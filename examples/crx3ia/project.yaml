@@ -1,0 +1,23 @@
+# urdf2vla の例: FANUC CRX-3iA + Robotiq 2F-85
+# URDF は同梱していません。手元の CRX-3iA の URDF（Robotiq 2F-85 付き）のパスを robot.urdf に書いてください。
+#   urdf2vla init projects/crx3ia --from examples/crx3ia/project.yaml
+# この URDF に含まれる簡略版 Robotiq（内側リンクが fixed）は、Isaac Sim 6.2 では左指の可動範囲が効かず
+# 物体をつかめない。グリッパは NVIDIA の SimReady アセットの Robotiq 2F-85 に付け替え、Isaac Sim の
+# Robot Assembler で URDF のグリッパと同じ位置・向きに取り付ける（import_robot が行う）。
+# グリッパを付け替えるので End Effector と指の開く向きの質問は出ません（初期姿勢は IK の提案を質問します）。
+name: crx3ia
+
+robot:
+  urdf: /path/to/crx3ia.urdf   # 手元の URDF のパスに書き換える
+  gripper: {simready: robotiq_2f_85}
+
+cameras:
+  - preset: wrist   # DROID と同じ配置: 手先 + 左右の外部カメラ
+  - preset: left
+  - preset: right
+
+overrides:
+  robot: {}
+  task: {}
+  cameras: {}
+  teleop: {}

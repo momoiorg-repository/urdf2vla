@@ -1,0 +1,63 @@
+# Build the documentation site (MkDocs, English + 日本語) and publish it to GitHub Pages.
+# One-time setup in the repository: Settings → Pages → Build and deployment → Source: "GitHub Actions".
+# Pull requests only build (with --strict, so broken links fail); pushes to main also deploy.
+name: docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}   # never cancel a running Pages deployment
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the docs tools
+        run: pip install -e '.[docs]'
+
+      - name: Check the generated reference table is up to date
+        run: python docs/gen_reference.py --check
+
+      - name: Get the Pages URL
+        id: pages
+        if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@v5
+
+      - name: Build
+        env:
+          SITE_URL: ${{ steps.pages.outputs.base_url && format('{0}/', steps.pages.outputs.base_url) || 'http://127.0.0.1:8000/' }}
+          NO_MKDOCS_2_WARNING: "1"
+        run: mkdocs build --strict
+
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
+        with:
+          path: site
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

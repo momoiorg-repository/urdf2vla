@@ -1,0 +1,26 @@
+# urdf2vla の例: DUAL_SCORPION（https://github.com/momoiorg-repository/dual_scorpion）
+# 注意: Isaac Lab 3.0 版の urdf2vla は双腕の環境をまだ作れません（import_robot の USD 変換と検査までは動きます）。
+#   git clone --depth 1 https://github.com/momoiorg-repository/dual_scorpion.git external/dual_scorpion
+#   urdf2vla init projects/dual_scorpion --from examples/dual_scorpion/project.yaml
+# グリッパ関節・開閉角・正面方向は URDF から決まらないので質問されます。下の値は 2026-10-30 の検証で使った回答例です:
+#   urdf2vla answer --project projects/dual_scorpion 'robot.gripper_joints=[joint7_R, joint7_L]'
+#     （同リポジトリの telegrip 用 URDF で 8 番目の関節が gripper）
+#   urdf2vla answer --project projects/dual_scorpion 'grippers.0.open_close=[-0.8, 0.0]' 'grippers.1.open_close=[-0.8, 0.0]'
+#     （snapshot で開閉の向きを確認）
+#   urdf2vla answer --project projects/dual_scorpion robot.front_axis=+y   （肩が x 方向に並び、腕は +y に伸びる）
+name: dual_scorpion
+
+robot:
+  urdf: ../../external/dual_scorpion/dual_scorpion_Full_urdf/urdf/scorpion.urdf
+  # URDF のトルク 1 N·m は仮値（作者の README）。実機の値が分かったら書き換える。下は検証用の仮の値
+  effort_limits: {"joint[0-6]_[RL]": 10.0}
+
+cameras:
+  - preset: wrist   # 双腕なので腕ごとに付く（right_wrist_cam / left_wrist_cam）
+  - preset: left
+  - preset: right
+
+overrides:
+  robot: {}
+  task: {}
+  cameras: {}

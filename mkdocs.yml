@@ -1,0 +1,116 @@
+# urdf2vla documentation site (MkDocs + Material, English / 日本語)
+#   uv pip install -e '.[docs]'
+#   mkdocs serve        # http://127.0.0.1:8000 (live reload)
+#   mkdocs build --strict
+# Pages are Markdown in docs/: page.md = English, page.ja.md = Japanese (falls back to English when missing).
+site_name: urdf2vla
+site_description: From a robot URDF to a trained Vision-Language-Action model in NVIDIA Isaac Sim, without learning Omniverse first.
+# The GitHub Pages workflow sets SITE_URL from the repository's Pages URL; locally it is the `mkdocs serve` address.
+site_url: !ENV [SITE_URL, "http://127.0.0.1:8000/"]
+repo_url: https://github.com/momoiorg-repository/urdf2vla
+repo_name: momoiorg-repository/urdf2vla
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+exclude_docs: |
+  make_media.py
+  gen_reference.py
+  snippets/
+
+theme:
+  name: material
+  language: en
+  icon:
+    logo: material/robot-industrial
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: teal
+      toggle: {icon: material/weather-night, name: Dark mode}
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: teal
+      toggle: {icon: material/weather-sunny, name: Light mode}
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+    - toc.follow
+
+plugins:
+  - search:
+      lang: [en, ja]
+  - glightbox:
+      zoomable: true
+      skip_classes: [no-lightbox]
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: true
+      reconfigure_material: true
+      reconfigure_search: true
+      languages:
+        - locale: en
+          default: true
+          name: English
+          build: true
+        - locale: ja
+          name: 日本語
+          build: true
+          site_description: ロボットの URDF から、Omniverse を覚えなくても NVIDIA Isaac Sim で VLA モデルを学習するまで。
+          nav_translations:
+            Home: ホーム
+            Get started: はじめる
+            Install: インストール
+            "Tutorial: Franka end to end": "チュートリアル: Franka で一通り"
+            Guides: ガイド
+            Bring your own robot: 自分のロボットを使う
+            Check your robot in the browser: ブラウザでロボットを確かめる
+            Record demonstrations: デモを記録する
+            Train and evaluate: 学習と評価
+            Use it from Claude Code: Claude Code から使う
+            Troubleshooting: トラブルシューティング
+            Reference: リファレンス
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify {kwds: {case: lower}}
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.snippets:
+      base_path: [docs/snippets]
+      check_paths: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - Home: index.md
+  - Get started:
+      - Install: install.md
+      - "Tutorial: Franka end to end": tutorial.md
+  - Guides:
+      - Bring your own robot: guides/your-robot.md
+      - Check your robot in the browser: guides/view.md
+      - Record demonstrations: guides/recording.md
+      - Train and evaluate: guides/training.md
+      - Use it from Claude Code: guides/claude-code.md
+  - Troubleshooting: troubleshooting.md
+  - Reference: reference.md

@@ -1,0 +1,2 @@
+franka_description/ は Isaac Sim 5.1 の URDF importer 拡張（isaacsim.asset.importer.urdf）に同梱されている
+franka_description 0.7.1（Franka Emika GmbH, Apache License 2.0）のコピーです。

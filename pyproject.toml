@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "urdf2vla"
+version = "0.1.0"
+description = "From a robot URDF to a trained Vision-Language-Action model in NVIDIA Isaac Sim (Isaac Lab Arena + GR00T N1.7)"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+dependencies = ["pydantic>=2.5", "pyyaml>=6"]
+
+[project.urls]
+Homepage = "https://github.com/momoiorg-repository/urdf2vla"
+Documentation = "https://momoiorg-repository.github.io/urdf2vla/"
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+# urdf2vla view（ブラウザで URDF・TCP・カメラを確認し、質問に答える画面）
+view = ["viser>=1.0", "yourdfpy>=0.0.56", "trimesh>=4.0"]
+# ドキュメントのサイト（mkdocs serve / mkdocs build）
+docs = ["mkdocs-material>=9.5", "mkdocs-static-i18n>=1.2", "mkdocs-glightbox>=0.4"]
+# ドキュメントの画像・動画を作る（docs/make_media.py。playwright install chromium も必要）
+docs-media = ["urdf2vla[view]", "playwright>=1.40", "imageio-ffmpeg>=0.5"]
+
+[project.scripts]
+urdf2vla = "urdf2vla.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,22 @@
+# シミュレーション実行環境。ホストの urdf2vla CLI は Isaac Sim を使う Skill をここで指定したコンテナで実行する。
+# mode: local にすると、このプロセスと同じ環境（Isaac Lab 3.0 の python）で直接実行する。
+# image は bash docker/build.sh で作り、コンテナは bash docker/run.sh で作る。
+mode: docker
+container: urdf2vla-sim
+image: urdf2vla/isaaclab_arena:b9e37c5   # Isaac Lab Arena main（2026-11-04）/ Isaac Lab 3.0.0 / Isaac Sim 6.2.0
+# user: 省略時はホストのユーザ名（image の entrypoint が同じ uid のユーザを作る）
+python: /workspaces/isaaclab_arena/submodules/IsaacLab/isaaclab.sh -p   # Isaac Sim の環境を読み込んで Isaac Lab 3.0 の uv 環境（Python 3.12）で実行
+mounts:
+  - host: ${URDF2VLA_ROOT}
+    container: /workspace/urdf2vla
+env:
+  ACCEPT_EULA: "Y"
+  PRIVACY_CONSENT: "Y"
+  HDF5_USE_FILE_LOCKING: "FALSE"
+
+# GR00T（データ変換・学習・推論サーバ）用のコンテナ。書いていない項目（mounts など）は上の値を使う
+gr00t:
+  container: urdf2vla-gr00t
+  image: urdf2vla/gr00t:23ace64   # Isaac-GR00T N1.7 の Dockerfile で作る（bash docker/build.sh gr00t）。推論サーバとは ZMQ で通信
+  python: /workspace/.venv/bin/python   # GR00T の依存は uv.lock どおりこの環境に入っている
+  gr00t_root: /workspace   # image に入っている Isaac-GR00T のソース（23ace64）

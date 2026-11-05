@@ -1,0 +1,19 @@
+# urdf2vla の例: Franka Emika Panda（URDF は Isaac Sim の URDF importer 同梱のもの, Apache-2.0）
+#   urdf2vla init projects/franka --from examples/franka/project.yaml
+name: franka
+
+robot:
+  urdf: franka_description/robots/panda_arm_hand.urdf
+  # 手先が真下を向く標準の ready 姿勢。書かなければ import_robot が IK で推奨姿勢を提案する
+  default_pose: {panda_joint1: 0.0, panda_joint2: -0.7854, panda_joint3: 0.0, panda_joint4: -2.3562,
+                 panda_joint5: 0.0, panda_joint6: 1.5708, panda_joint7: 0.7854}
+
+cameras:
+  - preset: wrist   # DROID と同じ配置: 手先 + 左右の外部カメラ
+  - preset: left
+  - preset: right
+
+overrides:
+  robot: {}
+  task: {}
+  cameras: {}

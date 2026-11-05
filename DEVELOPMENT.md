@@ -1,0 +1,278 @@
+# urdf2vla 開発者向けメモ
+
+> 使い方のドキュメントは [docs/](docs/)（サイト: `mkdocs serve` または GitHub Pages）にあります。このファイルは
+> 開発者向けに、設計の考え方・Isaac Sim でのハマりどころとその対処・検証状況・今後の予定をまとめたものです。
+
+
+ロボットの **URDF + カメラ情報 + 少数の追加情報** から、Isaac Sim 上に VLA 開発環境（Pick & Place）を作るツールです。
+Isaac Sim / Omniverse / VLA に詳しくないロボット開発者が、自分のロボットで VLA 開発を始められるようにすることを目的にしています。
+
+```
+URDF → ロボット解析 → 必要な情報だけ質問 → Isaac Sim へ導入 → カメラ配置 → シミュレーション起動   ← Phase 1（実装済み）
+     → Observation / Action 定義 → Teleoperation → 軌道記録                                  ← Phase 2（実装済み）
+     → GR00T 用データ変換 → GR00T 学習（ジョブ生成）                                          ← Phase 3（実装済み）
+     → 推論サーバ → Isaac Sim 上で評価                                                        ← Phase 4（実装済み）
+```
+
+## 考え方
+
+- **ロボットの事実は 1 か所に置く。** End Effector・制御関節・グリッパ（関節、mimic、開閉値、データセット上の値の定義）・初期姿勢・カメラは
+  `generated/robot_config.yaml` / `cameras.yaml` に集約し、シミュレーション環境・teleop・データ変換・評価はすべてそこから派生させます。
+  ロボット固有のコードは書きません（Franka と CRX-3iA + Robotiq を同じコードで動かしています）。
+- **推測しない。** URDF から一意に決まらない重要な設定（例: End Effector の候補が複数ある、回転関節の指がどちらで開くか）は、候補を添えて質問します。
+- **Skill を順番に実行する。** 各工程は独立した Skill（CLI サブコマンド）で、単体でも実行できます。
+  Agent（Claude Code の `.claude/skills/urdf2vla/SKILL.md`）は Skill を組み合わせる Orchestrator で、設定を自由生成しません。
+- **生成した設定はユーザが確認・編集できる。** 生成値には出所（`urdf` / `user` / `inferred` / `default`）が付きます。
+  変更は `project.yaml` の `overrides:` に書くと、次回の生成で反映されます。
+- **シミュレーション環境は Isaac Lab Arena で組み立てる。** URDF から作ったロボットを Arena の Embodiment に、
+  台・物体・置き場所を Arena の Scene に、Pick & Place を Arena の Task にして `ArenaEnvBuilder` で環境を作ります
+  （`src/urdf2vla/sim/arena/`）。Arena には URDF の読み込み・ロボットの自動解析・scripted 収集がないので、そこは urdf2vla が担います。
+
+## 動作環境
+
+| | バージョン |
+|---|---|
+| Isaac Lab | 3.0.0（Isaac Lab Arena `main` の b9e37c5 が固定している submodule） |
+| Isaac Sim | 6.2.0（Python 3.12） |
+| Isaac Lab Arena | `main` b9e37c5（2026-11-04）。リリース前のブランチなのでコミットで固定 |
+| GR00T | N1.7（Isaac-GR00T 23ace64）。変換・学習・推論サーバは別コンテナ（Isaac Lab のバージョンとは独立、ZMQ で通信） |
+
+Arena の GR00T 連携（変換・評価）は N1.6 で、変換が 1 カメラのみなので使っていません（urdf2vla は DROID と同じ手先 + 左右の 3 カメラ、N1.7）。
+
+## 必要なもの
+
+- NVIDIA GPU（RTX 5080 16GB で検証）とドライバ 580 以降、Docker（`--gpus` が使えること）、空きディスク 100GB 程度
+- ホストの Python 3.10+ と [uv](https://docs.astral.sh/uv/)
+
+## クイックスタート
+
+```bash
+cd urdf2vla
+uv venv .venv && uv pip install -e '.[dev]'
+source .venv/bin/activate
+bash docker/build.sh                    # 初回だけ: Isaac Lab Arena（Isaac Lab 3.0 / Isaac Sim 6.2）と Isaac-GR00T を
+                                        #   external/ に取得し、image urdf2vla/isaaclab_arena:b9e37c5（シミュレーション）と
+                                        #   urdf2vla/gr00t:23ace64（変換・学習・推論サーバ）を作る（合わせて 1〜2 時間、100GB 程度）
+bash docker/run.sh                      # シミュレーション用コンテナ urdf2vla-sim を作成・起動（既存コンテナには触れない）
+
+# 例: Franka
+urdf2vla init projects/franka --from examples/franka/project.yaml
+urdf2vla inspect_robot   --project projects/franka
+urdf2vla configure_robot --project projects/franka
+urdf2vla configure_task  --project projects/franka
+urdf2vla configure_camera --project projects/franka
+urdf2vla import_robot    --project projects/franka   # USD 変換 + 検査（初回は 1〜2 分）
+urdf2vla launch_sim      --project projects/franka   # 環境起動 + snapshots/*.png
+urdf2vla launch_sim      --project projects/franka --livestream   # WebRTC で GUI 表示（Ctrl-C で終了。Isaac Lab 3.0 版では未検証）
+```
+
+Phase 2（データ収集）:
+
+```bash
+urdf2vla configure_vla_interface --project projects/franka   # state / action / 画像の仕様
+urdf2vla setup_teleoperation     --project projects/franka   # teleop 設定 + 手先が指令どおり動くかの検査
+urdf2vla collect_dataset --project projects/franka --device scripted --num-demos 50   # 自動操作で収集（人がいなくてよい）
+urdf2vla collect_dataset --project projects/franka --device socket --num-demos 10     # 端末のキー入力で操作
+urdf2vla teleop-keys                                                                 #   ↑ を起動したら別の端末で実行
+urdf2vla collect_dataset --project projects/franka --device keyboard --livestream     # WebRTC の画面でキー操作
+```
+
+Phase 3〜4（GR00T）:
+
+```bash
+bash docker/run.sh gr00t                                                     # GR00T 用コンテナ urdf2vla-gr00t
+urdf2vla convert_dataset --project projects/franka --dataset demos          # → datasets/demos_gr00t（LeRobot v2.1 + modality + 統計）
+urdf2vla train_vla       --project projects/franka --dataset demos          # GPU が 44GB 未満なら training/<job>.tar.gz を作る
+urdf2vla evaluate_vla    --project projects/franka --replay --dataset demos # 学習前に推論サーバ〜行動の適用までを検証
+urdf2vla evaluate_vla    --project projects/franka --model training/franka_demos/checkpoints/checkpoint-10000 --episodes 20
+```
+
+GR00T N1.7 の学習は 44GB 以上の GPU が必要です（LLM・画像エンコーダを凍結しても約 42GB）。`train_vla` は GPU を確認し、
+足りなければ `training/<job>.tar.gz`（train.sh + データセット + modality config）を作ります。大きな GPU のマシンに
+GR00T の image（`bash docker/build.sh gr00t`、または `docker save urdf2vla/gr00t:23ace64` で持っていく）を用意し、
+train.sh の先頭に書いた `docker run ... bash /job/train.sh` で学習して、できた checkpoint を `evaluate_vla --model` で評価します
+（Isaac-GR00T を直接入れた環境なら `GR00T_ROOT=/path/to/Isaac-GR00T GR00T_PYTHON=python bash train.sh`）。
+
+自分のロボットなら `urdf2vla init projects/myrobot --urdf /path/to/robot.urdf` から始めます。
+各コマンドは結果を JSON で出力します（`status`: `ok` / `needs_input` / `error`）。
+
+### 質問が返ってきたとき（例: URDF のグリッパをそのまま使うロボット）
+
+```bash
+urdf2vla inspect_robot --project projects/myrobot
+#  "status": "needs_input"
+#  arms.0.ee_link: 候補は robotiq_85_base_link, end_effector です。どれを使いますか？
+#  grippers.0.open_position: robotiq_85_left_knuckle_joint はどちらの限界で指が開きますか？ lower=0.0 / upper=0.8
+urdf2vla answer --project projects/myrobot arms.0.ee_link=robotiq_85_base_link grippers.0.open_position=lower
+urdf2vla configure_robot --project projects/myrobot
+...
+urdf2vla import_robot --project projects/myrobot
+#  初期姿勢で手先が下を向いていない → IK で「台の上 20cm で真下を向く姿勢」を求めて質問
+urdf2vla answer --project projects/myrobot robot.default_pose=suggested
+```
+
+### ブラウザで確かめる（urdf2vla view）
+
+Omniverse の画面を開かずに、ロボット・把持点（TCP）・台と物体・カメラの位置と画角を 3D で確かめ、質問に答えられます。
+URDF と urdf2vla の設定ファイルだけを読む（Isaac Sim は不要）ので、`inspect_robot` の直後から使えます。
+
+```bash
+uv pip install -e '.[view]'                     # 初回だけ（viser, yourdfpy）
+urdf2vla view --project projects/myrobot         # → http://localhost:8080（別の PC からは表示される LAN のアドレス）
+```
+
+- 関節のスライダで姿勢を動かす。「初期姿勢」「グリッパを開く / 閉じる」で設定どおりに動くかを見る。衝突形状も表示できる
+- TCP（把持点）の座標軸と、接近方向（青）・指の開く向き（橙）の矢印。End Effector の候補の link（質問の候補を選ぶと強調）
+- 台・物体・置き場所、正面（+x）の矢印、カメラの視野（`launch_sim` の後は、その画像を視野の中に表示）
+- 工程の状態と検査の結果、まだ答えていない質問（選んで「回答を保存」すると `answers.yaml` に記録）
+
+### グリッパを SimReady アセットに付け替える（例: CRX-3iA + Robotiq 2F-85）
+
+URDF のグリッパが Isaac Sim でうまく動かない（閉リンクの簡略化・mimic の変換の問題など）ときは、NVIDIA の
+SimReady アセット（Isaac Sim のアセットライブラリ）のグリッパに付け替えられます。`project.yaml` に 1 行書くだけです:
+
+```yaml
+robot:
+  urdf: /path/to/crx3ia.urdf
+  gripper: {simready: robotiq_2f_85}   # 対応: robotiq_2f_85（urdf2vla/grippers.py）
+```
+
+- `configure_robot` が URDF のグリッパの link を外し、同じ取付位置・向き（接近方向と指の開く向きを合わせる）に付ける設定を作る。
+  グリッパと End Effector の質問は出ない。URDF にグリッパがなければ `gripper: {simready: ..., mount_link: flange}` で取付先を指定する。
+- `import_robot` が腕を USD に変換し、Isaac Sim の Robot Assembler でグリッパを取り付ける（ロボットの USD の
+  variant `Gripper=<キー>` として保存）。グリッパのアセットはネットから読むので、初回はネット接続が必要。
+- 開閉・把持点・mimic の追従関節・把持力・ソルバーの反復回数は、アセットで測った値を `urdf2vla/grippers.py` に持つ。
+
+### Agent から使う
+
+Claude Code をこのリポジトリで起動し、「`/path/to/robot.urdf` で VLA 開発を始めたい」のように頼むと、
+`urdf2vla` Skill が工程を順に実行し、必要なときだけ質問します。
+
+## コマンド
+
+| コマンド | 内容 |
+|---|---|
+| `urdf2vla skills [--json]` | Skill 一覧（入出力・前提つき） |
+| `urdf2vla init DIR --urdf URDF` / `--from examples/*/project.yaml` | プロジェクト作成 |
+| `urdf2vla status --project P` | 工程の状態と次に実行する Skill |
+| `urdf2vla answer --project P key=value ...` | 質問への回答を `answers.yaml` に記録 |
+| `urdf2vla show --project P robot_config` | 生成された設定を表示 |
+| `urdf2vla diagnose --project P` | 失敗した Skill のログから原因と対処を推定 |
+| `urdf2vla view --project P [--port 8080]` | ブラウザで 3D 表示（ロボット・TCP・台・カメラ）、質問への回答（`.[view]` が必要） |
+| `urdf2vla <skill> --project P` | Skill を実行 |
+
+| Skill | 実行場所 | 内容 |
+|---|---|---|
+| `inspect_robot` | host | link/joint・root・arm・gripper（mimic 含む）・End Effector 候補・メッシュの解決 |
+| `configure_robot` | host | Robot configuration と正規化 URDF（`package://` 解決、空の `world` link 除去） |
+| `configure_task` | host | 台・物体・置き場所を腕の長さから配置（プリミティブのみ、ネット上のアセット不要） |
+| `configure_camera` | host | 既定は DROID と同じ `wrist` + `left` + `right`。ほかに `front` / `side` プリセット、または取付 link・位置姿勢・内部パラメータの明示指定 |
+| `import_robot` | sim | URDF→USD 変換、関節名・剛体・発散・初期姿勢追従・関節限界・グリッパ開閉・グリッパの可動範囲（関節トルクで押す）の検査、初期姿勢の IK 提案 |
+| `launch_sim` | sim | Pick & Place 環境（Isaac Lab Arena で組み立てる）の起動、カメラ画像の保存、カメラ更新・取付位置・物体・発散・把持（物体を掴んで保持できるか、指がめり込まないか）の検査 |
+| `configure_vla_interface` | host | VLA の state（arm 関節角 + グリッパのスカラー）・action（関節目標 + グリッパ）・画像の仕様 |
+| `setup_teleoperation` | sim | teleop 設定（目標手先姿勢を IK で追従）と、手先が指令方向に指令量だけ動くかの検査 |
+| `collect_dataset` | sim | scripted / socket / keyboard でデモを記録し HDF5 に保存（成功デモのみ）、カメラ更新・最初の画像・ラベル再生の検査 |
+| `convert_dataset` | gr00t | HDF5 → GR00T（LeRobot v2.1）、`modality.json` と N1.7 の modality config・統計を生成、GR00T のローダと動画の検査 |
+| `train_vla` | gr00t | GR00T N1.7 fine-tune ジョブ（引数の検査）。GPU が足りれば学習、足りなければ持ち出し用の一式 |
+| `evaluate_vla` | host → gr00t + sim | GR00T 推論サーバを起動し、Isaac Sim 側のクライアントで成功率を測る（`--replay` で学習前の配管検証、`--video` でエピソードごとの動画） |
+
+## プロジェクトの中身
+
+```
+projects/<name>/
+  project.yaml   入力と上書き設定（ユーザが編集）      answers.yaml  質問への回答
+  generated/     robot_metadata / robot_config / task / cameras（自動生成）
+  build/         robot.urdf（正規化）, meshes/（コンテナから見えないメッシュのコピー）, usd/, import_report.yaml,
+                 launch_report.yaml, eval_report.yaml, eval_videos/
+  snapshots/     カメラ画像                            logs/  Skill ごとのログと結果 JSON
+```
+
+## 設計上の決めごと（ハマりどころの自動対処）
+
+- 四元数は Isaac Lab 3.0 と同じ `(x, y, z, w)`。設定のキーは `rot_xyzw`（2.x 時代の `rot_wxyz` を書くと変換して警告する）。
+  記録データ（HDF5）は `urdf2vla_format: 2`。2.x 版で記録したデータ（format 1）は変換を拒否する（記録し直す）。
+- URDF の mimic（グリッパの従動関節）: Isaac Lab 3.0 の URDF importer は mimic を `NewtonMimicAPI` の拘束として書く。
+  PhysX では Franka の +1 の直動指では効くが、CRX の Robotiq の左右 knuckle（multiplier -1）では leader が可動範囲を越えて
+  回り続けた。urdf2vla は import_robot で拘束を無効にし、gripper spec の open / close（follower は multiplier から計算）で
+  全関節を駆動する（Isaac Lab の Franka の設定と同じやり方）。
+- URDF から変換した簡略版 Robotiq 2F-85（CRX-3iA の URDF に含まれる、内側リンクが fixed のもの）は、Isaac Sim 6.2 では
+  左 knuckle の可動範囲と速度上限が効かない（関節トルクで押すと 0〜0.8 rad を越えて回る。右は効く。mimic の有無・下限値を
+  変えても同じで、原因は特定していない）。把持すると左指が押し戻されて物体が逃げる。CRX の例は SimReady の Robotiq 2F-85 に
+  付け替える（上記）。
+- SimReady の Robotiq 2F-85 は PhysX の mimic 拘束（`PhysxMimicJointAPI`）で 5 つの関節が `finger_joint` に追従する。
+  - ソルバーの位置反復が 8 回だと、物体を挟んだときに拘束が保てず掴めない。64 回にする（Isaac Lab Arena の DROID と同じ）。
+  - アセットの把持力（26 N·m）のままだと、物体を挟んだときに mimic の反力が手首を押し続け（J4・J5 に約 35 N·m）、手先が目標から
+    4cm ずれたまま運べない。0.1kg の物体には 8 N·m で十分で、手首への反力も 1〜2 N·m になる。
+  - 指の link の原点はすべて base_link の原点にある（アセットの作り）。把持点は指の腹の衝突形状から測った。
+- 環境を作った直後は描画が立ち上がっておらず、reset の再描画だけでは最初のエピソードの最初の画像が reset 前の場面のまま残る
+  （2.x 版では 2 回目以降のエピソードで起きていた）。環境を作ったら物理と描画を数 step 進めてから reset し直し、
+  collect_dataset の `first_frame_fresh` 検査で最初の 2 フレームの差が続くフレームより極端に大きくないかを確かめる。
+- 成功判定（置き場所の半径内・台の上・グリッパを開いた状態が N step 続く）は記録・評価のループ側で行う。Arena の成功条件は
+  満たした瞬間に episode を終えて reset するので、N step の保持やデモの記録と合わない。Arena の Task は時間切れだけを終了条件にする。
+- URDF のメッシュがコンテナから見えない場所にあれば、そのディレクトリごと `build/meshes/` にコピーして参照する。
+  URDF に別マシン（コンテナ）の絶対パスが書かれていれば、末尾の部分パスで URDF の親ディレクトリと `package_paths` の下を探す。
+- グリッパは「開閉できる」だけでは掴めるとは限らない（下の 2 つはどちらも開閉の検査を通った）。import_robot の
+  `joint_limits_hold`（駆動を切って関節トルクで押し、可動範囲の中に留まるか）と、launch_sim の `grasp_hold`（指の間に
+  物体を置いて閉じ、離しても落ちないか）・`grasp_opening`（直動の指の開きが物体の幅と合うか）で、データを集める前に見つける。
+  URDF の簡略版 Robotiq は `joint_limits_hold` と `grasp_hold` に、反復 8 回の Franka は `grasp_opening` に失敗する。
+- articulation のソルバーの位置反復は既定 32 回。8 回（Isaac Lab の既定）だと、軽い物体を左右から挟んだときに接触を解き切れず、
+  指が物体にめり込む（Franka で 45mm の立方体を持つと指の間が 23mm まで閉じた。衝突形状は正しく、動かない立方体では 22.5mm で
+  止まる）。32 回で 44.8mm。SimReady の Robotiq 2F-85 は 64 回。
+- カメラの既定は DROID（https://droid-dataset.github.io/）と同じ 3 台: 手先 + ロボットの左（+y）と右（-y）の高い位置から
+  台の中央を見下ろす外部カメラ。DROID の外部カメラの配置（Franka の base から前 0.05 m・左右 0.57 m・上 0.66 m、焦点距離 2.1）を
+  台の大きさで拡大縮小する（腕の大きさが違うロボットでも作業域が写る）。画像は正方形 256×256・画角 約 70°。
+- 手先カメラは link の下に置き、launch_sim の `camera_mount` 検査で設定どおりの位置・向きかを確かめる
+  （2.x 版の DUAL_SCORPION では描画側（Fabric）のローカル変換がずれて手先カメラが手首に埋まったため、環境を作った直後に
+  書き直していた。3.0 版では Franka / CRX でずれないことを確認し、書き直しはやめた。双腕は 3.0 版ではまだ環境を作れない）。
+- 正面が +x でないロボット（Fusion から出した URDF など）は、肩の並びと腕の伸びる向きから正面を推定して確認し、+x を向くように回して置く。
+- 台の配置は、肩の高さと腕の長さから「肩から腕の長さの半分・斜め下 45°」に把持点が来るように決める（肩が高く腕が短いロボットは台を高くする）。
+- 片側だけ動く顎のグリッパは、arm の最後の関節として見えるので質問する。把持点は「固定側の顎と開いた顎の間」。
+- URDF 変換は `merge_fixed_joints=False`（True だと `panda_hand` のような End Effector が剛体でなくなる）、
+  USD は `build/usd/` に固定してキャッシュを効かせる（Isaac Lab 3.0 の importer は `build/usd/robot/robot.usda` + payloads の階層 USD を作る）。
+- 質量のない frame（例: `end_effector`, `tool0`）を End Effector にした場合は、剛体の祖先に固定オフセット付きで取り付ける。
+- シミュレーション系は常にカメラの描画を有効にし、`DISPLAY` なしで起動（`DISPLAY` が残ると起動が数分止まる）。
+  コンテナ内の Python は `isaaclab.sh -p`（Isaac Sim の環境を読み込む。直接 `/opt/isaaclab-venv/bin/python` を使うと Isaac Sim が見つからない）。
+- カメラ画像が step 間で更新されない問題（以前のプロジェクトで学習失敗の原因になった）を、launch_sim / 記録 / 評価で毎 step 検査する
+  （直前の step と完全に同じ画像が 1 回でもあれば失敗）。`env.step` 内の描画で毎 step 更新されることを
+  確認済み（Isaac Lab 2.3.2 / 3.0 + RTX 5080、Franka / CRX）なので、余分な描画ステップ（`task.render_fix`）は既定で無効。
+  有効にすると 1 制御 step あたり物理が 1 step 増え、`task.control_hz`（= データセットの fps）もそれに合わせて変わる。
+- 遅いグリッパ（URDF の速度上限が小さい）でも開閉検査の時間を自動で延ばす。
+- mimic の follower の速度上限・トルク上限は URDF（なければ leader）の値を actuator に明示する。
+- 把持点（TCP）は指の衝突メッシュ（STL）から指先を求めて決める（Franka: 0.100 m、Isaac Lab の値 0.103 m とほぼ一致）。
+- 行動ラベルは「IK が出した関節目標 + グリッパのスカラー（0=閉, 1=開）」。teleop は目標手先姿勢を積算して IK で追従するので、
+  腕の追従が遅れても指令どおりに動く。記録後、ラベルだけで腕を動かして記録時と同じ軌道になるかを検査する（把持前の区間で判定）。
+
+## テスト
+
+```bash
+pytest            # ホスト側（URDF 解析・設定生成・質問の出方）。Franka / CRX-3iA / 合成した双腕ロボット
+```
+
+## 検証状況（2026-11-05, RTX 5080, Isaac Lab 3.0.0 / Isaac Sim 6.2.0 / Isaac Lab Arena b9e37c5）
+
+カメラは既定の DROID 配置（手先 + 左右の外部カメラ、各 256×256）。
+
+| | Franka | CRX-3iA + Robotiq 2F-85（SimReady に付け替え） | DUAL_SCORPION（双腕） |
+|---|---|---|---|
+| Phase 1（質問・導入・検査・起動） | 質問なしで通る。import_robot 9 検査・launch_sim 9 検査 OK | 初期姿勢（IK の提案）だけ質問。Robot Assembler でグリッパを取り付け、import_robot 9 検査・launch_sim 9 検査 OK | import_robot（USD 変換と 10 検査）まで通る。環境は 3.0 版ではまだ作れない（launch_sim が明示的なエラー） |
+| Phase 2（scripted 収集） | 4/4、ラベル再生・最初の画像の検査 OK | 4/4、ラベル再生・最初の画像の検査 OK | 未実施 |
+| Phase 3（変換） | GR00T ローダで読める、3 カメラの動画は元画像と一致 | 同左 | 未実施 |
+| Phase 4（replay 評価、`--video`） | 4/4（動画で把持・配置を確認） | 4/4（同左） | 未実施 |
+
+Isaac Lab 2.3.2 版（git タグ `isaaclab2-last`）では、CRX は URDF のグリッパで収集 3/4〜6/7・replay 4/6、
+DUAL_SCORPION は scripted 収集 0/8（回転する顎が物体を台に押し付けながら閉じ、腕が押し上げられる。URDF のトルクは仮値）だった。
+
+推論サーバは学習済み N1.7 checkpoint（別のプロジェクトで学習したもの）を読み込んで起動できることまで確認（2.x 版、GPU 6.4GB）。
+
+未検証: GR00T の実際の学習（44GB 以上の GPU が必要。Isaac Lab 3.0 版では `train_vla` のジョブ作成も未実行。データセット側は
+`convert_dataset` の GR00T ローダ検査で確認済み）と、学習済みモデルでの評価（`evaluate_vla --model`）。
+Isaac Lab 3.0 版で試したのは scripted の収集だけで、socket / keyboard の teleop と `--livestream` は未検証（2.x 版では socket は検証済み）。
+
+## 今後
+
+- 学習済み checkpoint での評価（大きな GPU で train.sh を実行した後）
+- 場面・タスクを SimReady アセット（NVIDIA の Hugging Face にある物体・台など）から選べるようにする（Arena の Object と
+  配置の relations を使う）。いまは台・立方体・置き場所のプリミティブだけ
+- SimReady のグリッパを増やす（Robotiq 2F-140 / Hand-E など。値はアセットで測る）
+- 双腕の環境（Arena の Embodiment に 2 本の腕と 2 つのグリッパ）
+- URDF のないロボット（USD しかないもの）: USD 入力への対応（schema は双腕・関節の役割・mimic グリッパに対応済み）

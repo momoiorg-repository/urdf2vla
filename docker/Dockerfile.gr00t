@@ -1,0 +1,14 @@
+# urdf2vla の GR00T（変換・学習・推論サーバ）用 image。
+# Isaac-GR00T 自身の Dockerfile で作った image（GR00T N1.7 の依存が uv.lock どおり /workspace/.venv に入っている）に、
+# urdf2vla が使う追加のパッケージと、ホストと同じ uid のユーザを作る entrypoint を足す。
+#   bash docker/build.sh が external/Isaac-GR00T から base を作り、この Dockerfile で urdf2vla/gr00t:<コミット> を作る
+ARG BASE_IMAGE=urdf2vla/gr00t-base:23ace64
+FROM ${BASE_IMAGE}
+
+# GR00T の依存に含まれないもの（データセットの HDF5、設定の検証・読み書き）
+RUN uv pip install --python /workspace/.venv/bin/python h5py pydantic pyyaml
+
+COPY gr00t_entrypoint.sh /urdf2vla_entrypoint.sh
+RUN chmod +x /urdf2vla_entrypoint.sh
+ENTRYPOINT ["/urdf2vla_entrypoint.sh"]
+CMD ["bash"]
