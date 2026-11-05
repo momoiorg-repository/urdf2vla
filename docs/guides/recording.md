@@ -17,9 +17,10 @@ urdf2vla setup_teleoperation     --project projects/myrobot   # checks the hand 
 | Images | Every camera (default: wrist, left, right), 256×256 RGB, at the control rate (20 Hz by default) |
 | State | Arm joint positions + one gripper value (0 = closed, 1 = open) |
 | Action | The arm joint targets + the gripper command — what the controller was told to do |
-| Task text | The language instruction, e.g. "pick up the red cube and place it on the green target" |
+| Task text | The instruction for this episode, naming its object, e.g. "put the apple in the tray" |
 
-An episode counts as a success when the cube rests inside the target circle on the table and the gripper has let go,
+Each episode puts one of the task's objects on the table at a random position. It counts as a success when the
+object rests inside the tray and the gripper has let go,
 held for a few steps. Episodes that fail are discarded, so the dataset contains only good demonstrations. Recordings go
 to `datasets/<name>.hdf5` (`demos` by default; choose another with `--dataset`).
 
@@ -27,7 +28,7 @@ to `datasets/<name>.hdf5` (`demos` by default; choose another with `--dataset`).
 
 === "Scripted (no human)"
 
-    A scripted controller picks up the cube and places it on the target, with a new random cube position each episode.
+    A scripted controller picks up the object and puts it in the tray, with a new random object and position each episode.
     This is the quickest way to get a dataset and to check the whole pipeline.
 
     ```bash
@@ -80,12 +81,12 @@ to `datasets/<name>.hdf5` (`demos` by default; choose another with `--dataset`).
 
 The hand moves in small steps (8 mm and 0.04 rad per control step); change `pos_step` and `rot_step` under
 `overrides.teleop` in `project.yaml` if it feels too slow or too fast. An episode is saved automatically as soon as the
-cube has been placed on the target.
+object has been placed in the tray. The instruction for the episode is printed when it starts.
 
 ## How many demonstrations?
 
 Start with **50 scripted demonstrations** to get the whole pipeline working end to end. For a policy that works from
-many different cube positions, plan for more — typically hundreds per task. Human (keyboard) demonstrations add
+many different objects and positions, plan for more — typically hundreds. Human (keyboard) demonstrations add
 variety that a scripted controller doesn't have.
 
 ## Checks during recording

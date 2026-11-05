@@ -24,6 +24,10 @@ urdf2vla convert_dataset --project projects/myrobot --dataset demos
 動画の全フレームを元の画像と比べます。変換の誤りを、何時間も学習した後ではなくここで見つけるためです。`--force` で
 作り直します。
 
+各エピソードは自分の指示文を持ちます。`meta/tasks.jsonl` に異なる指示文（*"put the apple in the tray"*、
+*"put the lime in the tray"* など）を並べ、各フレームがそのエピソードの指示文を指すので、モデルは指示文が名指しする
+ものに従って動くことを学びます。
+
 ## 2. 学習する
 
 ```bash
@@ -81,7 +85,7 @@ urdf2vla evaluate_vla --project projects/myrobot \
 ```
 
 `evaluate_vla` は GR00T のコンテナで checkpoint を読んだ推論サーバを、シミュレーション用コンテナで Isaac Sim を起動し、
-立方体の位置をランダムにしてエピソードを実行します。シミュレータがカメラ画像・ロボットの状態・タスクの文を送り、
+物体とその位置をランダムにしてエピソードを実行します。シミュレータがカメラ画像・ロボットの状態・タスクの文を送り、
 モデルが次の行動を返します。結果は `build/eval_report.yaml` に書きます。
 
 - エピソード全体での `success_rate`（成功の判定は記録のときと同じ）

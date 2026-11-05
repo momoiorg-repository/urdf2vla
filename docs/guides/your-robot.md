@@ -104,7 +104,7 @@ your answers to the same file (`answers.yaml`).
 ## 4. Check the result
 
 `launch_sim` saves what each camera sees at the start and end of a short test into `snapshots/`, and runs physics
-checks — including picking up the cube — before you spend time recording. If every check is `OK`, continue with
+checks — including picking up each object — before you spend time recording. If every check is `OK`, continue with
 [recording demonstrations](recording.md).
 
 ## 5. Swap in a SimReady gripper {#simready}
@@ -130,17 +130,44 @@ robot:
 - Supported: `robotiq_2f_85` (Robotiq 2F-85). The tuned values (grip force, solver iterations, grasp point) live in
   `src/urdf2vla/grippers.py`.
 
-## 6. Adjust the scene and cameras
+## 6. Choose the objects, adjust the scene and cameras {#objects}
 
-The table, cube and target are placed from your arm's reach. To change them, write the generated keys under
+By default every episode puts one of four objects on the table — an apple, a lime, a pear or a colored cube — and the
+robot has to put it in a tray. Choose others in `project.yaml`, then run `configure_task` **and `launch_sim`** again
+(`launch_sim` measures how each object comes to rest; episodes use that):
+
+```yaml
+task:
+  objects: [lime, color_cube, rubiks_cube]   # one per episode, named in the instruction
+  container: plastic_tray                     # or "disc" for a flat green target
+```
+
+| Key | Object | Size (cm) | Source |
+|---|---|---|---|
+| `rubiks_cube` | Rubik's cube (not in the default list: its source dataset's license is unverified) | 5.8 × 5.8 × 5.8 | Isaac Lab Arena object library (from HOT3D) |
+| `apple` | apple (scaled to 70 %) | 5.4 × 5.7 × 6.7 | NVIDIA SimReady |
+| `lime` | lime | 6.4 × 7.5 × 6.1 | NVIDIA SimReady |
+| `pear` | pear | 6.1 × 13.4 × 6.2 | NVIDIA SimReady |
+| `color_cube` | colored cube | 5.0 × 5.0 × 5.0 | Isaac Sim props |
+| `cube` | red cube (primitive, no download) | 4.5 × 4.5 × 4.5 | — |
+| `plastic_tray` (container) | tray | 25.6 × 27.0 × 2.1 | NVIDIA SimReady |
+
+Datasets recorded with a different object list can't be replayed with the new one (the episodes store which entry
+of the list they used). To replay recordings from before this object list existed, set
+`task: {objects: [cube], container: disc}`.
+
+Objects wider than your gripper can open are left out, with a warning (the Franka opens 8 cm; the SimReady Robotiq
+2F-85, 8.5 cm). The assets are downloaded from NVIDIA's asset server the first time. The catalog with the measured
+sizes is `src/urdf2vla/objects.py`.
+
+The table, spawn area and tray are placed from your arm's reach. To move them, write the generated keys under
 `overrides.task` (same structure as `generated/task.yaml`) and run `configure_task` again:
 
 ```yaml
 overrides:
   task:
-    object: {size: [0.04, 0.04, 0.06], mass: 0.05}
-    target: {radius: 0.05}
-    language_instruction: "put the red block on the green circle"
+    target: {pos: [0.45, -0.18]}
+    instruction: "place the {object} into the {target}"
 ```
 
 Cameras: the default is the [DROID](https://droid-dataset.github.io/) layout (a wrist camera plus left and right
@@ -160,5 +187,5 @@ Quaternions are always `[x, y, z, w]`.
 
 - **Dual-arm robots** can be inspected, configured and imported (with all checks), but `launch_sim` and later steps
   don't support them yet.
-- One task: pick and place with primitive shapes (box, cylinder target).
+- One task: pick an object and place it in a container (or on a flat target). Objects come from the catalog in `src/urdf2vla/objects.py`.
 - Grippers: two-finger parallel or single-moving-jaw grippers. Suction and multi-finger hands are not supported.

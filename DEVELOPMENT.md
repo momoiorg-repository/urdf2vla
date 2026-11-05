@@ -215,6 +215,33 @@ projects/<name>/
   `joint_limits_hold`（駆動を切って関節トルクで押し、可動範囲の中に留まるか）と、launch_sim の `grasp_hold`（指の間に
   物体を置いて閉じ、離しても落ちないか）・`grasp_opening`（直動の指の開きが物体の幅と合うか）で、データを集める前に見つける。
   URDF の簡略版 Robotiq は `joint_limits_hold` と `grasp_hold` に、反復 8 回の Franka は `grasp_opening` に失敗する。
+- 物体はカタログ（`src/urdf2vla/objects.py`、SimReady と Arena のアセット。大きさは Isaac Sim で測った値）から選び、
+  候補をすべて場面に生成してロボットの後ろの床に置いておき、エピソードの始めに 1 つを台に置く（`SimView.start_episode`）。
+  指示文はエピソードごと（HDF5 の demo の attrs `language_instruction` / `object`、GR00T の `tasks.jsonl` に複数の task）。
+  - 剛体の原点はアセットによって違う（りんごは中心、ルービックキューブは外接箱の中心から y に 2.9 cm ずれる、SimReady の
+    多くは底）。カタログの値ではなく、生成した物体の USD から剛体の原点に対する外接箱の中心・底と生成時の向きを測って使う
+    （測る前は、りんごが 4 cm 浮き、ルービックキューブは grasp_hold で指に食い込んで飛んだ）。
+  - Isaac Sim 6.2 の SimReady は衝突形状と質量を variant `PhysX=Enabled` に持つ（Arena の SimReadyUsdObject の既定
+    `Physics=physics` では衝突形状がない）。トレイは `kinematic_enabled` で台に固定する。
+  - PhysX には転がり抵抗がないので、丸い果物（りんご・ライム）は浅いトレイ（縁 2.1 cm）の中で転がって外に出る。
+    丸い物体だけ角速度の減衰 2.0 を付ける。箱の形の物体に付けると、掴んだときに指の面に沿って回り切れず指がめり込む
+    （ルービックキューブで grasp_opening が 5.7 cm → 2.6 cm）。スクリプトの把持は、真上の位置合わせも 6 mm の精度にする
+    （2 cm のずれのまま下降すると、指の開きに余裕のないりんごで指が物体の上に乗る）。
+  - SimReady のりんごは直立では安定せず、腕を止めていても 2 秒ほどで横に倒れて 10 cm 転がる（角速度の減衰 0.05 でも 10 でも
+    同じ軌跡。減衰では止まらない）。launch_sim で物体ごとにしばらく置いて落ち着いた向きと高さを測り（build/object_rest.json）、
+    エピソードではその向き（＋鉛直軸まわりのランダムな回転）で置く。スクリプトの把持の高さは実際の中心の高さを使う。
+  - 再生（replay の評価・label_replay）は、記録した「置いた姿勢（落ち着かせる前）」から記録と同じ手順で置き直す。落ち着いた
+    後の姿勢から置き直すと、丸い物体は 2 回目の落ち着き方が違って 1〜2 cm 転がり、開ループの再生で指が外れた（洋梨・りんご）。
+    これで tutorial の 10 エピソードの replay が 10/10。
+  - Isaac Lab の rigid_props は instance（instanceable な prim の中身）を黙って飛ばす（SimReady のりんごの剛体は instance の中）。
+    物体は instance を解いてから剛体に角速度の減衰を付ける（scene.py の _spawn_usd_damped）。
+    ただし減衰が転がりを抑える効果は測っていない（りんごの倒れ方は減衰に関係しなかった。replay を直したのは落ち着いた向きと
+    置いた姿勢からの再生）。減衰と instance を解く処理は残してあるが、効果がなければ外してよい。
+  - 環境の時間切れ（Arena の Task）は記録・評価のループの上限より 10 秒長くする。同じだと最後の step で自動の reset が入り、
+    物体が置き場に戻って失敗の記録（object_final）が意味を失う。
+  - Isaac Lab の環境の作成が torch の乱数の種を設定し直すので、`--seed` は環境の作成の後で設定する（前は効いていなかった）。
+- 推論サーバの後始末（`pkill -f "[u]rdf2vla.gr00t.server..."`）の括弧は、pkill を含む bash 自身にマッチしないため。
+  名前を変えたときにこの括弧の形が置換から漏れ、サーバが残って次の評価がポートを取れなかった。
 - articulation のソルバーの位置反復は既定 32 回。8 回（Isaac Lab の既定）だと、軽い物体を左右から挟んだときに接触を解き切れず、
   指が物体にめり込む（Franka で 45mm の立方体を持つと指の間が 23mm まで閉じた。衝突形状は正しく、動かない立方体では 22.5mm で
   止まる）。32 回で 44.8mm。SimReady の Robotiq 2F-85 は 64 回。

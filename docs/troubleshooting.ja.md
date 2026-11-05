@@ -18,13 +18,18 @@ urdf2vla status   --project projects/myrobot     # どの工程が済んだか�
 
 ## 症状から探す
 
-### グリッパは閉じるが、立方体が滑り落ちる・落ちる
+### グリッパは閉じるが、物体が滑り落ちる・落ちる
 
 | 失敗した検査 | 工程 | 意味 | 対処 |
 |---|---|---|---|
 | `joint_limits_hold` | `import_robot` | 指の関節が押されて可動範囲を越えた。シミュレータで可動範囲が効いていない。簡略化された URDF のグリッパでよく起きる | グリッパを SimReady のアセットに付け替える: `robot.gripper.simready`（[ガイド](guides/your-robot.md#simready)）。`configure_robot` からやり直す |
-| `grasp_hold` | `launch_sim` | 指の間に置いた立方体が、離した後に離れていった | `overrides.robot.asset.solver_position_iterations` を増やして（既定 32、SimReady のグリッパは 64）`import_robot` からやり直す。グリッパの力が不自然なら、トルク上限を確かめる |
-| `grasp_opening` | `launch_sim` | 直動の指が立方体の幅より狭く閉じた（めり込んだ） | `overrides.robot.asset.solver_position_iterations` を増やして `import_robot` からやり直す |
+| `grasp_hold` | `launch_sim` | 指の間に置いた物体が、離した後に離れていった | `overrides.robot.asset.solver_position_iterations` を増やして（既定 32、SimReady のグリッパは 64）`import_robot` からやり直す。グリッパの力が不自然なら、トルク上限を確かめる |
+| `grasp_opening` | `launch_sim` | 直動の指が物体の幅より狭く閉じた（めり込んだ） | `overrides.robot.asset.solver_position_iterations` を増やして `import_robot` からやり直す |
+| `object_on_table:<object>` | `launch_sim` | 物体が、大きさから決まる高さで台の上に落ち着かない | たいていはアセットの問題（剛体や衝突形状が見た目と合わない）。`task.objects` から外し、`build/launch_report.yaml`（`object_frames`）を付けて報告してください |
+| `asset_size:<object>` | `launch_sim` | 生成した物体の大きさがカタログと 15 % 以上違う（アセットの縮尺や単位の誤り） | `task.objects` から外して報告してください |
+
+物体が複数あると、把持の検査は物体ごとに出ます（`grasp_hold:<gripper>:<object>`）。失敗した物体だけ `task.objects` から
+外せば、ほかの物体はそのまま使えます。グリッパの開きより幅の広い物体は、`configure_task` が警告を出して除いています。
 
 ### ロボットが姿勢を保てない・震える・吹き飛ぶ
 
@@ -60,10 +65,10 @@ urdf2vla status   --project projects/myrobot     # どの工程が済んだか�
 
 ### 記録が失敗する・成功が少ない
 
-`build/collect_report.yaml` に全試行が載っています（`object_lift_m`: 立方体が持ち上がったか、`object_to_target_m`:
+`build/collect_report.yaml` に全試行が載っています（`object_lift_m`: 物体が持ち上がったか、`object_to_target_m`:
 置き場所からどれだけ離れて終わったか）。`snapshots/collect_fail_*.png` は失敗した試行の最後の画像です。
 
-- **立方体が持ち上がらない** — 掴む問題: 上のグリッパの項を見るか、掴む高さを調整する（`overrides.teleop.grasp_height_offset`）。
+- **物体が持ち上がらない** — 掴む問題: 上のグリッパの項を見るか、掴む高さを調整する（`overrides.teleop.grasp_height_offset`）。
 - **持ち上がるが置けない** — 置き場所に届きにくい: `overrides.task.target.pos` で近づける。
 - **`label_replay` が失敗する** — 記録した行動を再生しても同じ動きにならない（ラベルがロボットの動きを表していない）。
   先に `ik_direction` とグリッパの検査を確かめる。

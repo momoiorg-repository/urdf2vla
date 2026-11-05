@@ -105,6 +105,6 @@ def evaluate_vla(project: Project, opts: dict, result: SkillResult, log) -> None
         result.outputs["server_log"] = project.rel(server_log)
         result.outputs["sim_log"] = project.rel(sim_log)
     finally:
-        pattern = shlex.quote(f"[e]asyvla.gr00t.server.*--port {port}")
+        pattern = shlex.quote(f"[u]rdf2vla.gr00t.server.*--port {port}")
         subprocess.run(["docker", "exec", gr.container, "bash", "-c", f"pkill -f {pattern}"], capture_output=True)
         server.kill()

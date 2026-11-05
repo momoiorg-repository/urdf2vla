@@ -11,7 +11,9 @@ HDF5 の構成（Isaac Lab の /data/demo_N 形式に合わせ、VLA 変換に�
     obs/object_quat    (T, 4)          float32   (x, y, z, w)
     actions            (T, action_dim) float32   行動ラベル = IK が出した関節目標 + gripper スカラー
     teleop_actions     (T, 7*arms + grippers)    teleop 環境に入れた行動（目標 TCP 姿勢 + ±1）
-    initial_state      joint_pos (n_joints), object_pose (7: 位置 + (x, y, z, w))  再生用
+    initial_state      joint_pos (n_joints), object_pose (7: 位置 + (x, y, z, w)), object_index (1),
+                       object_place_pose (7: 置いた姿勢。落ち着かせる前)  再生用
+  attrs: object（task.objects の key）, language_instruction（このエピソードの指示文）
 
 urdf2vla_format 2 = Isaac Lab 3.0 版（四元数は (x, y, z, w)）。1 は Isaac Lab 2.x 版（(w, x, y, z)）で、再生できない。
 """
@@ -87,19 +89,14 @@ def _save_failure_frames(project: Project, buf: EpisodeBuffer, cams: list[str]) 
 
 def _replay_labels(env, view, c, demo: dict) -> dict:
     """記録した行動ラベル（関節目標 + gripper スカラー）だけで、評価環境と同じ方法で腕を動かしてタスクが成功するか。"""
-    from urdf2vla.sim.lab import T, render_fix, write_joint_state, write_root_pose
+    from urdf2vla.sim.lab import T, render_fix, write_joint_state
 
     robot = view.robot
     names = robot.joint_names
     env.reset()
     q0 = torch.tensor(demo["joint_pos0"], device=env.device).unsqueeze(0)
     write_joint_state(robot, q0)
-    pose = torch.tensor(demo["object_pose0"], device=env.device).unsqueeze(0)
-    pose[:, :3] += view.origin
-    write_root_pose(view.object, pose)
-    env.scene.write_data_to_sim()
-    env.sim.step(render=False)
-    env.scene.update(env.physics_dt)
+    view.place_object(int(demo["object_index"]), list(demo["object_place_pose"]))
 
     arm_idx = [names.index(j) for g in c.vla.action.groups if g.kind == "joint_position" for j in g.joints]
     grippers = [view.grippers[g.gripper] for g in c.vla.action.groups if g.kind == "gripper_scalar"]
@@ -156,10 +153,9 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
     device_kind = args.device or c.teleop.device
     num_demos = int(args.num_demos)
     max_attempts = int(args.max_attempts) or num_demos * 3
-    torch.manual_seed(int(args.seed))
-
     env, env_id = make_env(c, "teleop")
-    view = SimView(env, c.robot, c.task, c.vla)
+    torch.manual_seed(int(args.seed))  # 環境の作成（Isaac Lab）が乱数の種を設定し直すので、その後で設定する
+    view = SimView(env, c.robot, c.task, c.vla, project_root=project.root)
     device = make_device(device_kind, c.teleop, view)
     integ = TargetIntegrator(c.teleop, view)
     cams = [i.camera for i in c.vla.images]
@@ -202,6 +198,7 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
     while saved < num_demos and attempts < max_attempts and not quit_all:
         attempts += 1
         env.reset()
+        obj_index, place_pose = view.start_episode()  # 物体の候補から 1 つを選んで台に置く
         render_fix(env, c.task)
         device.reset(view)
         integ.reset(view)
@@ -210,6 +207,8 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
         initial = {
             "joint_pos": view.joint_pos().tolist(),
             "object_pose": obj_p.tolist() + obj_q.tolist(),
+            "object_index": [obj_index],
+            "object_place_pose": place_pose,  # 置いた姿勢（落ち着かせる前）。再生はここから同じ手順で置く
         }
         tcp_start = {a.name: view.tcp_pose_root(a.name)[0].clone() for a in c.robot.arms}
         prev_img = None
@@ -275,6 +274,7 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
         tx, ty = c.task.target.pos
         ep = {
             "attempt": attempts,
+            "object": view.object_cfg.key,
             "outcome": outcome,
             "steps": len(buf),
             "frozen_frames": frozen,
@@ -301,13 +301,19 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
         jump = max((_first_frame_jump(buf.data.get(f"obs/images/{n}", [])) for n in cams), default=0.0)
         stale_first = max(stale_first, jump)
         if outcome == "success":
-            write_episode(h5, start_idx + saved, buf, initial, {"success": True, "device": device_kind, "seed": int(args.seed), "attempt": attempts})
+            write_episode(
+                h5, start_idx + saved, buf, initial,
+                {"success": True, "device": device_kind, "seed": int(args.seed), "attempt": attempts,
+                 "object": view.object_cfg.key, "language_instruction": view.instruction()},
+            )  # fmt: skip
             if first_demo is None:
                 first_demo = {
                     "actions": buf.data["actions"],
                     "states": buf.data["obs/state"],
                     "joint_pos0": initial["joint_pos"],
                     "object_pose0": initial["object_pose"],
+                    "object_index": obj_index,
+                    "object_place_pose": place_pose,
                 }
             saved += 1
             h5.flush()

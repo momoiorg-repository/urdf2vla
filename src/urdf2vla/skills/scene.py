@@ -10,6 +10,7 @@ from urdf2vla.result import SkillResult
 from urdf2vla.schema.camera import CameraConfig, CamerasConfig
 from urdf2vla.schema.robot import RobotConfig
 from urdf2vla.schema.task import ObjectConfig, TableConfig, TargetConfig, TaskConfig
+from urdf2vla import objects as catalog
 from urdf2vla.urdf import analysis as A
 from urdf2vla.urdf.kinematics import Transform, cross, look_at_ros, normalize
 from urdf2vla.urdf.parser import parse_urdf
@@ -42,6 +43,24 @@ def arm_geometry(project: Project, cfg: RobotConfig) -> tuple[list[list[float]],
 
 GRASP_CLEAR = 0.05  # 把持点の台からの高さの目安
 SQRT_HALF = math.sqrt(0.5)
+GRASP_MARGIN = 0.012  # 物体の幅がグリッパの開きよりこれ以上小さいこと [m]（指の厚み・位置のずれ）
+
+
+def gripper_opening(project: Project, cfg: RobotConfig) -> float | None:
+    """最初のグリッパの指先の最大の開き [m]。SimReady はカタログの値、直動の指は可動量の和。回転の指は分からない（None）。"""
+    if not cfg.grippers:
+        return None
+    g = cfg.grippers[0]
+    if g.simready:
+        from urdf2vla.grippers import get_gripper
+
+        return get_gripper(g.simready).max_opening or None
+    meta = project.read_generated("robot_metadata.yaml")
+    types = {j["name"]: j["type"] for j in meta.get("joints", [])}
+    joints = list(g.open)
+    if joints and all(types.get(j) == "prismatic" for j in joints):
+        return round(sum(abs(g.open[j] - g.close[j]) for j in joints), 4)
+    return None
 
 
 # --------------------------------------------------------------------------- configure_task
@@ -84,19 +103,74 @@ def configure_task(project: Project, opts: dict, result: SkillResult, log) -> No
     home = {}
     for arm, sh in zip(cfg.arms, shoulders):
         home[arm.name] = [round(wx, 3), round(sh[1] if len(shoulders) > 1 else wy, 3), round(top_z + GRASP_CLEAR + 0.6 * drop, 3)]
+
+    # 物体と置き場所: project.yaml の task.objects（カタログの key のリスト）と task.container（key、"disc" は円）
+    spec = project.config().get("task") or {}
+    keys = list(spec.get("objects") or catalog.DEFAULT_OBJECTS)
+    container = spec.get("container", catalog.DEFAULT_CONTAINER)
+    opening = gripper_opening(project, cfg)
+    objs, dropped = [], []
+    for key in keys:
+        if key == "cube":
+            objs.append(ObjectConfig())
+            continue
+        try:
+            a = catalog.get_object(key)
+        except KeyError as e:
+            result.fail(str(e))
+            return
+        if opening is not None and a.grasp_width > opening - GRASP_MARGIN:
+            dropped.append(f"{key}（幅 {a.grasp_width * 100:.1f} cm）")
+            continue
+        objs.append(ObjectConfig(key=a.key, name=a.name, asset=a.url, variants=dict(a.variants), scale=a.scale,
+                                 size=a.scaled_size, bottom=a.scaled_bottom, box=a.box))  # fmt: skip
+    if dropped:
+        result.warnings.append(
+            f"グリッパの開き（{opening * 100:.1f} cm）に入らない物体を除きました: {', '.join(dropped)}。"
+        )
+    if not objs:
+        result.fail(f"グリッパの開き（{(opening or 0) * 100:.1f} cm）に入る物体がありません。task.objects に小さい物体（例: cube, lime）を選んでください。")
+        return
+    spawn_x = [round(wx - 0.06 * s, 3), round(wx + 0.06 * s, 3)]
+    spawn_y = [round(wy + 0.06 * s, 3), round(wy + 0.16 * s, 3)]
+    if container in (None, "disc"):
+        target = TargetConfig(pos=[round(wx, 3), round(wy - 0.12 * s, 3)], radius=0.06)
+    else:
+        try:
+            c = catalog.get_container(container)
+        except KeyError as e:
+            result.fail(str(e))
+            return
+        size = c.scaled_size
+        # 容器は物体を置く範囲の右（-y）に、縁と物体の間に隙間をあけて置く
+        widest = max(o.grasp_width for o in objs)
+        ty = min(wy - 0.12 * s, spawn_y[0] - widest / 2 - 0.04 - size[1] / 2)
+        target = TargetConfig(pos=[round(wx, 3), round(ty, 3)], key=c.key, name=c.name, asset=c.url, variants=dict(c.variants),
+                              scale=c.scale, size=size, bottom=c.scaled_bottom, radius=round(min(size[0], size[1]) / 2, 3))  # fmt: skip
+        if abs(ty - cy) + size[1] / 2 > size_y / 2 or size[0] > size_x:
+            size_y = round(max(size_y, 2 * (abs(ty - cy) + size[1] / 2) + 0.04), 3)
+            size_x = round(max(size_x, size[0] + 0.04), 3)
     task = TaskConfig(
         table=TableConfig(center=[round(wx, 3), round(cy, 3)], size=[round(size_x, 3), round(size_y, 3), 0.05], top_z=round(top_z, 3)),
-        object=ObjectConfig(
-            spawn_x=[round(wx - 0.06 * s, 3), round(wx + 0.06 * s, 3)],
-            spawn_y=[round(wy + 0.06 * s, 3), round(wy + 0.16 * s, 3)],
-        ),
-        target=TargetConfig(pos=[round(wx, 3), round(wy - 0.12 * s, 3)], radius=0.06),
+        objects=objs,
+        spawn_x=spawn_x,
+        spawn_y=spawn_y,
+        target=target,
+        instruction="put the {object} in the {target}" if target.is_container else TaskConfig.model_fields["instruction"].default,
         home_tcp=home,
     )
     path = project.write_generated("task.yaml", task.model_dump(mode="json"), section="task")
     TaskConfig.model_validate(project.read_generated("task.yaml"))
     result.outputs["task"] = project.rel(path)
-    result.data = {"arm_length_estimate": length, "workspace_center": [round(wx, 3), round(wy, 3), round(top_z, 3)], "control_hz": task.control_hz}
+    result.data = {
+        "arm_length_estimate": length,
+        "workspace_center": [round(wx, 3), round(wy, 3), round(top_z, 3)],
+        "control_hz": task.control_hz,
+        "objects": [o.key for o in task.objects],
+        "target": task.target.key,
+        "instructions": [task.instruction_for(i) for i in range(len(task.objects))],
+        "gripper_opening_m": opening,
+    }
     result.warnings.append(
         "台・物体・置き場所はロボットの腕の長さから自動配置しました（launch_sim の snapshot で確認してください）。"
         "変更は project.yaml の overrides.task に書きます。"

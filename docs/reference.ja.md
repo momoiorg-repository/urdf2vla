@@ -20,7 +20,7 @@
 |---|---|
 | `inspect_robot` | URDF を読む: link と関節、腕、グリッパ（mimic を含む）、手先の link の候補、メッシュ。曖昧なことは質問する |
 | `configure_robot` | URDF と回答からロボットの設定を作り、正規化した URDF を書く（`package://` を解決、空の root link を除去） |
-| `configure_task` | 腕の届く範囲と肩の高さから、台・立方体・置き場所を配置する |
+| `configure_task` | 物体と容器を選び（`task.objects`, `task.container`）、腕の届く範囲と肩の高さから台・物体を置く範囲・トレイを配置する |
 | `configure_camera` | カメラを置く: 既定は DROID の配置（`wrist`, `left`, `right`）。ほかに `front` / `side` のプリセットか明示指定 |
 | `import_robot` | URDF を USD に変換し（設定があれば SimReady のグリッパを取り付け）、ロボットの検査をする。手先が下を向いていなければ IK で初期姿勢を提案する |
 | `launch_sim` | Isaac Lab Arena で Pick & Place の環境を組み立て、カメラの画像を保存し、カメラ・場面・試しの把持を検査する。`--livestream` で WebRTC のクライアント用に動かし続ける |
@@ -69,6 +69,10 @@ robot:
   base_pose: {pos: [0, 0, 0], rot_xyzw: [0, 0, 0, 1]}
   gripper: {simready: robotiq_2f_85}   # URDF のグリッパを付け替える（URDF にグリッパがなければ + mount_link）
 
+task:
+  objects: [apple, lime, pear, color_cube]   # エピソードごとに 1 つ（物体の一覧は「自分のロボットを使う」）
+  container: plastic_tray              # または "disc"（平らな緑の置き場所）
+
 cameras:                               # プリセット: wrist, left, right, front, side。または明示指定
   - preset: wrist
   - preset: left
@@ -86,13 +90,15 @@ overrides:                             # generated/ のファイルと同じ構�
 | キー | 既定 | 効果 |
 |---|---|---|
 | `overrides.robot.asset.solver_position_iterations` | 32（SimReady のグリッパでは 64） | 接触の精度。指が物体にめり込むときに上げる |
-| `overrides.task.object.size` / `.mass` | `[0.045, 0.045, 0.045]` m / 0.1 kg | 立方体 |
-| `overrides.task.target.radius` | 0.06 m | 置き場所（成功の半径は `task.success.radius`） |
+| `overrides.task.instruction` | "put the {object} in the {target}" | 指示文。`{object}` と `{target}` はエピソードの物体と容器の名前になる |
+| `overrides.task.spawn_x` / `.spawn_y` | 腕の届く範囲から | エピソードで物体を置く範囲 |
+| `overrides.task.target.pos` | 物体を置く範囲の横 | トレイの位置 |
+| `overrides.task.success.container_margin` | 0.01 m | 物体がトレイの縁からどれだけ内側にあれば成功か |
 | `overrides.task.language_instruction` | "pick up the red cube and place it on the green target" | VLA に渡すタスクの文 |
 | `overrides.task.episode_length_s` | 30 秒 | エピソードの時間切れ |
 | `overrides.task.render_fix` | false | カメラが止まるとき、step ごとに描画を 1 回増やす |
 | `overrides.teleop.pos_step` / `.rot_step` | 0.008 m / 0.04 rad | キー操作の 1 制御 step あたりの移動量 |
-| `overrides.teleop.grasp_height_offset` | 0 m | スクリプトで掴む高さ（立方体の中心から） |
+| `overrides.teleop.grasp_height_offset` | 0 m | スクリプトで掴む高さ（物体の中心から） |
 
 ## プロジェクトのフォルダ
 
@@ -126,7 +132,7 @@ projects/<名前>/
 | 工程 | 検査 |
 |---|---|
 | `import_robot` | `articulation_root`, `all_joints_driven`, `mimic_constraints_off`, `joint_name_match`, `bodies_exist`, `no_nan`, `default_pose_tracking`, `within_limits`, `gripper_motion:<gripper>`, `joint_limits_hold:<gripper>` |
-| `launch_sim` | `camera_alive:<camera>`, `camera_not_black:<camera>`, `camera_mount:<camera>`, `no_nan`, `object_on_table`, `grasp_hold:<gripper>`, `grasp_opening:<gripper>` |
+| `launch_sim` | `camera_alive:<camera>`, `camera_not_black:<camera>`, `camera_mount:<camera>`, `no_nan`、物体ごとに `object_on_table:<object>`, `asset_size:<object>`, `grasp_hold:<gripper>:<object>`, `grasp_opening:<gripper>:<object>`（箱の形の物体）、`asset_size:<container>` |
 | `setup_teleoperation` | `ik_direction:<arm>:+x`, `ik_direction:<arm>:+z`, `ik_direction:<arm>:-y`, `action_label:<arm>` |
 | `collect_dataset` | `camera_frames_updated`, `first_frame_fresh`, `label_replay` |
 | `convert_dataset` | `gr00t_loader`, `video_matches:<camera>` |

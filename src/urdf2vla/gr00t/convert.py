@@ -98,8 +98,11 @@ def run(project: Project, args, result: SkillResult) -> None:
             return
         episodes, total = [], 0
         features: dict = {}
+        tasks: dict[str, int] = {}  # 指示文 → task_index（エピソードごとに物体が違えば指示文も違う）
         for ep, name in enumerate(demos):
             g = data[name]
+            ep_instruction = str(g.attrs.get("language_instruction", instruction))
+            task_index = tasks.setdefault(ep_instruction, len(tasks))
             state = g["obs/state"][:].astype(np.float32)
             action = g["actions"][:].astype(np.float32)
             T = len(action)
@@ -114,8 +117,8 @@ def run(project: Project, args, result: SkillResult) -> None:
                     "observation.state": list(state),
                     "action": list(action),
                     "timestamp": (np.arange(T) / fps).astype(np.float32),
-                    "annotation.human.task_description": np.zeros(T, dtype=np.int64),
-                    "task_index": np.zeros(T, dtype=np.int64),
+                    "annotation.human.task_description": np.full(T, task_index, dtype=np.int64),
+                    "task_index": np.full(T, task_index, dtype=np.int64),
                     "episode_index": np.full(T, ep, dtype=np.int64),
                     "index": np.arange(total, total + T, dtype=np.int64),
                     "frame_index": np.arange(T, dtype=np.int64),
@@ -133,7 +136,7 @@ def run(project: Project, args, result: SkillResult) -> None:
                     return
                 vid = out / f"videos/chunk-{chunk:03d}/observation.images.{img.key}/episode_{ep:06d}.mp4"
                 features[f"observation.images.{img.key}"] = _encode_video(frames, vid, fps)
-            episodes.append({"episode_index": ep, "tasks": [instruction], "length": int(T)})
+            episodes.append({"episode_index": ep, "tasks": [ep_instruction], "length": int(T)})
             total += T
             print(f"[urdf2vla] converted {name} -> episode {ep} ({T} steps)", flush=True)
 
@@ -151,7 +154,7 @@ def run(project: Project, args, result: SkillResult) -> None:
         "robot_type": robot_name,
         "total_episodes": n,
         "total_frames": total,
-        "total_tasks": 1,
+        "total_tasks": len(tasks),
         "total_videos": n * len(vla.images),
         "total_chunks": math.ceil(n / CHUNK),
         "chunks_size": CHUNK,
@@ -165,7 +168,7 @@ def run(project: Project, args, result: SkillResult) -> None:
     meta.mkdir(parents=True, exist_ok=True)
     (meta / "info.json").write_text(json.dumps(info, indent=2))
     (meta / "episodes.jsonl").write_text("".join(json.dumps(e) + "\n" for e in episodes))
-    (meta / "tasks.jsonl").write_text(json.dumps({"task_index": 0, "task": instruction}) + "\n")
+    (meta / "tasks.jsonl").write_text("".join(json.dumps({"task_index": i, "task": t}) + "\n" for t, i in tasks.items()))
     (meta / "modality.json").write_text(json.dumps(modality_json(vla), indent=2))
     module = f"urdf2vla_modality_{re.sub(r'[^a-zA-Z0-9]', '_', project.name)}"
     cfg_path = out / f"{module}.py"

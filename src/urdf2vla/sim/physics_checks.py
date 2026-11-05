@@ -70,10 +70,11 @@ def joint_limits_hold(sim, robot, cfg, jtype: dict[str, str]) -> list[dict]:
     return checks
 
 
-def grasp_hold(env, view, c, base_action: torch.Tensor, jtype: dict[str, str]) -> tuple[list[dict], dict]:
-    """指の間（TCP）に台の物体を置いて閉じ、物体を離しても落ちないか、直動の指なら指の開きが物体の幅と合うかを調べる。
+def grasp_hold(env, view, c, base_action: torch.Tensor, jtype: dict[str, str], index: int = 0) -> tuple[list[dict], dict]:
+    """指の間（TCP）に物体の候補 index を置いて閉じ、物体を離しても落ちないか、直動の指なら指の開きが物体の幅と合うかを調べる。
 
-    物体は面が指の開閉方向に垂直になる向きに置き、指が閉じ終わるまでその場に保持してから離す。腕は初期姿勢のまま。
+    物体は外接箱の中心を TCP に、x 軸（短い辺の側）を指の開閉方向に向けて置き、指が閉じ終わるまでその場に保持してから離す。
+    腕は初期姿勢のまま。物体の候補が複数あれば、検査の名前に物体の key を付ける。
     """
     from isaaclab.utils.math import quat_apply, quat_from_matrix
 
@@ -83,7 +84,10 @@ def grasp_hold(env, view, c, base_action: torch.Tensor, jtype: dict[str, str]) -
     g = robot_cfg.gripper_for(arm.name)
     if g is None:
         return checks, report
-    width = float(c.task.object.size[0])
+    view.active = index
+    ocfg = view.object_cfg
+    suffix = f":{ocfg.key}" if len(c.task.objects) > 1 else ""
+    width = float(ocfg.size[0])
     n_arm = sum(len(a.joints) for a in robot_cfg.arms)
     open_a, close_a = base_action.clone(), base_action.clone()
     open_a[0, n_arm:] = 1.0
@@ -100,27 +104,32 @@ def grasp_hold(env, view, c, base_action: torch.Tensor, jtype: dict[str, str]) -
     f_w = f_w - torch.dot(f_w, a_w) * a_w
     f_w = f_w / torch.linalg.norm(f_w)
     rot = torch.stack([f_w, torch.linalg.cross(a_w, f_w), a_w], dim=1)
-    q_obj = quat_from_matrix(rot.unsqueeze(0))[0]
+    q_dir = quat_from_matrix(rot.unsqueeze(0))[0]
+    # 物体の直立の向き（生成時）の x を指の開閉方向、z を接近方向に合わせる（剛体の向きは q_dir × 生成時の向き）
+    from isaaclab.utils.math import quat_mul
+
+    q_obj = quat_mul(q_dir.unsqueeze(0), view.quat0[index].unsqueeze(0))[0]
     tcp, _ = view.tcp_pose(arm.name)
-    pose = torch.cat([tcp + view.origin, q_obj]).unsqueeze(0)
+    # 外接箱の中心を TCP に（剛体の原点はアセットによって底や別の点にある）
+    pose = torch.cat([tcp - view.center_offset(index, q_obj) + view.origin, q_obj]).unsqueeze(0)
     for k in range(60):
         if k < 20:  # 指が閉じ終わるまで物体をその場に保持し、その後は指だけで支える
             write_root_pose(view.object, pose)
         env.step(close_a)
-    obj_p, _ = view.object_pose()
+    obj_p = view.object_center()
     tcp_now, _ = view.tcp_pose(arm.name)
     drift = float(torch.linalg.norm(obj_p - tcp_now))
     report["object_offset_from_tcp_m"] = round(drift, 4)
     checks.append(
         {
-            "name": f"grasp_hold:{g.name}",
+            "name": f"grasp_hold:{g.name}{suffix}",
             "ok": drift < HELD_TOL,
             "detail": {"object_offset_from_tcp_m": round(drift, 4), "tolerance_m": HELD_TOL},
             "fix": FIX["grasp_hold"],
         }
     )
     # 直動の指: 指の開き（閉じた位置からの移動量の和）が物体の幅と合うか（めり込みの検出）
-    if all(jtype.get(j) == "prismatic" for j in g.joints):
+    if ocfg.box and all(jtype.get(j) == "prismatic" for j in g.joints):
         names = view.robot.joint_names
         q = T(view.robot.data.joint_pos)[0]
         opening = sum(abs(float(q[names.index(j)]) - g.close[j]) for j in g.joints)
@@ -128,7 +137,7 @@ def grasp_hold(env, view, c, base_action: torch.Tensor, jtype: dict[str, str]) -
         report["object_width_m"] = width
         checks.append(
             {
-                "name": f"grasp_opening:{g.name}",
+                "name": f"grasp_opening:{g.name}{suffix}",
                 "ok": opening >= width - OPENING_TOL,
                 "detail": {"finger_opening_m": round(opening, 4), "object_width_m": width, "tolerance_m": OPENING_TOL},
                 "fix": FIX["grasp_opening"],
@@ -136,3 +145,26 @@ def grasp_hold(env, view, c, base_action: torch.Tensor, jtype: dict[str, str]) -
         )
     env.reset()
     return checks, report
+
+
+SIZE_TOL = 0.15  # 生成された物体の外接箱がカタログの値からずれてよい割合
+
+
+def asset_size_check(env, entity: str, key: str, expected: list[float]) -> dict:
+    """場面に生成した物体（env 0）の外接箱を USD から測り、カタログの大きさ（縮尺後）と比べる。
+
+    外れていれば、縮尺の誤り・アセットの単位（cm / m）の違い・variant の選び間違いを疑う。
+    """
+    from pxr import Usd, UsdGeom
+
+    import isaaclab.sim as sim_utils
+
+    asset = env.scene[entity]
+    prim = sim_utils.find_matching_prims(asset.cfg.prim_path)[0]
+    cache = UsdGeom.BBoxCache(Usd.TimeCode.Default(), ["default", "render"], useExtentsHint=False)
+    box = cache.ComputeWorldBound(prim).ComputeAlignedRange()
+    measured = [round(float(v), 4) for v in (box.GetMax() - box.GetMin())]
+    # 水平の 2 辺は向きで入れ替わるので、並べ替えて比べる
+    pairs = list(zip(sorted(measured[:2]) + [measured[2]], sorted(expected[:2]) + [expected[2]]))
+    ok = all(abs(m - e) <= SIZE_TOL * e + 0.003 for m, e in pairs)
+    return {"name": f"asset_size:{key}", "ok": ok, "detail": {"measured_m": measured, "catalog_m": [round(v, 4) for v in expected]}}

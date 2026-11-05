@@ -131,13 +131,14 @@ class ScriptedExpert(TeleopDevice):
 
     def reset(self, view: SimView) -> None:
         # 双腕なら物体に近い方の手で掴む
-        obj, _ = view.object_pose()
+        obj = view.object_center()
         dist = {a.name: float(torch.linalg.norm(view.tcp_pose(a.name)[0][:2] - obj[:2])) for a in view.cfg.arms}
         self._select_arm(view, min(dist, key=dist.get))
         self.phase = 0
         self.wait = 0
         self.open = True
         self.grasp_latched = None
+        self.half_latched = None
 
     def _down_orientation(self, view: SimView, q_tcp: torch.Tensor) -> torch.Tensor:
         """接近方向だけを真下に合わせた手先の向き（鉛直軸まわりの回転は今のまま）。
@@ -170,10 +171,15 @@ class ScriptedExpert(TeleopDevice):
         f_tcp = quat_apply_inverse(view.tcp_rot_b[self.arm].unsqueeze(0), torch.tensor([arm.finger_axis], device=view.device))
         f = quat_apply(q.unsqueeze(0), f_tcp)[0]
         _, obj_q = view.object_pose()
-        ox = quat_apply(obj_q.unsqueeze(0), torch.tensor([[1.0, 0.0, 0.0]], device=view.device))
+        # 指の開閉方向を物体の水平の短い辺にそろえる。縦横がほぼ同じ（立方体・丸い果物）なら 90° ごとに同じなので近い面に、
+        # 細長い物体（洋梨など）は 180° ごと（短い辺の向きに限る）
+        sx, sy = view.object_cfg.size[0], view.object_cfg.size[1]
+        short = [1.0, 0.0, 0.0] if sx <= sy else [0.0, 1.0, 0.0]
+        period = math.pi / 2 if max(sx, sy) / max(min(sx, sy), 1e-6) < 1.2 else math.pi
+        ox = quat_apply(obj_q.unsqueeze(0), torch.tensor([short], device=view.device))
         ox = quat_apply_inverse(view.root_quat().unsqueeze(0), ox)[0]
         a = math.atan2(float(f[0] * ox[1] - f[1] * ox[0]), float(f[0] * ox[0] + f[1] * ox[1]))
-        a = (a + math.pi / 4) % (math.pi / 2) - math.pi / 4  # 立方体は 90° ごとに同じなので、近い面に合わせる
+        a = (a + period / 2) % period - period / 2
         if abs(a) < 1e-3:
             return q
         dq = quat_from_angle_axis(torch.tensor([a], device=view.device), torch.tensor([[0.0, 0.0, 1.0]], device=view.device))[0]
@@ -188,17 +194,21 @@ class ScriptedExpert(TeleopDevice):
     def advance(self, view: SimView, integ: TargetIntegrator) -> Command:
         cmd = Command()
         c = self.cfg
-        obj, _ = view.object_pose()
+        obj = view.object_center()  # 外接箱の中心（剛体の原点はアセットによって底や別の点にある）
         tx, ty = view.task.target.pos
         top = view.task.table.top_z
-        half = view.task.object.size[2] / 2
-        grasp = self._to_root(view, torch.tensor([float(obj[0]), float(obj[1]), top + half + c.grasp_height_offset], device=view.device))
-        # 把持を始めたら把持位置を固定する（つかんだ物体は手と一緒に動くので、追いかけ続けないように）
+        # 掴む高さは物体の実際の中心の高さ（丸い物体は倒れた向きで置くので、直立の高さの半分ではない）
+        grasp = self._to_root(view, torch.tensor([float(obj[0]), float(obj[1]), float(obj[2]) + c.grasp_height_offset], device=view.device))
+        # 把持を始めたら把持位置と、置いたときの中心の高さを固定する（つかんだ物体は手と一緒に動くので、追いかけ続けないように）
         if self.phase >= 2:
             if self.grasp_latched is None:
                 self.grasp_latched = grasp.clone()
+                self.half_latched = float(obj[2]) - top
             grasp = self.grasp_latched
-        place = self._to_root(view, torch.tensor([tx, ty, top + half + c.place_height_offset], device=view.device))
+        half = self.half_latched if self.phase >= 2 and self.half_latched is not None else float(obj[2]) - top
+        # 置く高さ: 容器なら容器の縁の上（そこで離して中に落とす）、円なら台の上
+        floor = top + (view.task.target.size[2] if view.task.target.is_container else 0.0)
+        place = self._to_root(view, torch.tensor([tx, ty, floor + half + c.place_height_offset], device=view.device))
         up = torch.tensor([0.0, 0.0, c.approach_height], device=view.device)
         plan = [("move", grasp + up), ("move", grasp), ("close", None), ("move", grasp + up),
                 ("move", place + up), ("move", place), ("open", None), ("move", place + up)]  # fmt: skip
@@ -215,8 +225,9 @@ class ScriptedExpert(TeleopDevice):
                     self.wait, self.phase = 0, self.phase + 1
             else:
                 goal = target
-                # 掴む・置く高さへの下降（phase 1, 5）だけ精密に、それ以外の移動は粗くてよい
-                tol = c.waypoint_tolerance if self.phase in (1, 5) else max(c.waypoint_tolerance, 0.02)
+                # 物体・トレイの真上（phase 0, 4）と、掴む・置く高さへの下降（phase 1, 5）は精密に。真上で水平のずれを
+                # 残したまま下降すると、指の開きに余裕のない物体（りんごなど）では指が物体の上に乗る。持ち上げは粗くてよい
+                tol = c.waypoint_tolerance if self.phase in (0, 1, 4, 5) else max(c.waypoint_tolerance, 0.02)
                 if float(torch.linalg.norm(target - pos)) < tol:
                     self.phase += 1
         cmd.arm_goal[self.arm] = (goal, self._grasp_orientation(view, integ.quat[self.arm]))

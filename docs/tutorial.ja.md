@@ -11,8 +11,8 @@ urdf2vla に同梱の Franka Panda で、URDF から記録したデータセッ�
 |---|---|---|
 | [1. プロジェクトを作る](#create) | `init` | すぐ |
 | [2. 設定する](#configure) | `inspect_robot` 〜 `configure_camera` | 約 1 秒 |
-| [3. Isaac Sim に取り込む](#import) | `import_robot`, `launch_sim` | 約 1 分 |
-| [4. 記録する](#record) | `configure_vla_interface`, `setup_teleoperation`, `collect_dataset` | デモ 10 個で約 3 分 |
+| [3. Isaac Sim に取り込む](#import) | `import_robot`, `launch_sim` | 約 2 分（初回は物体とトレイのダウンロードでもう少し） |
+| [4. 記録する](#record) | `configure_vla_interface`, `setup_teleoperation`, `collect_dataset` | デモ 10 個で約 4 分 |
 | [5. 変換し、学習を用意する](#convert) | `convert_dataset`, `train_vla` | 約 15 秒 |
 | [6. 評価する](#replay) | `evaluate_vla --replay` | 約 1 分 |
 
@@ -36,7 +36,8 @@ urdf2vla configure_camera --project projects/tutorial_franka
 ```
 
 これらはコンテナではなく手元のマシンで動きます。`inspect_robot` が URDF を読んで腕・グリッパ・手先の link を見つけ、
-`configure_robot` がロボットの設定にまとめ、`configure_task` が台・4.5 cm の立方体・緑の置き場所を手の届く範囲に置き、
+`configure_robot` がロボットの設定にまとめ、`configure_task` が台とトレイを手の届く範囲に置いて物体（Franka の 8 cm の
+指に入るりんご・ライム・洋梨・色付きの立方体）を選び、
 `configure_camera` が [DROID](https://droid-dataset.github.io/) のデータセットと同じように手先カメラと 2 台の外部カメラを
 置きます。
 
@@ -86,8 +87,9 @@ urdf2vla launch_sim   --project projects/tutorial_franka
 }
 ```
 
-`launch_sim` は Isaac Lab Arena で Pick & Place の環境を組み立てて少し動かし、カメラ・場面・試しの把持（グリッパが
-立方体を保持でき、指が立方体にめり込まないこと）を検査します。各カメラの画像は `snapshots/` に保存されます。
+`launch_sim` は Isaac Lab Arena で Pick & Place の環境を組み立てて少し動かし、カメラ・場面と、物体ごとに台の上に置けるか・
+大きさがカタログどおりか・掴んで保持できるかを検査します。丸い物体はしばらく台に置いて落ち着く向き（りんごは横に倒れる）
+を測り、エピソードではその向きで置きます。各カメラの画像は `snapshots/` に保存されます。
 
 <figure markdown="span">
   ![手先・左・右のカメラの画像](assets/tutorial_cameras.png)
@@ -106,8 +108,8 @@ urdf2vla collect_dataset --project projects/tutorial_franka --device scripted --
 グリッパの指令）を決めます。`setup_teleoperation` は、手先を +x・−y・+z に動かす指令で、本当にその向きに動くかを
 確かめます。
 
-`collect_dataset --device scripted` は、毎回ランダムな位置に置いた立方体をスクリプトで運ばせ、成功したエピソードだけを
-残します。
+`collect_dataset --device scripted` は、毎回ランダムに選んだ物体をランダムな位置に置き、その名前を言う指示文
+（*"put the pear in the tray"*）でスクリプトに運ばせ、成功したエピソードだけを残します。
 
 ```json
 {
@@ -153,8 +155,8 @@ urdf2vla evaluate_vla --project projects/tutorial_franka --replay --dataset demo
 ```
 
 学習済みのモデルがなくても、`--replay` でモデルのまわりをすべて試せます。変換したデータセットの行動を返す代わりの方策で
-GR00T の推論サーバを起動し、Isaac Sim をつないで、本番の評価と同じようにエピソードを実行します。ここで立方体が置き場所に
-置かれれば、データの形式・行動の変換・サーバとシミュレータの接続はすべて動いています。
+GR00T の推論サーバを起動し、Isaac Sim をつないで、本番の評価と同じように（記録と同じ物体で）エピソードを
+実行します。ここで物体がトレイに置かれれば、データの形式・行動の変換・サーバとシミュレータの接続はすべて動いています。
 
 <video controls muted playsinline width="100%" src="../../assets/eval_replay.mp4"></video>
 

@@ -59,6 +59,15 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
     env, env_id = make_env(c, "policy")
     render_fix(env, task)
     print(f"[urdf2vla] env ready: {env_id}, action dim {env.action_manager.total_action_dim}", flush=True)
+    from urdf2vla.sim.state import SimView
+
+    view = SimView(env, robot, task, c.vla)
+
+    def place_center(i: int) -> None:
+        """物体の候補 i を、物体を置く範囲の中央に置く。"""
+        view.place_object(i, view.pose_on_table(i, sum(task.spawn_x) / 2, sum(task.spawn_y) / 2))
+
+    place_center(0)  # 最初の画像に写すのは 1 つ目の物体
 
     # 行動ベクトル = [arm ごとの関節目標..., gripper ごとの関節目標...]（ActionsCfg の順）
     default = {n: v for n, v in robot.default_pose.items()}
@@ -172,17 +181,45 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
     joint_pos = T(env.scene["robot"].data.joint_pos)[0]
     finite = bool(torch.isfinite(joint_pos).all())
     checks.append({"name": "no_nan", "ok": finite, "detail": "関節角が有限"})
-    obj_pos = T(env.scene["object"].data.root_pos_w)[0] - env_origin(env)
-    on_table = abs(float(obj_pos[2]) - (task.table.top_z + task.object.size[2] / 2)) < 0.02
-    checks.append({"name": "object_on_table", "ok": on_table, "detail": {"object_pos": [round(float(c), 4) for c in obj_pos]}})
+    # 物体の候補ごと: 台に置いて落ち着くか（台を突き抜けない・跳ねない）、生成された大きさがカタログと合うか。
+    # 丸い物体は直立では倒れて転がる（SimReady のりんごは 2 秒ほどで倒れて 10 cm 転がった）ので、しばらく置いて
+    # 落ち着いた向きと高さを測り（build/object_rest.json）、エピソードではその向きで置く
+    import json
+
+    from urdf2vla.sim.physics_checks import asset_size_check
+
+    multi = len(task.objects) > 1
+    rest = {}
+    for i, o in enumerate(task.objects):
+        place_center(i)
+        start = view.object_center().clone()
+        for _ in range(25 if o.box else 150):
+            env.step(base)
+        center = view.object_center()
+        root_p, root_q = view.object_pose()
+        lo, hi = task.table.top_z + min(o.size) / 2 - 0.01, task.table.top_z + max(o.size) / 2 + 0.01
+        moved = float(torch.linalg.norm(center[:2] - start[:2]))
+        on_table = lo <= float(center[2]) <= hi
+        name = f"object_on_table:{o.key}" if multi else "object_on_table"
+        checks.append({"name": name, "ok": on_table, "detail": {"object_center": [round(float(v), 4) for v in center], "expected_z": [round(lo, 4), round(hi, 4)], "moved_while_settling_m": round(moved, 4)}})
+        rest[o.key] = {"quat_xyzw": [round(float(v), 6) for v in root_q], "root_height": round(float(root_p[2]) - task.table.top_z, 5)}
+        if o.asset is not None:
+            checks.append(asset_size_check(env, f"object_{i}", o.key, o.size))
+        env.reset()
+    (project.build / "object_rest.json").write_text(json.dumps(rest, indent=1))
+    view.set_rest_poses(rest)
+    if task.target.is_container:
+        checks.append(asset_size_check(env, "target", task.target.key, task.target.size))
 
     # 掴めるか: 指の間に物体を置いて閉じ、離しても落ちないか・指が物体にめり込んでいないか（最後に行う。環境を reset する）
     from urdf2vla.sim.physics_checks import grasp_hold
-    from urdf2vla.sim.state import SimView
 
     jtype = {j.name: j.type for j in c.meta.joints} if c.meta else {}
-    grasp_checks, grasp_report = grasp_hold(env, SimView(env, robot, task, c.vla), c, base, jtype)
-    checks += grasp_checks
+    grasp_report = {}
+    for i, o in enumerate(task.objects):
+        grasp_checks, rep = grasp_hold(env, view, c, base, jtype, index=i)
+        checks += grasp_checks
+        grasp_report[o.key] = rep
 
     report = {
         "env_id": env_id,
@@ -194,6 +231,12 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
         "approach_axis_world": approach_world,
         "checks": checks,
         "grasp": grasp_report,
+        # 物体ごとに測った剛体の原点から外接箱の中心・底へのオフセットと、生成時の剛体の向き（直立）
+        "object_frames": {
+            o.key: {"center_offset": [round(float(v), 4) for v in view.center_off0[i]], "bottom": round(view.bottom0[i], 4),
+                    "spawn_quat_xyzw": [round(float(v), 4) for v in view.quat0[i]]}
+            for i, o in enumerate(task.objects)
+        },  # fmt: skip
         "snapshots": sorted(p.name for p in snap_dir.glob("*.png")),
     }
     (project.build / "launch_report.yaml").write_text(dump_yaml(report))

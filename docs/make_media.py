@@ -51,24 +51,33 @@ def free_port() -> int:
 # --------------------------------------------------------------------------- simulation media
 
 
-def snapshots(project: Path) -> None:
-    """launch_sim の最初の画像（手先・左・右のカメラ）を横に並べた 1 枚。"""
-    from PIL import Image
+def _feature_video(project: Path) -> Path:
+    """動画に使うエピソード: NVIDIA の SimReady の物体（りんご・ライム・洋梨）を運ぶ最初のもの（なければ最初のエピソード）。
+    Arena のライブラリの物体（ルービックキューブ）は元のデータセットの利用条件を確かめていないので、公開する画像には使わない。"""
+    import yaml
 
-    images = [Image.open(project / "snapshots" / f"{cam}_cam_start.png").convert("RGB") for cam in ("wrist", "left", "right")]
-    gap = 8
-    w, h = images[0].size
-    strip = Image.new("RGB", (3 * w + 2 * gap, h), (255, 255, 255))
-    for i, im in enumerate(images):
-        strip.paste(im, (i * (w + gap), 0))
+    from urdf2vla.objects import OBJECTS
+
+    videos = sorted((project / "build" / "eval_videos").glob("*_ep*.mp4"))
+    report = yaml.safe_load((project / "build" / "eval_report.yaml").read_text())
+    for e in report.get("episodes", []):
+        key = e.get("object")
+        if key in OBJECTS and OBJECTS[key].source.startswith("NVIDIA") and e.get("video"):
+            return project / e["video"]
+    return videos[0]
+
+
+def snapshots(project: Path) -> None:
+    """そのエピソードの最初のフレーム（手先・左・右のカメラを横に並べたもの）。"""
+    src = _feature_video(project)
     out = ASSETS / "tutorial_cameras.png"
-    strip.save(out, optimize=True)
-    print("wrote", out)
+    run([ffmpeg(), "-y", "-loglevel", "error", "-i", str(src), "-frames:v", "1", str(out)])
+    print("wrote", out, "from", src.name)
 
 
 def eval_video(project: Path) -> None:
     """evaluate_vla --video の 1 エピソード → ブラウザで再生できる H.264 の MP4 と、README 用の GIF。"""
-    src = sorted((project / "build" / "eval_videos").glob("*_ep000.mp4"))[0]
+    src = _feature_video(project)
     mp4 = ASSETS / "eval_replay.mp4"
     run([ffmpeg(), "-y", "-loglevel", "error", "-i", str(src), "-vf", "scale=iw*2:ih*2:flags=lanczos",
          "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "26", "-preset", "slow", "-movflags", "+faststart", "-an", str(mp4)])  # fmt: skip
@@ -76,7 +85,7 @@ def eval_video(project: Path) -> None:
     run([ffmpeg(), "-y", "-loglevel", "error", "-i", str(src), "-vf",
          "fps=10,scale=768:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96[p];[b][p]paletteuse=dither=bayer:bayer_scale=4",
          str(gif)])  # fmt: skip
-    print("wrote", mp4, gif)
+    print("wrote", mp4, gif, "from", src.name)
 
 
 # --------------------------------------------------------------------------- browser viewer media

@@ -104,8 +104,8 @@ def run_sim_skill(
 def _kill_in_runtime(runtime: Runtime, skill: str, project: Project) -> None:
     if runtime.mode != "docker":
         return
-    # "[e]asyvla" は自分（この pkill を含む bash）のコマンド行にはマッチしない
-    pattern = shlex.quote(f"[e]asyvla.(sim|gr00t).entry {skill} --project {runtime.to_runtime(project.root)}")
+    # "[u]rdf2vla" は自分（この pkill を含む bash）のコマンド行にはマッチしない
+    pattern = shlex.quote(f"[u]rdf2vla.(sim|gr00t).entry {skill} --project {runtime.to_runtime(project.root)}")
     # Kit は SIGTERM で止まらないことがあるので、少し待って SIGKILL
     script = f"pkill -TERM -f {pattern}; for i in 1 2 3 4 5; do pgrep -f {pattern} >/dev/null || exit 0; sleep 1; done; pkill -KILL -f {pattern}"
     subprocess.run(["docker", "exec", runtime.container, "bash", "-c", script], capture_output=True)

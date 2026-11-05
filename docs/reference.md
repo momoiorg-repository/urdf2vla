@@ -20,7 +20,7 @@
 |---|---|
 | `inspect_robot` | Reads the URDF: links and joints, the arm, the gripper (including mimic joints), hand-link candidates, mesh files. Asks about anything ambiguous. |
 | `configure_robot` | Builds the robot configuration from the URDF and your answers, and writes a normalized URDF (`package://` resolved, empty root link removed). |
-| `configure_task` | Places the table, the cube and the target from the arm's reach and shoulder height. |
+| `configure_task` | Chooses the objects and the container (`task.objects`, `task.container`) and places the table, the spawn area and the tray from the arm's reach and shoulder height. |
 | `configure_camera` | Places the cameras: DROID layout by default (`wrist`, `left`, `right`), or `front` / `side` presets, or explicit cameras. |
 | `import_robot` | Converts the URDF to USD (attaching a SimReady gripper if configured) and runs the robot checks. Proposes an IK starting pose if the hand doesn't point down. |
 | `launch_sim` | Builds the pick-and-place environment with Isaac Lab Arena, saves camera snapshots, checks cameras, scene and a test grasp. `--livestream` keeps it running for a WebRTC client. |
@@ -69,6 +69,10 @@ robot:
   base_pose: {pos: [0, 0, 0], rot_xyzw: [0, 0, 0, 1]}
   gripper: {simready: robotiq_2f_85}   # replace the URDF gripper (+ mount_link if the URDF has none)
 
+task:
+  objects: [apple, lime, pear, color_cube]   # one per episode; see the object list in the "Bring your own robot" guide
+  container: plastic_tray              # or "disc" (a flat green target)
+
 cameras:                               # presets: wrist, left, right, front, side — or explicit
   - preset: wrist
   - preset: left
@@ -86,13 +90,14 @@ Frequently used overrides:
 | Key | Default | Effect |
 |---|---|---|
 | `overrides.robot.asset.solver_position_iterations` | 32 (64 with a SimReady gripper) | Contact accuracy; raise when fingers sink into objects |
-| `overrides.task.object.size` / `.mass` | `[0.045, 0.045, 0.045]` m / 0.1 kg | The cube |
-| `overrides.task.target.radius` | 0.06 m | The target, also the success radius (`task.success.radius`) |
-| `overrides.task.language_instruction` | "pick up the red cube and place it on the green target" | The task text given to the VLA |
+| `overrides.task.instruction` | "put the {object} in the {target}" | The instruction; `{object}` and `{target}` become the episode's object and the container |
+| `overrides.task.spawn_x` / `.spawn_y` | from the arm's reach | Where an episode puts its object |
+| `overrides.task.target.pos` | beside the spawn area | Where the tray stands |
+| `overrides.task.success.container_margin` | 0.01 m | How far inside the tray's rim the object must end up |
 | `overrides.task.episode_length_s` | 30 s | Episode timeout |
 | `overrides.task.render_fix` | false | Render once more per step if a camera freezes |
 | `overrides.teleop.pos_step` / `.rot_step` | 0.008 m / 0.04 rad | Keyboard step size per control step |
-| `overrides.teleop.grasp_height_offset` | 0 m | Scripted grasp height relative to the cube center |
+| `overrides.teleop.grasp_height_offset` | 0 m | Scripted grasp height relative to the object's center |
 
 ## Project folder
 
@@ -126,7 +131,7 @@ Where the steps run. The defaults match `docker/build.sh` and `docker/run.sh`.
 | Step | Checks |
 |---|---|
 | `import_robot` | `articulation_root`, `all_joints_driven`, `mimic_constraints_off`, `joint_name_match`, `bodies_exist`, `no_nan`, `default_pose_tracking`, `within_limits`, `gripper_motion:<gripper>`, `joint_limits_hold:<gripper>` |
-| `launch_sim` | `camera_alive:<camera>`, `camera_not_black:<camera>`, `camera_mount:<camera>`, `no_nan`, `object_on_table`, `grasp_hold:<gripper>`, `grasp_opening:<gripper>` |
+| `launch_sim` | `camera_alive:<camera>`, `camera_not_black:<camera>`, `camera_mount:<camera>`, `no_nan`, and per object: `object_on_table:<object>`, `asset_size:<object>`, `grasp_hold:<gripper>:<object>`, `grasp_opening:<gripper>:<object>` (box-shaped objects); `asset_size:<container>` |
 | `setup_teleoperation` | `ik_direction:<arm>:+x`, `ik_direction:<arm>:+z`, `ik_direction:<arm>:-y`, `action_label:<arm>` |
 | `collect_dataset` | `camera_frames_updated`, `first_frame_fresh`, `label_replay` |
 | `convert_dataset` | `gr00t_loader`, `video_matches:<camera>` |

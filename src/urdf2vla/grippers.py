@@ -36,6 +36,7 @@ class SimReadyGripper:
     # mimic の拘束で閉リンクを表すグリッパは、ソルバーの反復が少ないと物体を挟んだときに拘束が保てず掴めない
     # （Isaac Lab Arena の DROID も 64）
     solver_position_iterations: int = 64
+    max_opening: float = 0.0  # 指先の間の最大の開き [m]（製品仕様。掴める物体の幅の上限に使う）
 
     @property
     def url(self) -> str:
@@ -53,6 +54,7 @@ GRIPPERS: dict[str, SimReadyGripper] = {
         usd="Isaac/Robots/Robotiq/2F-85/Robotiq_2F_85_edit.usd",
         variants={"Physics": "Physx_Mimic"},
         driven="finger_joint",
+        max_opening=0.085,  # 2F-85 のストローク 85 mm
         # 2026-11-05 にアセットで確認: finger_joint の範囲 0〜47°、5 つの関節が PhysxMimicJointAPI で追従、
         # 開いた状態の指の腹は base_link の z 0.091〜0.148、y ±0.0435〜±0.0748（開き幅 87 mm）
         open=0.0,

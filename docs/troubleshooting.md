@@ -18,13 +18,19 @@ Each step also writes a report with the measured values behind every check: `bui
 
 ## By symptom
 
-### The gripper closes but the cube slips out or falls
+### The gripper closes but the object slips out or falls
 
 | Failed check | Step | What it means | What to do |
 |---|---|---|---|
 | `joint_limits_hold` | `import_robot` | A finger joint was pushed past its limits — the simulator isn't enforcing them. Common with simplified URDF grippers. | Replace the gripper with a SimReady asset: `robot.gripper.simready` ([guide](guides/your-robot.md#simready)), then redo from `configure_robot`. |
-| `grasp_hold` | `launch_sim` | With the cube between the fingers, it drifted away after being released. | Raise `overrides.robot.asset.solver_position_iterations` (default 32; SimReady grippers use 64) and redo from `import_robot`. If the gripper's force is unrealistic, check the effort limits. |
-| `grasp_opening` | `launch_sim` | Prismatic fingers closed further than the cube is wide: they sank into it. | Raise `overrides.robot.asset.solver_position_iterations` and redo from `import_robot`. |
+| `grasp_hold` | `launch_sim` | With the object between the fingers, it drifted away after being released. | Raise `overrides.robot.asset.solver_position_iterations` (default 32; SimReady grippers use 64) and redo from `import_robot`. If the gripper's force is unrealistic, check the effort limits. |
+| `grasp_opening` | `launch_sim` | Prismatic fingers closed further than the object is wide: they sank into it. | Raise `overrides.robot.asset.solver_position_iterations` and redo from `import_robot`. |
+| `object_on_table:<object>` | `launch_sim` | The object doesn't come to rest on the table at the height its size implies. | Usually an asset problem (its rigid body or collision shape doesn't match its look). Remove it from `task.objects` and report it with `build/launch_report.yaml` (`object_frames`). |
+| `asset_size:<object>` | `launch_sim` | The spawned object's size differs from the catalog by more than 15 % — a wrong scale or unit in the asset. | Remove it from `task.objects` and report it. |
+
+With several objects, the grasp checks are reported per object (`grasp_hold:<gripper>:<object>`). An object that fails
+them can be left out of `task.objects` while you keep the others. Objects wider than the gripper opens are already left
+out by `configure_task`, with a warning.
 
 ### The robot doesn't hold its pose, shakes or explodes
 
@@ -60,10 +66,10 @@ Look at the pictures: `snapshots/<camera>_start.png` and `_end.png` from `launch
 
 ### Recording fails or succeeds rarely
 
-`build/collect_report.yaml` lists every attempt (`object_lift_m`: did the cube come up? `object_to_target_m`: how far
+`build/collect_report.yaml` lists every attempt (`object_lift_m`: did the object come up? `object_to_target_m`: how far
 from the target did it end?) and `snapshots/collect_fail_*.png` shows the last frame of failed attempts.
 
-- **The cube is never lifted** — a grasping problem: see the gripper section above, or adjust the grasp height
+- **The object is never lifted** — a grasping problem: see the gripper section above, or adjust the grasp height
   (`overrides.teleop.grasp_height_offset`).
 - **It's lifted but not placed** — the target is hard to reach: move it closer with `overrides.task.target.pos`.
 - **`label_replay` fails** — replaying the recorded actions doesn't reproduce the motion, so the labels don't describe

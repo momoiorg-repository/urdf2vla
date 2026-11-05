@@ -98,12 +98,12 @@ urdf2vla configure_robot --project projects/myrobot
 ## 4. 結果を確かめる
 
 `launch_sim` は短い試運転の最初と最後に各カメラが見たものを `snapshots/` に保存し、記録に時間を使う前に物理の検査
-（立方体を掴むことを含む）をします。すべての検査が `OK` なら、[デモの記録](recording.md) へ進みます。
+（物体を掴むことを含む）をします。すべての検査が `OK` なら、[デモの記録](recording.md) へ進みます。
 
 ## 5. SimReady のグリッパに付け替える {#simready}
 
 URDF のグリッパの中には、見た目は正しくてもシミュレーションでうまく動かないものがあります。閉リンクが簡略化されている、
-mimic 関節がうまく変換されない、可動範囲が効かない、などです。症状は「開閉はできるが立方体を保持できない」グリッパで、
+mimic 関節がうまく変換されない、可動範囲が効かない、などです。症状は「開閉はできるが物体を保持できない」グリッパで、
 urdf2vla の `joint_limits_hold` と `grasp_hold` の検査が失敗します。
 
 直し方は `project.yaml` の 1 行です。URDF のグリッパを、NVIDIA の SimReady アセット（Isaac Sim に付属のロボットと
@@ -123,17 +123,42 @@ robot:
 - 対応: `robotiq_2f_85`（Robotiq 2F-85）。調整した値（把持力、ソルバーの反復回数、把持点）は
   `src/urdf2vla/grippers.py` にあります。
 
-## 6. 場面とカメラを調整する
+## 6. 物体を選び、場面とカメラを調整する {#objects}
 
-台・立方体・置き場所は腕の届く範囲から配置します。変えるには、生成されたキーを `overrides.task`
+既定では、エピソードごとにりんご・ライム・洋梨・色付きの立方体のどれか 1 つを台に置き、ロボットはそれをトレイに
+入れます。ほかの物体は `project.yaml` で選び、`configure_task` と **`launch_sim`** をもう一度実行します（`launch_sim` が各物体の
+落ち着く向きを測り、エピソードはそれを使います）。
+
+```yaml
+task:
+  objects: [lime, color_cube, rubiks_cube]   # エピソードごとに 1 つ。指示文でその名前を言う
+  container: plastic_tray                     # 平らな緑の置き場所なら "disc"
+```
+
+| キー | 物体 | 大きさ (cm) | 出所 |
+|---|---|---|---|
+| `rubiks_cube` | ルービックキューブ（元のデータセットの利用条件を確かめていないので既定には入れない） | 5.8 × 5.8 × 5.8 | Isaac Lab Arena の物体ライブラリ（HOT3D 由来） |
+| `apple` | りんご（70 % に縮小） | 5.4 × 5.7 × 6.7 | NVIDIA SimReady |
+| `lime` | ライム | 6.4 × 7.5 × 6.1 | NVIDIA SimReady |
+| `pear` | 洋梨 | 6.1 × 13.4 × 6.2 | NVIDIA SimReady |
+| `color_cube` | 色付きの立方体 | 5.0 × 5.0 × 5.0 | Isaac Sim の props |
+| `cube` | 赤い立方体（プリミティブ、ダウンロード不要） | 4.5 × 4.5 × 4.5 | — |
+| `plastic_tray`（容器） | トレイ | 25.6 × 27.0 × 2.1 | NVIDIA SimReady |
+
+別の物体のリストで記録したデータセットは、新しいリストでは再生できません（エピソードはリストの何番目を使ったかを記録します）。
+物体のリストを導入する前の記録を再生するには `task: {objects: [cube], container: disc}` にします。
+
+グリッパの開きより幅の広い物体は、警告を出して除きます（Franka は 8 cm、SimReady の Robotiq 2F-85 は 8.5 cm）。
+アセットは初回に NVIDIA のアセットサーバからダウンロードします。測った大きさのカタログは `src/urdf2vla/objects.py` です。
+
+台・物体を置く範囲・トレイは腕の届く範囲から配置します。動かすには、生成されたキーを `overrides.task`
 （`generated/task.yaml` と同じ構造）に書き、`configure_task` をもう一度実行します。
 
 ```yaml
 overrides:
   task:
-    object: {size: [0.04, 0.04, 0.06], mass: 0.05}
-    target: {radius: 0.05}
-    language_instruction: "put the red block on the green circle"
+    target: {pos: [0.45, -0.18]}
+    instruction: "place the {object} into the {target}"
 ```
 
 カメラの既定は [DROID](https://droid-dataset.github.io/) の配置（手先カメラと、台を見下ろす左右のカメラ、256×256）です。
@@ -151,5 +176,5 @@ cameras:
 ## いまの制限
 
 - **双腕のロボット**は、解析・設定・取り込み（すべての検査を含む）まではできますが、`launch_sim` 以降はまだ対応していません。
-- タスクは 1 つ: プリミティブ形状（箱と円柱の置き場所）での Pick & Place。
+- タスクは 1 つ: 物体を掴んで容器に入れる（または平らな置き場所に置く）Pick & Place。物体は `src/urdf2vla/objects.py` のカタログから選びます。
 - グリッパ: 2 本指の平行グリッパと、片側の顎だけが動くグリッパ。吸着や多指ハンドには対応していません。

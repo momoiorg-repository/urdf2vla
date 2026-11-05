@@ -21,7 +21,8 @@ from urdf2vla.result import SkillResult
 def build_observation(view, vla) -> dict:
     imgs = view.images([i.camera for i in vla.images])
     state = view.vla_vector("state")
-    obs = {"video": {}, "state": {}, "language": {"annotation.human.task_description": [[vla.language_instruction]]}}
+    # 指示文はエピソードで選んだ物体のもの（"put the apple in the tray" など）
+    obs = {"video": {}, "state": {}, "language": {"annotation.human.task_description": [[view.instruction()]]}}
     for i in vla.images:
         obs["video"][i.key] = imgs[i.camera].cpu().numpy().astype(np.uint8)[None, None]
     k = 0
@@ -113,20 +114,28 @@ def _initial_states(project: Project, dataset: str) -> list[dict]:
         data = h5["data"]
         for n in _demo_order(data.keys()):
             if bool(data[n].attrs.get("success", True)):
-                out.append({"joint_pos": data[n]["initial_state/joint_pos"][:], "object_pose": data[n]["initial_state/object_pose"][:]})
+                ini = data[n]["initial_state"]
+                out.append(
+                    {
+                        "joint_pos": ini["joint_pos"][:],
+                        "object_pose": ini["object_pose"][:],
+                        "object_index": int(ini["object_index"][0]) if "object_index" in ini else 0,  # 物体が 1 つだった頃の記録は 0
+                        "object_place_pose": ini["object_place_pose"][:] if "object_place_pose" in ini else None,
+                    }
+                )
     return out
 
 
 def run(project: Project, args, result: SkillResult, app=None) -> None:
     from urdf2vla.gr00t.client import Gr00tClient
     from urdf2vla.sim.common import load_configs, make_env
-    from urdf2vla.sim.lab import render_fix, write_joint_state, write_root_pose
+    from urdf2vla.sim.lab import render_fix, write_joint_state
     from urdf2vla.sim.state import SimView
 
     c = load_configs(project)
     vla = c.vla
     env, env_id = make_env(c, "policy")
-    view = SimView(env, c.robot, c.task, vla)
+    view = SimView(env, c.robot, c.task, vla, project_root=project.root)
     client = Gr00tClient(port=int(args.port))
     if not client.wait_ready(300):
         result.fail(f"GR00T サーバ（127.0.0.1:{args.port}）に接続できません。")
@@ -141,7 +150,7 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
     exec_h = int(args.execution_horizon)
     max_steps = int(c.task.episode_length_s * c.task.control_hz)
     hold = 10
-    torch.manual_seed(int(args.seed))
+    torch.manual_seed(int(args.seed))  # 環境の作成の後（Isaac Lab が乱数の種を設定し直すため）
     print(f"[urdf2vla] evaluating on {env_id}: {n_eps} episodes, mode={'replay' if replay else 'model'}", flush=True)
     cams = [i.camera for i in vla.images]
     video_dir = project.build / "eval_videos"
@@ -155,16 +164,19 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
         if replay:
             q0 = torch.tensor(inits[ep]["joint_pos"], device=env.device).unsqueeze(0)
             write_joint_state(view.robot, q0)
-            pose = torch.tensor(inits[ep]["object_pose"], device=env.device).unsqueeze(0)
-            pose[:, :3] += view.origin
-            write_root_pose(view.object, pose)
-            env.scene.write_data_to_sim()
-            env.sim.step(render=True)
-            env.scene.update(env.physics_dt)
+            ini = inits[ep]
+            if ini["object_place_pose"] is not None:  # 記録と同じ姿勢から同じ手順で置く（落ち着いた後まで記録と同じになる）
+                view.place_object(ini["object_index"], [float(v) for v in ini["object_place_pose"]])
+            else:  # 古い記録: 落ち着いた後の姿勢から置き直す
+                view.replay_object(ini["object_index"], [float(v) for v in ini["object_pose"]])
             client.reset({"episode_index": ep, "step_index": 0})
         else:
+            view.start_episode()
             client.reset()
         render_fix(env, c.task)
+        start_p = view.object_center().clone()
+        max_lift = 0.0
+        moved_before_grasp = None
         writer = _VideoWriter(video_dir / f"{video_prefix}_ep{ep:03d}.mp4", c.task.control_hz) if args.video else None
         if writer:
             writer.write(_video_frame(view.images(cams), vla))
@@ -183,6 +195,8 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
                     _check_absolute(queue[0], view, vla)
             a = queue.pop(0)
             gripper_open = all(x > 0 for x in a[len(a) - len(c.robot.grippers) :])
+            if not gripper_open and moved_before_grasp is None:  # 最初に閉じた時点で物体が初めの位置からどれだけ動いたか
+                moved_before_grasp = float(torch.linalg.norm(view.object_center()[:2] - start_p[:2]))
             q_before = view.joint_pos().clone()
             env.step(torch.tensor([a], device=env.device))
             render_fix(env, c.task)
@@ -194,6 +208,7 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
             if prev is not None and torch.equal(img, prev) and float((view.joint_pos() - q_before).abs().max()) > 1e-4:
                 frozen += 1
             prev = img.clone()
+            max_lift = max(max_lift, float(view.object_center()[2] - start_p[2]))
             held = held + 1 if view.task_success(gripper_open) else 0
             if held >= hold:
                 outcome = "success"
@@ -207,10 +222,15 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
         tx, ty = c.task.target.pos
         ep_info = {
             "episode": ep,
+            "object": view.object_cfg.key,
+            "instruction": view.instruction(),
             "outcome": outcome,
             "steps": step,
             "policy_calls": calls,
             "object_to_target_m": round(((float(pos[0]) - tx) ** 2 + (float(pos[1]) - ty) ** 2) ** 0.5, 4),
+            "object_start": [round(float(v), 4) for v in start_p],
+            "object_lift_m": round(max_lift, 4),
+            "object_moved_before_grasp_m": None if moved_before_grasp is None else round(moved_before_grasp, 4),
             "frozen_frames": frozen,
         }
         if writer:

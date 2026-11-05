@@ -12,8 +12,8 @@ first start of Isaac Sim compiles shaders and can take several minutes.
 |---|---|---|
 | [1. Create the project](#create) | `init` | instant |
 | [2. Configure](#configure) | `inspect_robot` → `configure_camera` | ~1 s |
-| [3. Import into Isaac Sim](#import) | `import_robot`, `launch_sim` | ~1 min |
-| [4. Record](#record) | `configure_vla_interface`, `setup_teleoperation`, `collect_dataset` | ~3 min for 10 demos |
+| [3. Import into Isaac Sim](#import) | `import_robot`, `launch_sim` | ~2 min (more the first time: the objects and tray are downloaded) |
+| [4. Record](#record) | `configure_vla_interface`, `setup_teleoperation`, `collect_dataset` | ~4 min for 10 demos |
 | [5. Convert and package training](#convert) | `convert_dataset`, `train_vla` | ~15 s |
 | [6. Evaluate](#replay) | `evaluate_vla --replay` | ~1 min |
 
@@ -37,8 +37,9 @@ urdf2vla configure_camera --project projects/tutorial_franka
 ```
 
 These run on your machine, not in a container. `inspect_robot` reads the URDF and finds the arm, the gripper and the
-hand link; `configure_robot` turns that into a robot configuration; `configure_task` places a table, a 4.5 cm cube and a
-green target within reach; `configure_camera` places a wrist camera and two external cameras like the
+hand link; `configure_robot` turns that into a robot configuration; `configure_task` places a table and a tray within
+reach and chooses the objects — an apple, a lime, a pear and a colored cube, all of which fit the Franka's 8 cm
+fingers; `configure_camera` places a wrist camera and two external cameras like the
 [DROID](https://droid-dataset.github.io/) dataset.
 
 Every command prints its result as JSON. The part to read is `status` and `next`:
@@ -89,7 +90,9 @@ at its limits when pushed:
 ```
 
 `launch_sim` builds the pick-and-place environment with Isaac Lab Arena, runs it for a moment and checks the cameras,
-the scene and a test grasp (the gripper must hold the cube and its fingers must not sink into it). It saves what each
+the scene and, for every object, that it rests on the table, has the size the catalog expects, and stays in the hand
+when gripped. Round objects are left on the table for a moment to see how they come to rest (an apple tips onto its
+side), and episodes then place them that way. It saves what each
 camera sees in `snapshots/`:
 
 <figure markdown="span">
@@ -110,7 +113,8 @@ urdf2vla collect_dataset --project projects/tutorial_franka --device scripted --
 what it outputs (joint targets and a gripper command). `setup_teleoperation` checks that commanding the hand to move
 +x, −y or +z really moves it that way.
 
-`collect_dataset --device scripted` lets a scripted controller do the task with a new random cube position each time,
+`collect_dataset --device scripted` lets a scripted controller do the task — a random object at a random position each
+time, with an instruction that names it (*"put the pear in the tray"*) —
 and keeps only the episodes that succeed:
 
 ```json
@@ -158,7 +162,8 @@ urdf2vla evaluate_vla --project projects/tutorial_franka --replay --dataset demo
 
 Before you have a trained model, `--replay` tests everything around it: it starts the GR00T inference server with a
 stand-in policy that plays back the converted dataset, connects Isaac Sim to it, and runs episodes exactly as a real
-evaluation would. If the cube lands on the target here, the data format, the action conversion and the
+evaluation would — with the same object as in the recording. If the object lands in the tray here, the data format,
+the action conversion and the
 server–simulator connection all work.
 
 <video controls muted playsinline width="100%" src="../assets/eval_replay.mp4"></video>

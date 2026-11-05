@@ -11,31 +11,16 @@ from __future__ import annotations
 def make_task(c):
     import isaaclab.envs.mdp as mdp
     from isaaclab.envs.common import ViewerCfg
-    from isaaclab.managers import EventTermCfg, SceneEntityCfg
+    from isaaclab.managers import EventTermCfg
     from isaaclab_arena.tasks.task_base import TaskBase
     from isaaclab_arena.tasks.task_termination_cfg import TaskTerminationCfg
     from isaaclab_arena.utils.configclass import make_configclass
 
     task = c.task
-    obj = task.object
-    half_x = (obj.spawn_x[1] - obj.spawn_x[0]) / 2
-    half_y = (obj.spawn_y[1] - obj.spawn_y[0]) / 2
-    # reset の順序: すべてを初期状態（関節目標も）に戻してから、物体を台の上でばらつかせる
+    # reset ではすべて（物体の候補も）を初期状態（関節目標も）に戻す。物体の候補は台から離れた所に置いてあり、
+    # エピソードの始めに SimView.start_episode が 1 つを選んで台の上に置く
     events = [
         ("reset_scene", EventTermCfg, EventTermCfg(func=mdp.reset_scene_to_default, mode="reset", params={"reset_joint_targets": True})),
-        (
-            "reset_object",
-            EventTermCfg,
-            EventTermCfg(
-                func=mdp.reset_root_state_uniform,
-                mode="reset",
-                params={
-                    "pose_range": {"x": (-half_x, half_x), "y": (-half_y, half_y), "yaw": (-0.5, 0.5)},
-                    "velocity_range": {},
-                    "asset_cfg": SceneEntityCfg("object"),
-                },
-            ),
-        ),
     ]
     EventsCfg = make_configclass("Urdf2VlaEventsCfg", events)
     front = next((cam for cam in c.cameras.cameras if cam.mount == "world"), None)
@@ -44,13 +29,15 @@ def make_task(c):
 
     class Urdf2VlaPickPlaceTask(TaskBase):
         def __init__(self):
-            super().__init__(episode_length_s=task.episode_length_s, task_description=task.language_instruction)
+            super().__init__(episode_length_s=task.episode_length_s + 10.0, task_description=task.language_instruction)
 
         def get_scene_cfg(self):
             return None
 
         def get_termination_cfg(self) -> TaskTerminationCfg:
-            return TaskTerminationCfg(timeout_s=task.episode_length_s)
+            # 記録・評価のループが episode_length_s で止める。環境側の時間切れはそれより後にして、最後の step で
+            # 自動の reset が入らないようにする（入ると物体が置き場に戻り、最後の状態を記録できない）
+            return TaskTerminationCfg(timeout_s=task.episode_length_s + 10.0)
 
         def get_events_cfg(self):
             return EventsCfg()

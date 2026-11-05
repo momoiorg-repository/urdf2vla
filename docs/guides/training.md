@@ -25,6 +25,10 @@ fine-tuning. It then loads the result with GR00T's own data loader and compares 
 images, so a broken conversion is caught here rather than after hours of training. `--force` rebuilds an existing
 conversion.
 
+Each episode keeps its own instruction: `meta/tasks.jsonl` lists every distinct instruction (*"put the apple in the
+tray"*, *"put the lime in the tray"*, …) and every frame points to its episode's one, so the model learns to act on what
+the instruction names.
+
 ## 2. Train
 
 ```bash
@@ -82,7 +86,7 @@ urdf2vla evaluate_vla --project projects/myrobot \
 ```
 
 `evaluate_vla` starts the GR00T inference server with your checkpoint in the GR00T container, starts Isaac Sim in the
-simulation container, and runs episodes with random cube positions: the simulator sends the camera images, the robot
+simulation container, and runs episodes with a random object at a random position: the simulator sends the camera images, the robot
 state and the task text; the model answers with the next actions. The result is in `build/eval_report.yaml`:
 
 - `success_rate` over the episodes, with the same success rule as recording,

@@ -139,10 +139,27 @@ def run_viewer(project: Project, host: str = "0.0.0.0", port: int = 8080, block:
         tc, ts, top = task["table"]["center"], task["table"]["size"], task["table"]["top_z"]
         h = top - FLOOR_Z
         server.scene.add_box("/scene/table", color=(184, 153, 115), dimensions=(ts[0], ts[1], h), position=(tc[0], tc[1], top - h / 2), opacity=0.5)
-        o = task["object"]
-        server.scene.add_box("/scene/object", color=(217, 51, 38), dimensions=tuple(o["size"]), position=(sum(o["spawn_x"]) / 2, sum(o["spawn_y"]) / 2, top + o["size"][2] / 2))
-        tg = task["target"]
-        server.scene.add_cylinder("/scene/target", radius=tg["radius"], height=0.004, color=(38, 153, 64), position=(tg["pos"][0], tg["pos"][1], top + 0.002))
+        from urdf2vla.schema.task import TaskConfig
+
+        tcfg = TaskConfig.model_validate(task)  # 旧形式（object が 1 つ）も読む
+        sx, sy = tcfg.spawn_x, tcfg.spawn_y
+        # 物体を置く範囲（エピソードごとにこの中に 1 つ置く）と、物体の候補（外接箱。並べて表示）
+        server.scene.add_box("/scene/spawn_area", color=(230, 120, 60), dimensions=(sx[1] - sx[0], sy[1] - sy[0], 0.002),
+                             position=((sx[0] + sx[1]) / 2, (sy[0] + sy[1]) / 2, top + 0.001), opacity=0.35)  # fmt: skip
+        palette = [(217, 51, 38), (200, 40, 40), (120, 190, 60), (190, 200, 70), (70, 120, 220), (230, 160, 40)]
+        n = len(tcfg.objects)
+        step = max(o.grasp_width for o in tcfg.objects) + 0.02
+        for k, o in enumerate(tcfg.objects):
+            x = (sx[0] + sx[1]) / 2 + (k - (n - 1) / 2) * step
+            pos = (x, (sy[0] + sy[1]) / 2, top + o.size[2] / 2)
+            server.scene.add_box(f"/scene/objects/{o.key}", color=palette[k % len(palette)], dimensions=tuple(o.size), position=pos, opacity=0.85)
+            server.scene.add_label(f"/scene/objects/{o.key}/label", o.name, position=(0.0, 0.0, o.size[2] / 2 + 0.02))
+        tg = tcfg.target
+        if tg.is_container:
+            server.scene.add_box("/scene/target", color=(90, 160, 120), dimensions=tuple(tg.size), position=(tg.pos[0], tg.pos[1], top + tg.size[2] / 2), opacity=0.6)
+        else:
+            server.scene.add_cylinder("/scene/target", radius=tg.radius, height=0.004, color=(38, 153, 64), position=(tg.pos[0], tg.pos[1], top + 0.002))
+        server.scene.add_label("/scene/target/label", tg.name, position=(0.0, 0.0, max(tg.size[2], 0.01) + 0.02))
 
     # ---- 手先の候補と TCP
     arm_cfg = cfg["arms"][0] if cfg else None
