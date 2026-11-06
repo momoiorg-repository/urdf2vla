@@ -55,9 +55,16 @@ PATTERNS = [
     ),
     Pattern(
         "no_articulation",
-        r"Failed to find (an )?articulation|ArticulationRootAPI|articulation root",
+        # 正常なログにも "articulation roots: [...]" が出るので、失敗の形だけを拾う
+        r"Failed to find (an )?articulation|check articulation_root: FAIL|articulation roots: \[\]",
         "USD に articulation root がありません。",
         "configure_robot の root_link を確認します（空の root link を外したか）。",
+    ),
+    Pattern(
+        "gripper_limits_not_enforced",
+        r"joint_limits_hold\S* (に失敗|: FAIL)",
+        "グリッパの関節の可動範囲がシミュレーションで効いていません（URDF から変換したグリッパの閉リンク・mimic がうまく変換されないとき）。",
+        "project.yaml の robot に gripper: {simready: robotiq_2f_85} を書いて NVIDIA のアセットのグリッパに付け替え、configure_robot からやり直します。",
     ),
     Pattern(
         "diverged",

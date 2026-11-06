@@ -33,7 +33,7 @@ def _find_package(start: Path, pkg: str, extra: list[Path]) -> Path | None:
             candidates += [Path(env_path), Path(env_path) / pkg]
     for c in candidates:
         xml = c / "package.xml"
-        if xml.exists():
+        if _exists(xml):
             try:
                 name = ET.parse(xml).getroot().findtext("name")
             except ET.ParseError:
@@ -45,6 +45,14 @@ def _find_package(start: Path, pkg: str, extra: list[Path]) -> Path | None:
     return None
 
 
+def _exists(p: Path) -> bool:
+    """読めない場所（別のマシンの /root/... など）のパスは、存在しないものとして扱う（PermissionError で止めない）。"""
+    try:
+        return p.exists()
+    except OSError:
+        return False
+
+
 def resolve_mesh(filename: str, urdf_dir: Path, runtime: Runtime, package_paths: list[Path]) -> str | None:
     """メッシュ参照をホスト上の実ファイルパスに解決する（見つからなければ None）。"""
     m = PKG_RE.match(filename)
@@ -53,17 +61,17 @@ def resolve_mesh(filename: str, urdf_dir: Path, runtime: Runtime, package_paths:
         if pkg_dir is None:
             return None
         p = pkg_dir / m.group(2)
-        return str(p) if p.exists() else None
+        return str(p) if _exists(p) else None
     if filename.startswith("file://"):
         filename = filename[len("file://") :]
     p = Path(filename)
     if not p.is_absolute():
         p = urdf_dir / p
-        return str(p.resolve()) if p.exists() else None
-    if p.exists():
+        return str(p.resolve()) if _exists(p) else None
+    if _exists(p):
         return str(p)
     mapped = runtime.to_host(str(p))
-    if mapped and Path(mapped).exists():
+    if mapped and _exists(Path(mapped)):
         return mapped
     return _find_by_suffix(p, [urdf_dir, *list(urdf_dir.parents)[:4], *package_paths])
 
@@ -76,7 +84,7 @@ def _find_by_suffix(p: Path, bases: list[Path]) -> str | None:
         tail = Path(*parts[i:])
         for base in bases:
             c = base / tail
-            if c.exists():
+            if _exists(c):
                 return str(c)
     return None
 
@@ -111,6 +119,13 @@ def write_normalized_urdf(
         fn = mesh.get("filename")
         if fn in report.resolved:
             mesh.set("filename", _visible_path(Path(report.resolved[fn]), out_path.parent / "meshes", runtime, copied))
+    # 見つからないメッシュ（inspect_robot が形なしでよいとしたカメラ・取付金具など）は、その visual / collision を外す
+    for link in root.findall("link"):
+        for tag in ("visual", "collision"):
+            for el in link.findall(tag):
+                m = el.find("geometry/mesh")
+                if m is not None and m.get("filename") in report.unresolved:
+                    link.remove(el)
     if drop_links:  # SimReady のグリッパに付け替えるとき、URDF のグリッパの link と関節を外す
         for el in list(root.findall("link")):
             if el.get("name") in drop_links:

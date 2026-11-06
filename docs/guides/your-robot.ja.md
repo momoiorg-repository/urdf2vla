@@ -32,8 +32,10 @@ URDF を公開していて、多くの産業用ロボットと同じく CRX に�
     urdf2vla は URDF から読めることはすべて読みます。始める前に次を確かめてください。
 
     - **メッシュが見つかること。** `package://my_robot_description/meshes/...` は、URDF の親フォルダと
-      `robot.package_paths` に書いたフォルダから探します。リポジトリの外にあるメッシュは、コンテナから読めるように
-      プロジェクトに自動でコピーします。
+      `robot.package_paths` に書いたフォルダから探します。別のマシンの絶対パス（`file:///root/ws/install/...`）は、
+      同じフォルダの下からパスの末尾が一致するものを探します。リポジトリの外にあるメッシュは、コンテナから読めるように
+      プロジェクトに自動でコピーします。腕と、残すグリッパのメッシュは見つかる必要があります。手首のカメラやその
+      取付金具などの部品は、見つからなければ警告を出して形なしで取り込みます。
     - **関節の可動範囲とトルクが実際の値であること。** すべての関節のトルクが同じ値だったり、可動範囲のない関節が
       あったりすると警告します（CAD から書き出した URDF には仮の値がよく入っています）。トルクは URDF を編集せずに
       上書きできます（下記）。
@@ -41,6 +43,10 @@ URDF を公開していて、多くの産業用ロボットと同じく CRX に�
       いま対応しているのは、2 本指のグリッパの付いた単腕のロボットです。
 
     xacro は先に展開します: `xacro my_robot.urdf.xacro -o my_robot.urdf`
+
+    FANUC CRX-3iA と Franka のほかに、次の 7 軸アームも、公開の URDF からこのページの手順でデモの記録まで進めることを
+    確かめています: **KUKA LBR iiwa 14**（ROS-Industrial の `kuka_experimental`、腕だけ。`gripper: {simready: robotiq_2f_85}`
+    の 1 行）と **Kinova Gen3**（Kinova の `ros2_kortex` の `gen3_2f85.urdf`。付いている Robotiq を同じ 1 行で付け替え）。
 
 ## 2. プロジェクトを作る
 
@@ -234,23 +240,20 @@ task:
   2 つのプロジェクトで違うのは <code>robot.gripper.simready</code>（と、xArm では物体のリスト）だけです。</figcaption>
 </figure>
 
-### `mount_link` の選び方
+### グリッパを付ける場所（`mount_link`）
 
-グリッパは `mount_link` に、指がそのフレームの **+z** の方向に伸びる向きで付きます。+z がフランジ面から外を向くフレームを選びます。
+グリッパのない腕では、`mount_link` は書かなくてかまいません。urdf2vla は腕の先のいちばん外側のフレーム（`tool0` や FANUC の
+`fanuc_flange` などのフランジ・ツールのフレーム）に、指がフランジ面から外へ伸びる向き（最後の関節の軸のフランジ側）で付けます。
+どのフレームに付けたかと、ほかの候補は `configure_robot` が表示します。別のフレームにするときは `mount_link` に書きます。
+どのフレームを選んでも指はフランジ面から外へ伸びます（+z ではなく +x が外向きのフレーム、たとえば FANUC の `flange` でも）。
 
-| ロボットの記述 | `mount_link` |
-|---|---|
-| FANUC（`fanuc_description`） | `fanuc_flange`（FANUC のフランジ座標）。ROS 式の `flange` は **+x** がフランジ面から外向きなので、グリッパが横向きに付きます |
-| ROS-Industrial の記述 | `tool0` |
-| そのほか | +z がフランジ面から出るフランジやツールのフレーム。[`urdf2vla view`](view.md) で確かめます |
-
-取り付けた向きが違っていれば、`launch_sim` の snapshot ですぐ分かります。
+取り付けた様子がおかしければ、`launch_sim` の snapshot ですぐ分かります。
 
 ### URDF にあるグリッパを置き換える
 
 URDF にグリッパが入っているなら、`gripper: {simready: robotiq_2f_85}` だけを書きます。`configure_robot` が URDF のグリッパの
 link を外し、同じ場所に、接近方向と指の向きを元のグリッパに合わせて新しいグリッパを付けます。別の場所に付けるときだけ
-`mount_link` を書きます。
+`mount_link` を書きます。外すグリッパのメッシュは見つからなくても構いません。
 
 ### グリッパを追加する
 

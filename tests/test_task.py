@@ -106,3 +106,26 @@ def test_crx3ia_gripper_swap_keeps_the_workspace_reachable(tmp_path, capsys, gri
     assert not any("届かない点" in w for w in r["warnings"])
     checker = ReachChecker(parse_urdf(robot.asset.host_path), robot, robot.arms[0])
     assert checker.reachable((home[0] + 0.064, home[1], home[2])) and checker.reachable((home[0], home[1], home[2] + 0.064))
+
+
+@pytest.mark.skipif(not CRX_EXAMPLE.exists(), reason="run examples/crx3ia/fetch_urdf.sh to get the FANUC URDF")
+@pytest.mark.parametrize("mount", [None, "fanuc_flange", "flange"])
+def test_crx3ia_gripper_points_out_of_the_flange_whichever_frame(tmp_path, capsys, mount):
+    """腕だけの URDF: mount_link を書かなくても、+x が外向きの flange に付けても、指はフランジ面から外へ伸びる。"""
+    from urdf2vla.cli import main
+    from urdf2vla.project import Project
+    from urdf2vla.schema.robot import RobotConfig
+
+    proj = tmp_path / "crx"
+    main(["init", str(proj), "--from", str(CRX_EXAMPLE.parent.parent / "project.yaml")])
+    capsys.readouterr()
+    cfg = yaml.safe_load((proj / "project.yaml").read_text())
+    cfg["robot"]["gripper"] = {"simready": "robotiq_2f_85", **({"mount_link": mount} if mount else {})}
+    (proj / "project.yaml").write_text(yaml.safe_dump(cfg))
+    run(capsys, "inspect_robot", "--project", str(proj))
+    r = run(capsys, "configure_robot", "--project", str(proj))
+    assert r["status"] == "ok"
+    robot = RobotConfig.model_validate(Project(proj).read_generated("robot_config.yaml"))
+    assert robot.grippers[0].mount_link == (mount or "fanuc_flange")  # 書かなければ +z が外向きのフレームを選ぶ
+    assert robot.arms[0].approach_axis[0] > 0.99  # J6_link の +x = フランジ面から外
+    assert abs(robot.arms[0].tcp_offset.pos[0] - (0.123 + 0.1484 - 0.012)) < 0.005

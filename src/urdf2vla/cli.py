@@ -43,6 +43,8 @@ robot:
   # effort_limits: {{"joint[0-6]_.*": 10.0}}  # トルク上限 [N·m]（関節名の正規表現。URDF の値が仮値のとき）
   # base_pose: {{pos: [0, 0, 0], rot_xyzw: [0, 0, 0, 1]}}   # 四元数は [x, y, z, w]
   # package_paths: [../my_ws/src]       # package:// を探す追加ディレクトリ
+  # gripper: {{simready: robotiq_2f_85}}  # NVIDIA のアセットのグリッパを付ける（腕だけの URDF）・付け替える
+  #                                     # （robotiq_2f_85 / ufactory_xarm。取付先は自動、mount_link: tool0 などで変更）
 
 # Pick & Place の物体と容器。既定はりんご・ライム・洋梨・色付きの立方体（エピソードごとに 1 つ）と KLT の箱
 # task:

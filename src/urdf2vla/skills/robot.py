@@ -114,8 +114,8 @@ def model_warnings(meta: RobotMetadata, model: UrdfModel) -> list[str]:
         e = next(iter(efforts))
         out.append(
             f"すべての関節のトルク上限が同じ値（{e}）です。仮の値かもしれません。"
-            + ("この値ではシミュレーションで腕が指令に追従できないことがあります。" if e < 5 else "")
-            + "実際の値が分かれば project.yaml の overrides.robot.actuators で設定できます。"
+            + ("0 は未設定として扱い、上限なしで動かします。" if e == 0 else "この値ではシミュレーションで腕が指令に追従できないことがあります。" if e < 5 else "")
+            + "実際の値が分かれば project.yaml の robot.effort_limits（関節名の正規表現 → N·m）で設定できます。"
         )
     return out
 
@@ -181,12 +181,22 @@ def _robot_questions(meta: RobotMetadata, model: UrdfModel, robot_in: dict, answ
         # 片側の顎だけが動く直列グリッパは、arm の最後の関節として見えることが多い（SO-100 系など）。
         # どれがグリッパかで arm の関節と End Effector の候補が変わるので、先にこれだけ聞く
         last = [a.joints[-1] for a in meta.arms if a.joints]
+        attach = ""
+        if len(meta.arms) == 1 and last:
+            # 腕だけの URDF（産業用ロボットに多い）なら、NVIDIA のアセットのグリッパを付けられる。取付先の候補は腕の先の link
+            tip = model.joints[last[0]].child
+            mounts = A.fixed_descendants(model, tip)
+            attach = (
+                "腕だけの URDF でグリッパがないなら、質問に答える代わりに project.yaml の robot に "
+                "`gripper: {simready: robotiq_2f_85}` を書くと、NVIDIA のアセットのグリッパを腕の先に取り付けます"
+                f"（取付先は腕の先のフレーム {', '.join(mounts)} から自動で選び、mount_link で変えられます）。"
+            )
         questions.append(
             Question(
                 key="robot.gripper_joints",
                 prompt=(
                     "グリッパ（指）の関節が自動では見つかりませんでした。指を動かす関節はどれですか？"
-                    "片側の顎だけが動くグリッパなら、各 arm の最後の関節（候補）であることが多いです。"
+                    "片側の顎だけが動くグリッパなら、各 arm の最後の関節（候補）であることが多いです。" + attach
                 ),
                 candidates=last,
                 reason="関節名・mimic・同じ親を持つ指の組のどれにも当てはまりませんでした。"
@@ -331,12 +341,53 @@ def inspect_robot(project: Project, opts: dict, result: SkillResult, log) -> Non
         "meshes": {"total": meta.meshes.total, "resolved": len(meta.meshes.resolved), "unresolved": meta.meshes.unresolved},
     }
     if meta.meshes.unresolved:
-        result.fail(
-            f"メッシュ {len(meta.meshes.unresolved)} 件の場所が分かりません（例: {meta.meshes.unresolved[0]}）。"
-            "ROS パッケージの場所を project.yaml の robot.package_paths に追加してください。"
-        )
+        essential, optional = _classify_unresolved(meta, model, robot_in)
+        if essential:
+            result.fail(
+                f"メッシュ {len(essential)} 件の場所が分かりません（例: {essential[0]}）。"
+                "ROS パッケージの場所を project.yaml の robot.package_paths に追加してください。"
+            )
+        if optional:
+            replaced = set()
+            if simready_key(robot_in):
+                for g in meta.grippers:
+                    replaced |= set(A.subtree_links(model, g.mount_link))
+            by_link = {m: set(_links_of_mesh(model, m)) for m in optional}
+            gone = [m for m in optional if by_link[m] <= replaced]
+            shapeless = [m for m in optional if m not in gone]
+            if gone:
+                result.warnings.append(
+                    f"付け替える URDF のグリッパのメッシュ {len(gone)} 件が見つかりません。このグリッパは外すので、そのままで構いません。"
+                )
+            if shapeless:
+                links = sorted({lk for m in shapeless for lk in by_link[m]})
+                result.warnings.append(
+                    f"腕・グリッパ以外の部品（{', '.join(links[:4])}{' ...' if len(links) > 4 else ''}）のメッシュ {len(shapeless)} 件が"
+                    f"見つからないので、その部品は形なしで取り込みます（例: {shapeless[0]}）。"
+                    "形が必要なら、ROS パッケージの場所を project.yaml の robot.package_paths に追加してください。"
+                )
     if result.status != "error":
         result.next = ["configure_robot"]
+
+
+def _links_of_mesh(model: UrdfModel, mesh: str) -> list[str]:
+    return [name for name, link in model.links.items() if mesh in link.meshes]
+
+
+def _classify_unresolved(meta, model: UrdfModel, robot_in: dict) -> tuple[list[str], list[str]]:
+    """見つからないメッシュを、なくては困るもの（腕の link、残すグリッパ）と、形なしでよいもの（カメラや取付金具など、
+    SimReady のグリッパに付け替えて外す URDF のグリッパ）に分ける。"""
+    essential_links = {A.root_link(model)}
+    for arm in meta.arms:
+        for n in arm.joints:
+            essential_links |= {model.joints[n].parent, model.joints[n].child}
+    if not simready_key(robot_in):
+        for g in meta.grippers:
+            essential_links |= set(A.subtree_links(model, g.mount_link))
+    essential, optional = [], []
+    for m in meta.meshes.unresolved:
+        (essential if set(_links_of_mesh(model, m)) & essential_links else optional).append(m)
+    return essential, optional
 
 
 # --------------------------------------------------------------------------- configure_robot
@@ -360,6 +411,39 @@ def _default_pose_hint(project: Project, robot_in: dict, answers: dict) -> dict:
     if isinstance(ans, dict):
         return ans
     return robot_in.get("default_pose") or {}
+
+
+def _flange_outward(model: UrdfModel, last_joint: str, mesh_paths: dict[str, str]) -> tuple[tuple, str]:
+    """腕の先の外向き（最後の関節の子 link の座標）と、そちらにいちばん遠いフレーム（フランジ・tool0 など）。
+    外向きは最後の関節の軸のうち、子孫のフレーム（なければ子 link の衝突形状）がある側。"""
+    from urdf2vla.urdf.kinematics import normalize
+
+    j = model.joints[last_joint]
+    axis = normalize(j.axis)
+    frames = A.fixed_descendants(model, j.child)
+    proj = {f: sum(a * b for a, b in zip(A.relative_transform(model, j.child, f).pos, axis)) for f in frames}
+    side = max(proj.values(), key=abs)
+    if abs(side) < 1e-3:  # フレームが関節の位置にしかない: 子 link の形がある側
+        pts = A.collision_points(model, j.child, [j.child], mesh_paths)
+        side = sum(sum(a * b for a, b in zip(p, axis)) for p in pts) / len(pts) if pts else 1.0
+    outward = tuple(c if side >= 0 else -c for c in axis)
+
+    def z_out(f: str) -> float:  # フレームの +z と外向きの一致（ツール座標の慣習: tool0、FANUC の fanuc_flange）
+        z = Transform((0, 0, 0), A.relative_transform(model, j.child, f).rot).apply((0.0, 0.0, 1.0))
+        return sum(a * b for a, b in zip(z, outward))
+
+    # いちばん外側のフレーム。同じ位置に複数あれば +z が外を向くもの、次に木の深いもの
+    far = max(frames, key=lambda f: (round(abs(proj[f]), 3), z_out(f) > 0.99, frames.index(f)))
+    return outward, far
+
+
+def _finger_dir(a: tuple) -> tuple:
+    """接近方向 a に垂直な指の開閉方向: 取付フレームの x（a と平行に近ければ y）を a に垂直にしたもの。"""
+    from urdf2vla.urdf.kinematics import normalize
+
+    ref = (1.0, 0.0, 0.0) if abs(a[0]) < 0.9 else (0.0, 1.0, 0.0)
+    d = sum(x * y for x, y in zip(ref, a))
+    return tuple(normalize(tuple(r - d * c for r, c in zip(ref, a))))
 
 
 def _perpendicular(a: tuple) -> tuple:
@@ -443,7 +527,7 @@ def configure_robot(project: Project, opts: dict, result: SkillResult, log) -> N
             result.ask(q)
         result.next = ["configure_robot"]
         return
-    if meta.meshes.unresolved:
+    if meta.meshes.unresolved and _classify_unresolved(meta, model, robot_in)[0]:  # 腕・残すグリッパのメッシュがない
         result.fail("メッシュが未解決です。inspect_robot のエラーを先に解消してください。")
         return
 
@@ -497,13 +581,27 @@ def configure_robot(project: Project, opts: dict, result: SkillResult, log) -> N
             drop_links = set(A.subtree_links(model, gb))
             prov["grippers.0.mount"] = "inferred"
         else:
-            if not hint_mount:
-                result.fail("URDF にグリッパがないので、robot.gripper.mount_link（グリッパを取り付ける link）を指定してください。")
+            # 腕だけの URDF: 腕の先（最後の関節の子 link とその fixed の子孫）に、腕の外向き（最後の関節の軸の、フランジ側）に
+            # 指が伸びる向きで付ける。mount_link を書かなければ、いちばん外側のフレーム（フランジ・tool0 など）に付ける
+            tip_links = A.fixed_descendants(model, model.joints[cand.joints[-1]].child)
+            if hint_mount and hint_mount not in model.links:
+                result.fail(f"robot.gripper.mount_link の '{hint_mount}' は URDF にありません（腕の先の候補: {', '.join(tip_links)}）。")
                 return
-            sr_mount_link = hint_mount
-            T_m_gb, a_u, f_u = Transform(), (0.0, 0.0, 1.0), (1.0, 0.0, 0.0)
-            prov["grippers.0.mount"] = "default"
-            result.warnings.append(f"{sr.title} を '{sr_mount_link}' の +z 方向に、指が x 方向に開く向きで取り付けます。")
+            outward, far = _flange_outward(model, cand.joints[-1], meta.meshes.resolved)
+            sr_mount_link = hint_mount or far
+            r_tm = Transform((0, 0, 0), A.relative_transform(model, model.joints[cand.joints[-1]].child, sr_mount_link).rot)
+            a_u = tuple(r_tm.inverse().apply(outward))  # 外向きを取付フレームの座標で
+            f_u = _finger_dir(a_u)
+            T_m_gb = Transform()
+            prov["grippers.0.mount"] = "user" if hint_mount else "inferred"
+            axis_name = next((n for n, v in (("+x", (1, 0, 0)), ("-x", (-1, 0, 0)), ("+y", (0, 1, 0)), ("-y", (0, -1, 0)), ("+z", (0, 0, 1)), ("-z", (0, 0, -1)))
+                              if sum(x * y for x, y in zip(a_u, v)) > 0.99), None)  # fmt: skip
+            result.warnings.append(
+                f"{sr.title} を '{sr_mount_link}' に、腕の外向き（最後の関節 {cand.joints[-1]} の軸のフランジ側"
+                + (f"、'{sr_mount_link}' の {axis_name}" if axis_name else "")
+                + "）に指が伸びる向きで取り付けます。"
+                + ("" if hint_mount else f"取付先は robot.gripper.mount_link で変えられます（候補: {', '.join(tip_links)}）。")
+            )
         mount = T_m_gb @ Transform((0.0, 0.0, 0.0), _rotation_between(a_s, f_s, a_u, f_u))
         grippers = [
             GripperConfig(

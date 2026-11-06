@@ -33,14 +33,21 @@ attach one, and how to swap it for another. The steps are the same for any URDF.
     urdf2vla reads everything it can from the URDF. Before you start, make sure that:
 
     - **Meshes can be found.** `package://my_robot_description/meshes/...` paths are resolved by searching the URDF's
-      parent folders and any folders you list in `robot.package_paths`. Meshes outside the repository are copied into
-      the project automatically, so the container can read them.
+      parent folders and any folders you list in `robot.package_paths`; absolute paths from another machine
+      (`file:///root/ws/install/...`) are matched by their tail under the same folders. Meshes outside the repository
+      are copied into the project automatically, so the container can read them. Meshes of the arm and of a gripper
+      you keep must be found; parts like a wrist camera or its bracket are imported without a shape, with a warning.
     - **Joint limits and efforts are real values.** urdf2vla warns when every joint has the same effort or a joint has
       no limits — CAD exporters often write placeholders. You can override efforts without editing the URDF (see below).
     - **There is a gripper** — in the URDF, or one you [attach from NVIDIA's asset library](#simready).
       Supported today: single-arm robots with a two-finger gripper.
 
     A xacro file has to be expanded first: `xacro my_robot.urdf.xacro -o my_robot.urdf`.
+
+    Besides the FANUC CRX-3iA and the Franka, these 7-axis arms went from their public URDF to recorded
+    demonstrations with the steps on this page: the **KUKA LBR iiwa 14** (ROS-Industrial `kuka_experimental`, arm only,
+    one line `gripper: {simready: robotiq_2f_85}`) and the **Kinova Gen3** (Kinova `ros2_kortex`, `gen3_2f85.urdf`, its
+    Robotiq gripper replaced the same way).
 
 ## 2. Create a project
 
@@ -244,24 +251,21 @@ task:
   projects.</figcaption>
 </figure>
 
-### Choosing `mount_link`
+### Where the gripper goes (`mount_link`)
 
-The gripper is mounted on `mount_link` with its fingers pointing along that frame's **+z** axis. Use the frame whose
-+z points out of the flange face:
+On an arm without a gripper, `mount_link` is optional. urdf2vla mounts the gripper on the outermost frame at the end of
+the arm — the flange or tool frame, such as `tool0` or FANUC's `fanuc_flange` — with the fingers pointing out of the
+flange face (along the last joint's axis, on the flange side). `configure_robot` says which frame it chose and lists
+the others; write `mount_link` to choose one of them. The fingers point out of the flange whichever frame you choose,
+even one whose +x, not +z, leaves the flange (FANUC's `flange`).
 
-| Robot description | `mount_link` |
-|---|---|
-| FANUC (`fanuc_description`) | `fanuc_flange` — FANUC's flange frame. The ROS-style `flange` frame has **+x** out of the flange, so the gripper would stick out sideways |
-| ROS-Industrial descriptions | `tool0` |
-| Others | the flange or tool frame whose +z leaves the flange face; check it in [`urdf2vla view`](view.md) |
-
-If the attached gripper points the wrong way, the `launch_sim` snapshots show it at once.
+If the attached gripper looks wrong, the `launch_sim` snapshots show it at once.
 
 ### Replacing a gripper that's in the URDF
 
 If the URDF has its own gripper, write only `gripper: {simready: robotiq_2f_85}`. `configure_robot` removes the URDF
 gripper's links and mounts the new one at the same place, aligning its approach and finger directions with the old
-one. Add `mount_link` only to mount it somewhere else.
+one. Add `mount_link` only to mount it somewhere else. The replaced gripper's meshes don't need to be found.
 
 ### Adding another gripper
 

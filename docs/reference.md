@@ -68,7 +68,7 @@ robot:
   default_pose: {joint1: 0.0}          # starting pose [rad or m]
   effort_limits: {"joint[1-6]": 50.0}  # N·m; joint-name regex → value, overrides the URDF
   base_pose: {pos: [0, 0, 0], rot_xyzw: [0, 0, 0, 1]}
-  gripper: {simready: robotiq_2f_85}   # attach a gripper from the Isaac Sim asset library (robotiq_2f_85, ufactory_xarm); + mount_link if the URDF has none
+  gripper: {simready: robotiq_2f_85}   # attach a gripper from the Isaac Sim asset library (robotiq_2f_85, ufactory_xarm); + mount_link to choose the frame on an arm without a gripper (optional)
 
 task:
   objects: [apple, lime, pear, color_cube]   # one per episode; see the object list in the "Bring your own robot" guide

@@ -138,8 +138,9 @@ robot:
 ```
 
 - `configure_robot` が取付の位置・向きと TCP を決める。URDF にグリッパがあればその link を外し、同じ取付位置・向き
-  （接近方向と指の開く向きを合わせる）に付ける。なければ `mount_link` の +z に指が伸びる向きで付ける（FANUC は
-  `fanuc_flange`。ROS 式の `flange` は +x が外向き）。グリッパと End Effector の質問は出ない。
+  （接近方向と指の開く向きを合わせる）に付ける。なければ腕の先の外向き（最後の関節の軸のうち、子孫のフレームがある側）に
+  指が伸びる向きで付ける。`mount_link` を省くと、いちばん外側のフレーム（同じ位置なら +z が外向きのもの: tool0、
+  FANUC の fanuc_flange）を選ぶ（`_flange_outward`）。グリッパと End Effector の質問は出ない。
 - `configure_task` は、手先を真下に向けて作業域に届くかをホストの IK（`urdf2vla/urdf/reach.py`）で確かめ、届かなければ
   台を手前に寄せる（腕が短くグリッパが長いと、真下に向けた手首が高くなる。CRX-3iA は 2F-85 で 10 cm、xArm で 12 cm）。
 - `import_robot` が腕を USD に変換し、Isaac Sim の Robot Assembler でグリッパを取り付ける（ロボットの USD の

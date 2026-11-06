@@ -264,3 +264,51 @@ def test_view_lists_pending_questions_and_drops_replaced_gripper(tmp_path, capsy
     path2, _, _, dropped2 = view_urdf(Project(proj2))
     assert "robotiq_85_left_knuckle_link" in dropped2 and "robotiq_85" not in path2.read_text()
     assert "/tmpproj/" not in path2.read_text() and "meshes" in path2.read_text()  # メッシュはホストのパスのまま（コンテナのパスではない）
+
+
+def _arm_only_urdf(path: Path, camera_mesh: str | None, arm_mesh: str | None = None) -> Path:
+    """6 軸の腕だけ（グリッパなし）+ 手首のカメラ。メッシュは別のマシンの絶対パス（見つからない）にできる。"""
+
+    def mesh_link(name, mesh):
+        geo = f'<visual><geometry><mesh filename="{mesh}"/></geometry></visual>' if mesh else ""
+        return _link(name).replace("</link>", geo + "</link>")
+
+    parts = [_link("base_link", 10.0)]
+    prev = "base_link"
+    for i in range(1, 7):
+        parts += [mesh_link(f"link{i}", arm_mesh if i == 3 else None), _joint(f"joint{i}", "revolute", prev, f"link{i}", lo=-3.0, hi=3.0)]
+        prev = f"link{i}"
+    parts += [_link("tool0"), _joint("tool0_joint", "fixed", "link6", "tool0", xyz="0 0 0.08")]
+    parts += [mesh_link("camera_link", camera_mesh), _joint("camera_joint", "fixed", "link6", "camera_link", xyz="0.05 0 0.03")]
+    path.write_text(f'<robot name="arm6">{"".join(parts)}</robot>')
+    return path
+
+
+def test_missing_accessory_mesh_is_a_warning_but_a_missing_arm_mesh_is_an_error(tmp_path, capsys):
+    gone = "file:///root/other_ws/install/cam_description/share/cam_description/meshes/cam.stl"
+    proj = make_project(tmp_path / "a", capsys, _arm_only_urdf(tmp_path / "a.urdf", gone), {"gripper": {"simready": "robotiq_2f_85"}})
+    r = run(capsys, "inspect_robot", "--project", str(proj))
+    assert r["status"] == "ok" and any("camera_link" in w and "形なし" in w for w in r["warnings"])
+    assert run(capsys, "configure_robot", "--project", str(proj))["status"] == "ok"
+
+    proj = make_project(tmp_path / "b", capsys, _arm_only_urdf(tmp_path / "b.urdf", None, arm_mesh=gone), {"gripper": {"simready": "robotiq_2f_85"}})
+    r = run(capsys, "inspect_robot", "--project", str(proj))
+    assert r["status"] == "error" and "メッシュ" in r["errors"][0]
+
+
+def test_arm_without_gripper_gets_the_simready_gripper_on_its_tool_frame(tmp_path, capsys):
+    """腕だけの URDF に gripper: {simready: ...} の 1 行: 取付先（tool0）と向き（最後の関節の軸の外向き）を自動で決める。"""
+    proj = make_project(tmp_path, capsys, _arm_only_urdf(tmp_path / "arm.urdf", None), {"gripper": {"simready": "robotiq_2f_85"}})
+    run(capsys, "inspect_robot", "--project", str(proj))
+    r = run(capsys, "configure_robot", "--project", str(proj))
+    assert r["status"] == "ok" and any("'tool0'" in w for w in r["warnings"])
+    cfg = yaml.safe_load((proj / "generated/robot_config.yaml").read_text())
+    assert cfg["grippers"][0]["mount_link"] == "tool0"
+    assert cfg["arms"][0]["approach_axis"][2] > 0.99  # joint6 の軸（+z）の、tool0 がある側
+
+
+def test_no_gripper_question_mentions_attaching_one(tmp_path, capsys):
+    proj = make_project(tmp_path, capsys, _arm_only_urdf(tmp_path / "arm.urdf", None))
+    r = run(capsys, "inspect_robot", "--project", str(proj))
+    q = next(q for q in r["questions"] if q["key"] == "robot.gripper_joints")
+    assert "simready" in q["prompt"] and "tool0" in q["prompt"]
