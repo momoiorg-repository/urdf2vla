@@ -73,7 +73,7 @@ plugins:
             Check your robot in the browser: ブラウザでロボットを確かめる
             Record demonstrations: デモを記録する
             Train and evaluate: 学習と評価
-            Use it from Claude Code: Claude Code から使う
+            Use it with an AI agent: AI エージェントから使う
             Troubleshooting: トラブルシューティング
             Reference: リファレンス
 
@@ -111,6 +111,6 @@ nav:
       - Check your robot in the browser: guides/view.md
       - Record demonstrations: guides/recording.md
       - Train and evaluate: guides/training.md
-      - Use it from Claude Code: guides/claude-code.md
+      - Use it with an AI agent: guides/claude-code.md
   - Troubleshooting: troubleshooting.md
   - Reference: reference.md

@@ -306,6 +306,9 @@ def build_parser() -> argparse.ArgumentParser:
         if name == "diagnose":
             s.add_argument("--skill")
 
+    s = sub.add_parser("doctor", help="実行環境を検査する（GPU ドライバ、Docker、image・コンテナ、ディスク、アセットサーバ）。最初と、環境がおかしいときに")
+    s.add_argument("--offline", action="store_true", help="アセットサーバに届くかは調べない")
+
     s = sub.add_parser("view", help="ブラウザでロボット・把持点・台・カメラを 3D で確かめ、質問に答える（pip install -e '.[view]' が必要）")
     s.add_argument("--project")
     s.add_argument("--host", default="0.0.0.0")
@@ -342,6 +345,11 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_diagnose(args)
         if args.cmd == "teleop-keys":
             return cmd_teleop_keys(args)
+        if args.cmd == "doctor":
+            from urdf2vla.doctor import default_runtimes, run_doctor
+            from urdf2vla.runtime.config import URDF2VLA_ROOT
+
+            return _emit(run_doctor(URDF2VLA_ROOT, default_runtimes(), assets=not args.offline))
         if args.cmd == "view":
             try:
                 import viser  # noqa: F401

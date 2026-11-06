@@ -29,11 +29,16 @@ git clone https://github.com/momoiorg-repository/urdf2vla.git && cd urdf2vla
 uv venv .venv && uv pip install -e '.[view]' && source .venv/bin/activate
 bash docker/build.sh                # 初回だけ: シミュレーション用と GR00T 用の image を作る（1〜2 時間）
 bash docker/run.sh && bash docker/run.sh gr00t
+urdf2vla doctor                     # GPU ドライバ・Docker・image・コンテナ・ディスクを検査し、問題ごとに直し方を示す
 
 urdf2vla init projects/tutorial_franka --from examples/franka/project.yaml
 urdf2vla inspect_robot --project projects/tutorial_franka
 # … 各コマンドの JSON の "next" に従うか、下のチュートリアルへ
 ```
+
+ロボットのシミュレーションが初めてなら、`urdf2vla doctor` が通った後に、リポジトリを Claude Code（`claude`）か
+Codex（`codex`）で開いて「自分のロボットで VLA 開発を始めたい」と頼んでください。同梱の Agent Skill が工程を実行し、
+ロボットについてだけあなたに聞きます。
 
 ## ドキュメント
 
@@ -46,7 +51,7 @@ urdf2vla inspect_robot --project projects/tutorial_franka
 - [チュートリアル: Franka で一通り](https://momoiorg-repository.github.io/urdf2vla/ja/tutorial/)
 - [自分のロボットを使う](https://momoiorg-repository.github.io/urdf2vla/ja/guides/your-robot/) · [ブラウザでロボットを確かめる](https://momoiorg-repository.github.io/urdf2vla/ja/guides/view/) ·
   [デモを記録する](https://momoiorg-repository.github.io/urdf2vla/ja/guides/recording/) · [学習と評価](https://momoiorg-repository.github.io/urdf2vla/ja/guides/training/) ·
-  [Claude Code から使う](https://momoiorg-repository.github.io/urdf2vla/ja/guides/claude-code/)
+  [AI エージェントから使う（Claude Code / Codex）](https://momoiorg-repository.github.io/urdf2vla/ja/guides/claude-code/)
 - [トラブルシューティング](https://momoiorg-repository.github.io/urdf2vla/ja/troubleshooting/) · [リファレンス](https://momoiorg-repository.github.io/urdf2vla/ja/reference/)
 
 設計の考え方・シミュレータのハマりどころ・検証状況: [DEVELOPMENT.md](DEVELOPMENT.md)

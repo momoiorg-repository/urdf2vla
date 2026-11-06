@@ -4,6 +4,7 @@
 
 | Command | What it does |
 |---|---|
+| `urdf2vla doctor [--offline]` | Check the machine: GPU driver, Docker and the NVIDIA Container Toolkit, images and containers, disk, NVIDIA's asset server. Changes nothing; each problem comes with its fix. |
 | `urdf2vla init DIR --urdf URDF` | Create a project for a URDF. `--from examples/<robot>/project.yaml` starts from an example instead. |
 | `urdf2vla <skill> --project DIR [options]` | Run one step (see below). `urdf2vla <skill> --help` lists its options. |
 | `urdf2vla status --project DIR` | Each step's last result and what to run next. |

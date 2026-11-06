@@ -21,7 +21,8 @@ URDF → ロボット解析 → 必要な情報だけ質問 → Isaac Sim へ導
   ロボット固有のコードは書きません（Franka と CRX-3iA + Robotiq を同じコードで動かしています）。
 - **推測しない。** URDF から一意に決まらない重要な設定（例: End Effector の候補が複数ある、回転関節の指がどちらで開くか）は、候補を添えて質問します。
 - **Skill を順番に実行する。** 各工程は独立した Skill（CLI サブコマンド）で、単体でも実行できます。
-  Agent（Claude Code の `.claude/skills/urdf2vla/SKILL.md`）は Skill を組み合わせる Orchestrator で、設定を自由生成しません。
+  Agent（`.agents/skills/urdf2vla/SKILL.md`。Codex はここを、Claude Code は同じファイルへのリンク `.claude/skills/urdf2vla/SKILL.md` を読む）は
+  Skill を組み合わせる Orchestrator で、設定を自由生成しません。環境の問題は最初に `urdf2vla doctor` で調べます。
 - **生成した設定はユーザが確認・編集できる。** 生成値には出所（`urdf` / `user` / `inferred` / `default`）が付きます。
   変更は `project.yaml` の `overrides:` に書くと、次回の生成で反映されます。
 - **シミュレーション環境は Isaac Lab Arena で組み立てる。** URDF から作ったロボットを Arena の Embodiment に、

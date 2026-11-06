@@ -39,8 +39,8 @@ flowchart LR
 - **DROID と同じカメラ配置が既定。** 手先カメラと左右の外部カメラを、作業域の大きさに合わせて置きます。
 - **NVIDIA GR00T N1.7 のためのデータと学習。** 記録を GR00T が読む LeRobot v2.1 形式に変換し、GPU が足りなければ
   大きな GPU のマシンで学習できる一式を作ります。
-- **Agent でも使える。** リポジトリを [Claude Code](guides/claude-code.md) で開いて「自分のロボットで VLA 開発を始めたい」
-  と頼むと、同じコマンドを実行し、ロボットについて聞くときだけ止まります。
+- **AI エージェントでも使える。** リポジトリを [Claude Code や Codex](guides/claude-code.md) で開いて「自分のロボットで
+  VLA 開発を始めたい」と頼むと、エージェントが同じコマンドを実行し、ロボットについて聞くときだけ止まります。
 
 ## 構成
 
@@ -59,6 +59,7 @@ flowchart LR
 <div class="grid cards" markdown>
 
 - **[インストール](install.md)** — 必要なものと、コンテナの作り方（初回は 1〜2 時間）。
+- **[AI エージェントから使う](guides/claude-code.md)** — ロボットのシミュレーションが初めてなら、インストールの後は Claude Code や Codex に工程を任せ、ロボットについての質問にだけ答える。
 - **[チュートリアル](tutorial.md)** — 同梱の Franka Panda で全工程を一度通す。
 - **[自分のロボットを使う](guides/your-robot.md)** — FANUC CRX-3iA を例に、URDF から始めて質問に答え、グリッパを取り付け・付け替える。
 - **[トラブルシューティング](troubleshooting.md)** — 失敗した検査の意味と、何を変えればよいか。

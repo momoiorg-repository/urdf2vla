@@ -40,8 +40,8 @@ flowchart LR
 - **DROID-style cameras by default.** A wrist camera plus left and right external cameras, scaled to your workspace.
 - **Data and training for NVIDIA GR00T N1.7.** Recordings are converted to the LeRobot v2.1 format GR00T expects, and
   training is packaged for a large GPU when yours is too small.
-- **An agent workflow.** Open the repository in [Claude Code](guides/claude-code.md) and say "I want to start VLA development
-  with my robot" — it runs the same commands and only stops to ask you about your robot.
+- **An agent workflow.** Open the repository in [Claude Code or Codex](guides/claude-code.md) and say "I want to start VLA
+  development with my robot" — the agent runs the same commands and only stops to ask you about your robot.
 
 ## How it's built
 
@@ -60,6 +60,7 @@ Python package on your machine.
 <div class="grid cards" markdown>
 
 - **[Install](install.md)** — what you need and how to build the containers (about 1–2 hours the first time).
+- **[Use it with an AI agent](guides/claude-code.md)** — new to robot simulation? After installing, let Claude Code or Codex run the steps and ask you only about your robot.
 - **[Tutorial](tutorial.md)** — run the whole pipeline once with the bundled Franka Panda.
 - **[Bring your own robot](guides/your-robot.md)** — the FANUC CRX-3iA as the example: start from a URDF, answer the questions, attach and swap grippers.
 - **[Troubleshooting](troubleshooting.md)** — what each failed check means and what to change.

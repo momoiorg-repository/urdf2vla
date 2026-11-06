@@ -30,11 +30,16 @@ git clone https://github.com/momoiorg-repository/urdf2vla.git && cd urdf2vla
 uv venv .venv && uv pip install -e '.[view]' && source .venv/bin/activate
 bash docker/build.sh                # once: builds the simulation and GR00T images (1–2 hours)
 bash docker/run.sh && bash docker/run.sh gr00t
+urdf2vla doctor                     # checks the GPU driver, Docker, images, containers, disk; prints the fix for each problem
 
 urdf2vla init projects/tutorial_franka --from examples/franka/project.yaml
 urdf2vla inspect_robot --project projects/tutorial_franka
 # … then follow "next" in each command's JSON output, or the tutorial below
 ```
+
+New to robot simulation? After `urdf2vla doctor` passes, open the repository in Claude Code (`claude`) or Codex
+(`codex`) and say "I want to start VLA development with my robot" — the bundled agent skill runs the steps and asks you
+only about your robot.
 
 ## Documentation
 
@@ -47,7 +52,7 @@ The site is built from [`docs/`](docs/) by `.github/workflows/docs.yml`. To read
 - [Tutorial: Franka end to end](https://momoiorg-repository.github.io/urdf2vla/tutorial/)
 - [Bring your own robot](https://momoiorg-repository.github.io/urdf2vla/guides/your-robot/) · [Check your robot in the browser](https://momoiorg-repository.github.io/urdf2vla/guides/view/) ·
   [Record demonstrations](https://momoiorg-repository.github.io/urdf2vla/guides/recording/) · [Train and evaluate](https://momoiorg-repository.github.io/urdf2vla/guides/training/) ·
-  [Use it from Claude Code](https://momoiorg-repository.github.io/urdf2vla/guides/claude-code/)
+  [Use it with an AI agent (Claude Code / Codex)](https://momoiorg-repository.github.io/urdf2vla/guides/claude-code/)
 - [Troubleshooting](https://momoiorg-repository.github.io/urdf2vla/troubleshooting/) · [Reference](https://momoiorg-repository.github.io/urdf2vla/reference/)
 
 Design notes, simulator pitfalls and verification status (in Japanese): [DEVELOPMENT.md](DEVELOPMENT.md).

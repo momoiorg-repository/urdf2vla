@@ -69,8 +69,21 @@ The containers run as your own user, so every file urdf2vla writes in the reposi
 
 ## 4. Check that everything works
 
-The fastest check is the [tutorial](tutorial.md): its first simulation step, `import_robot`, finishes in under a minute
-once the shaders are compiled (the very first start of Isaac Sim can take several minutes).
+```bash
+urdf2vla doctor
+```
+
+`doctor` checks your machine without changing anything: the GPU driver (including a kernel update that left the driver
+behind), GPU memory, Docker and the NVIDIA Container Toolkit, both images and containers (and that the containers can see
+the GPU and the repository), free disk space, and whether NVIDIA's asset server is reachable. Each problem comes with the
+command that fixes it. Run it again whenever something looks wrong with the environment.
+
+Then run the [tutorial](tutorial.md): its first simulation step, `import_robot`, finishes in under a minute once the
+shaders are compiled (the very first start of Isaac Sim can take several minutes).
+
+!!! tip "New to this? Let an agent drive"
+    From here on, a coding agent can run the steps for you and ask you only about your robot — see
+    [Use it with an AI agent](guides/claude-code.md) (Claude Code or Codex).
 
 ## Optional: the documentation site
 

@@ -4,6 +4,7 @@
 
 | コマンド | すること |
 |---|---|
+| `urdf2vla doctor [--offline]` | マシンを検査する: GPU ドライバ、Docker と NVIDIA Container Toolkit、image とコンテナ、ディスク、NVIDIA のアセットサーバ。何も変更せず、問題ごとに直し方を示す |
 | `urdf2vla init DIR --urdf URDF` | URDF のプロジェクトを作る。`--from examples/<robot>/project.yaml` で例から作る |
 | `urdf2vla <工程> --project DIR [オプション]` | 工程を 1 つ実行する（下記）。`urdf2vla <工程> --help` でオプション一覧 |
 | `urdf2vla status --project DIR` | 各工程の最後の結果と、次に実行するもの |
