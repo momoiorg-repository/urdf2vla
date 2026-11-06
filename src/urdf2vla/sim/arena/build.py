@@ -27,7 +27,8 @@ def make_env(c, mode: str = "policy"):
     def tune(env_cfg):
         # 制御周期と描画（記録した fps = task.control_hz と一致させる）
         env_cfg.decimation = task.decimation
-        env_cfg.episode_length_s = task.episode_length_s
+        # 記録・評価のループが episode_length_s で止める。環境側の時間切れは 10 秒後にして、最後の step で自動の reset が入らないようにする
+        env_cfg.episode_length_s = task.episode_length_s + 10.0
         env_cfg.sim.dt = task.sim_dt
         env_cfg.sim.render_interval = task.decimation
         # reset 直後の画像に前のエピソードの場面が残らないよう、reset で描画し直す（Isaac Lab の画像入力タスクと同じ）

@@ -48,6 +48,95 @@ def chunk_to_env_actions(action: dict, vla, n_steps: int) -> list[list[float]]:
     return out
 
 
+# ---- GR00T の DROID の事前学習（embodiment OXE_DROID_RELATIVE_EEF_RELATIVE_JOINT）で zero-shot に動かす
+# Isaac-GR00T の examples/DROID/main_gr00t.py（実機の DROID の client）と同じ観測・行動にする
+DROID_RESOLUTION = (180, 320)  # (高さ, 幅)。正方形の画像は左右を黒で埋める（tf.image.resize_with_pad と同じ）
+DROID_EEF_ROTATION_CORRECT = np.array([[0, 0, -1], [-1, 0, 0], [0, 1, 0]], dtype=np.float64)
+
+
+def _resize_with_pad(img: np.ndarray, height: int, width: int) -> np.ndarray:
+    from PIL import Image
+
+    h, w = img.shape[:2]
+    s = min(height / h, width / w)
+    nh, nw = int(round(h * s)), int(round(w * s))
+    out = np.zeros((height, width, 3), dtype=np.uint8)
+    top, left = (height - nh) // 2, (width - nw) // 2
+    out[top : top + nh, left : left + nw] = np.asarray(Image.fromarray(img).resize((nw, nh), Image.BILINEAR))
+    return out
+
+
+def droid_eef_9d(view, arm: str) -> np.ndarray:
+    """DROID の eef_9d: ロボットの base 座標での TCP の位置 + 回転（補正の行列を掛けた回転行列の上 2 行）。
+    回転は panda_hand と同じ向きの TCP を使う（DROID の統計の平均とこの向きが一致する）。"""
+    from isaaclab.utils.math import matrix_from_quat
+
+    p, q = view.tcp_pose_root(arm)
+    r = matrix_from_quat(q.unsqueeze(0))[0].cpu().numpy().astype(np.float64) @ DROID_EEF_ROTATION_CORRECT
+    return np.concatenate([p.cpu().numpy(), r[:2, :].reshape(6)]).astype(np.float32)
+
+
+class DroidObservation:
+    """DROID の観測（外部カメラ 1 台 + 手先カメラ、各 2 フレーム）を毎 step 積む。"""
+
+    def __init__(self, view, vla, cameras):
+        arm = view.cfg.arms[0]
+        if len(arm.joints) != 7 or not view.cfg.grippers:
+            raise RuntimeError("GR00T の DROID は 7 関節の腕とグリッパのロボット（Franka）向けです。")
+        wrist = next((c.name for c in cameras.cameras if c.mount == "link"), None)
+        ext = next((c.name for c in cameras.cameras if c.mount == "world"), None)
+        if wrist is None or ext is None:
+            raise RuntimeError("GR00T の DROID には手先カメラと外部カメラが 1 台ずつ必要です（DROID の配置: wrist + left/right）。")
+        self.view, self.vla, self.arm, self.cams = view, vla, arm.name, (ext, wrist)
+        self.buf: list[dict] = []
+        self.video_delta = [0]
+
+    def configure(self, client) -> None:
+        """サーバのモデルの video の delta_indices（例: 事前学習 [-15, 0] = 今と 15 step 前、DROID の fine-tune [0]）を使う。"""
+        mc = client.call("get_modality_config")
+        video = mc["video"]
+        video = video.get("as_json", video) if isinstance(video, dict) else video
+        self.video_delta = list(video["delta_indices"]) if isinstance(video, dict) else list(video.delta_indices)
+        print(f"[urdf2vla] DROID video delta_indices: {self.video_delta}", flush=True)
+
+    @property
+    def history(self) -> int:
+        return max(-min(self.video_delta), 0) + 1
+
+    def reset(self) -> None:
+        self.buf = []
+
+    def push(self) -> None:
+        imgs = self.view.images(list(self.cams))
+        self.buf.append({k: _resize_with_pad(imgs[k].cpu().numpy().astype(np.uint8), *DROID_RESOLUTION) for k in self.cams})
+        self.buf = self.buf[-self.history :]
+
+    def observation(self) -> dict:
+        ext, wrist = self.cams
+        # delta_indices の各フレーム（足りない間は最も古いフレーム）
+        frames = [self.buf[max(len(self.buf) - 1 + d, 0)] for d in self.video_delta]
+        g = self.view.cfg.grippers[0].name
+        return {
+            "video": {
+                "exterior_image_1_left": np.stack([f[ext] for f in frames])[None],
+                "wrist_image_left": np.stack([f[wrist] for f in frames])[None],
+            },
+            "state": {
+                "eef_9d": droid_eef_9d(self.view, self.arm)[None, None],
+                "gripper_position": np.array([[[1.0 - self.view.gripper_scalar(g, "state")]]], dtype=np.float32),  # DROID は 1 = 閉
+                "joint_position": np.asarray(self.view.vla_vector("state")[:7], dtype=np.float32)[None, None],
+            },
+            "language": {"annotation.language.language_instruction": [[self.view.instruction()]]},
+        }
+
+
+def droid_chunk_to_env_actions(action: dict, n_steps: int) -> list[list[float]]:
+    """DROID の行動（関節位置の絶対値 7 + グリッパの位置 1。0.5 より大きければ閉）→ 評価環境の行動ベクトルの列。"""
+    joints = np.asarray(action["joint_position"])[0]
+    grip = np.asarray(action["gripper_position"])[0]
+    return [[float(x) for x in joints[t]] + [-1.0 if float(grip[t][0]) > 0.5 else 1.0] for t in range(min(len(joints), n_steps))]
+
+
 def _check_absolute(first: list[float], view, vla) -> None:
     """GR00T が関節目標の絶対値ではなく相対値（state との差）を返していないか。
     相対値をそのまま関節目標にすると、腕が 0 rad 付近へ向かって暴れる（気づきにくい失敗）。"""
@@ -140,7 +229,11 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
     if not client.wait_ready(300):
         result.fail(f"GR00T サーバ（127.0.0.1:{args.port}）に接続できません。")
         return
+    if getattr(args, "droid", False):
+        droid_obs = DroidObservation(view, vla, c.cameras)
+        droid_obs.configure(client)
     replay = bool(args.replay)
+    droid = droid_obs if getattr(args, "droid", False) else None
     inits = _initial_states(project, args.dataset) if replay else []
     lengths = []
     if replay:
@@ -161,6 +254,8 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
     project.snapshots.mkdir(parents=True, exist_ok=True)
     for ep in range(n_eps):
         env.reset()
+        if droid is not None:
+            droid.reset()
         if replay:
             q0 = torch.tensor(inits[ep]["joint_pos"], device=env.device).unsqueeze(0)
             write_joint_state(view.robot, q0)
@@ -187,11 +282,17 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
         outcome = "timeout"
         gripper_open = True
         while step < steps_limit:
+            if droid is not None:
+                droid.push()  # 15 step 前の画像を渡すので、問い合わせない step も積む
             if not queue:
-                action = client.get_action(build_observation(view, vla))
-                queue = chunk_to_env_actions(action, vla, exec_h)
+                if droid is not None:
+                    action = client.get_action(droid.observation())
+                    queue = droid_chunk_to_env_actions(action, exec_h)
+                else:
+                    action = client.get_action(build_observation(view, vla))
+                    queue = chunk_to_env_actions(action, vla, exec_h)
                 calls += 1
-                if calls == 1 and not replay:
+                if calls == 1 and not replay and droid is None:
                     _check_absolute(queue[0], view, vla)
             a = queue.pop(0)
             gripper_open = all(x > 0 for x in a[len(a) - len(c.robot.grippers) :])

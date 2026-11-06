@@ -14,7 +14,18 @@ from urdf2vla.runtime.config import load_runtime
 from urdf2vla.runtime.dispatch import container_running, run_sim_skill, runtime_script, wrap
 
 
+DROID_MODEL = "nvidia/GR00T-N1.7-DROID"
+DROID_TAG = "OXE_DROID_RELATIVE_EEF_RELATIVE_JOINT"
+
+
 def _server_args(project: Project, opts: dict, gr) -> list[str] | str:
+    if opts.get("droid"):
+        # GR00T の DROID の事前学習の embodiment で zero-shot に動かす（modality config は GR00T に内蔵）。
+        # --model はローカルの checkpoint か Hugging Face のモデル ID（既定: nvidia/GR00T-N1.7-DROID）
+        model = opts.get("model") or DROID_MODEL
+        path = Path(model).expanduser()
+        path = path if path.is_absolute() else project.root / path
+        return ["--model-path", gr.to_runtime(path) if path.exists() else model]
     # modality config（NEW_EMBODIMENT の定義）は変換済みデータセットにある。モデルのモードでも先に読み込む
     ds = project.root / "datasets" / f"{opts['dataset']}_gr00t"
     # 旧名（easyVLA）で変換したデータは easyvla_modality_*.py を持つ
@@ -55,6 +66,7 @@ def _server_args(project: Project, opts: dict, gr) -> list[str] | str:
         Arg(("--port",), {"type": int, "default": 5555}),
         Arg(("--seed",), {"type": int, "default": 0}),
         Arg(("--timeout",), {"type": float, "default": 3600.0, "help": "秒"}),
+        Arg(("--droid",), {"action": "store_true", "help": "GR00T の DROID（Franka + 外部カメラ + 手先カメラ）の事前学習で zero-shot に評価する。--model 省略時は nvidia/GR00T-N1.7-DROID"}),
         Arg(("--video",), {"action": "store_true", "help": "エピソードごとに VLA が見る画像を横に並べた動画を build/eval_videos/ に保存する"}),
     ],
 )
@@ -69,7 +81,7 @@ def evaluate_vla(project: Project, opts: dict, result: SkillResult, log) -> None
         result.fail(sargs)
         return
     port = int(opts["port"])
-    sargs += ["--embodiment-tag", "new_embodiment", "--port", str(port), "--host", "127.0.0.1"]
+    sargs += ["--embodiment-tag", DROID_TAG if opts.get("droid") else "new_embodiment", "--port", str(port), "--host", "127.0.0.1"]
     server_log = project.new_log("gr00t_server")
     cmd = wrap(gr, runtime_script(gr, f"cd /tmp && PYTHONUNBUFFERED=1 {gr.python} -m urdf2vla.gr00t.server " + " ".join(shlex.quote(a) for a in sargs)))
     log.info("server: %s", " ".join(cmd))
@@ -96,6 +108,8 @@ def evaluate_vla(project: Project, opts: dict, result: SkillResult, log) -> None
             extra.append("--replay")
         if opts.get("video"):
             extra.append("--video")
+        if opts.get("droid"):
+            extra.append("--droid")
         if opts.get("model"):
             extra += ["--model", str(opts["model"])]
         sim_log = project.new_log("evaluate_vla_sim")
