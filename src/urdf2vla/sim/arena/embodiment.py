@@ -165,6 +165,10 @@ def make_embodiment(c, mode: str):
             self.event_config = None  # reset は Task の events にまとめる（順序を保証するため）
             self.reward_config = None
             self.mimic_env = None
+            if c.mimic:
+                from urdf2vla.sim.mimic import make_mimic_env_class
+
+                self.mimic_env = make_mimic_env_class(robot)
 
         def get_command_body_name(self) -> str:
             return robot.arms[0].ik_body

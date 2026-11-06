@@ -165,7 +165,10 @@ def make_scene(c):
         )
     objects = []
     for i, obj in enumerate(task.objects):
-        pose = Pose(position_xyz=parked_pose(task, i))
+        if c.mimic:  # Isaac Lab Mimic: 物体は 1 つ。台の上の置く範囲の中央に直立で置き、reset の event でばらつかせる
+            pose = Pose(position_xyz=(sum(task.spawn_x) / 2, sum(task.spawn_y) / 2, task.table.top_z - obj.bottom_z + 0.002))
+        else:
+            pose = Pose(position_xyz=parked_pose(task, i))
         if obj.asset is None:
             o = Object(
                 name=f"object_{i}",

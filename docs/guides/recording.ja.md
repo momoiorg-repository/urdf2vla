@@ -80,6 +80,37 @@ urdf2vla setup_teleoperation     --project projects/myrobot   # 手先が指令�
 手先は少しずつ動きます（1 制御 step あたり 8 mm と 0.04 rad）。遅すぎる・速すぎるときは `project.yaml` の
 `overrides.teleop` に `pos_step` と `rot_step` を書きます。物体を箱に置いた時点で、エピソードは自動で保存されます。エピソードの始めにその指示文を表示します。
 
+## Isaac Lab Mimic でデモを増やす
+
+[Isaac Lab Mimic](https://isaac-sim.github.io/IsaacLab/main/source/overview/imitation-learning/teleop_imitation.html)
+は、少数のデモから多くのデモを作ります。元のデモを「物体を掴む」と「箱に入れる」に分け、新しいエピソードの物体と箱の
+位置に合わせてそれぞれを動かして実行し、成功したものを残します。`generate_mimic` は、**物体 1 つと容器**のタスクで
+これを一通り行います。
+
+```yaml
+# project.yaml
+task:
+  objects: [color_cube]
+  container: klt_bin
+```
+
+```bash
+urdf2vla generate_mimic --project projects/myrobot --source-demos 10 --trials 100
+```
+
+1. **元のデモ** — スクリプトが `--source-demos` 個の成功したエピソードを、Mimic が使う姿勢と一緒に記録します
+   （`datasets/demos_mimic_src.hdf5`）。
+2. **生成** — Mimic が、物体を毎回新しい位置に置いて `--trials` 回試し、成功したものを残します
+   （`datasets/demos_mimic_gen.hdf5`。行動だけ）。
+3. **記録** — 生成したエピソードを初期状態から再生し、カメラ画像付きでふつうの記録と同じく保存します
+   （`datasets/demos.hdf5`。`collect_dataset` と同じ検査付き）。
+
+結果には 2 つの数が出ます。`--trials` 回のうち Mimic が生成に成功した数と、そのうちデータセットに記録できた数です。
+`--trials` は試す回数で、成功数の目標ではありません。
+
+Franka の例（`task: {objects: [color_cube], container: klt_bin}`）では、元のデモ 10 個から **100 回中 75 回の生成に成功**し、
+75 個すべてを画像付きで記録できました。キューブは置く範囲の全体（向きは ±27°）に散らばります。RTX 5080 1 枚で約 45 分です（元のデモ 3 分、生成 23 分、記録 18 分）。
+
 ## デモはいくつ必要か
 
 まず **スクリプトのデモ 50 個**で全工程を通します。いろいろな物体と位置から動ける方策には、もっと多く（ふつうは数百）を

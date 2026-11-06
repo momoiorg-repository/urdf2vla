@@ -19,7 +19,11 @@ SIM_SKILLS = {
     "setup_teleoperation": "urdf2vla.sim.teleop_check",
     "collect_dataset": "urdf2vla.sim.collect",
     "evaluate_vla": "urdf2vla.sim.evaluate",
+    # generate_mimic（ホスト）が順に呼ぶ工程。引数は generate_mimic のものを使う
+    "mimic_source": "urdf2vla.sim.mimic_run:run_source",
+    "mimic_generate": "urdf2vla.sim.mimic_run:run_generate",
 }
+ARGS_OF = {"mimic_source": "generate_mimic", "mimic_generate": "generate_mimic"}
 
 
 def main() -> None:
@@ -30,8 +34,9 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("skill", choices=sorted(SIM_SKILLS))
     p.add_argument("--project", required=True)
-    if skill in SKILLS:
-        for a in SKILLS[skill].args:
+    spec = ARGS_OF.get(skill, skill)
+    if spec in SKILLS:
+        for a in SKILLS[spec].args:
             p.add_argument(*a.flags, **a.kwargs)
     args = p.parse_args()
 
@@ -58,7 +63,8 @@ def main() -> None:
     project = Project(args.project)
     result = SkillResult(skill=args.skill)
     try:
-        import_module(SIM_SKILLS[args.skill]).run(project, args, result, app)
+        module, _, func = SIM_SKILLS[args.skill].partition(":")
+        getattr(import_module(module), func or "run")(project, args, result, app)
     except Exception as e:  # noqa: BLE001
         traceback.print_exc()
         result.fail(f"{type(e).__name__}: {e}")

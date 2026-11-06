@@ -3,9 +3,21 @@
 成功判定（物体が置き場所の半径内・台の上・グリッパを開いた状態が N step 続く）は記録・評価のループ側で行う
 （urdf2vla.sim.state.SimView.task_success）。Arena の成功条件は満たした瞬間に episode を終えて reset するので、
 「N step 保持」の判定やデモの記録と相性が悪い。ここでは時間切れだけを終了条件にする（Isaac Lab 2.x 版と同じ）。
+例外は Isaac Lab Mimic の環境（Configs.mimic）: 生成の成否を Arena の成功条件（_success_criteria）で決める。
 """
 
 from __future__ import annotations
+
+
+def _success_criteria(task):
+    """物体が容器の中に置かれ、グリッパに開く指令が出ている状態が 10 step 続く（SimView.task_success と同じ考え方）。"""
+    from isaaclab_arena.progress_tracking.completion_criteria import CompletionCriteria
+    from isaaclab_arena.tasks.predicates.temporal import TrueForConsecutiveStepsCfg
+
+    from urdf2vla.sim.mimic import success_predicate
+
+    pred = success_predicate(task)
+    return CompletionCriteria(name="object_in_container", predicate_sequence=[TrueForConsecutiveStepsCfg(predicate=pred, required_steps=10)])
 
 
 def make_task(c):
@@ -22,6 +34,17 @@ def make_task(c):
     events = [
         ("reset_scene", EventTermCfg, EventTermCfg(func=mdp.reset_scene_to_default, mode="reset", params={"reset_joint_targets": True})),
     ]
+    if c.mimic:  # Isaac Lab Mimic: reset のたびに物体を置く範囲の中でばらつかせる（Mimic のループが reset を行う）
+        from isaaclab.managers import SceneEntityCfg
+
+        o = task.objects[0]
+        hx, hy = (task.spawn_x[1] - task.spawn_x[0]) / 2, (task.spawn_y[1] - task.spawn_y[0]) / 2
+        events.append((
+            "reset_object", EventTermCfg,
+            EventTermCfg(func=mdp.reset_root_state_uniform, mode="reset",
+                         params={"pose_range": {"x": (-hx, hx), "y": (-hy, hy), "yaw": (-0.5, 0.5) if o.box else (0.0, 0.0)},
+                                 "velocity_range": {}, "asset_cfg": SceneEntityCfg("object_0")}),
+        ))  # fmt: skip
     EventsCfg = make_configclass("Urdf2VlaEventsCfg", events)
     front = next((cam for cam in c.cameras.cameras if cam.mount == "world"), None)
     eye = tuple(front.pos) if front else (task.table.center[0] + 1.2, 0.0, 0.8)
@@ -37,13 +60,17 @@ def make_task(c):
         def get_termination_cfg(self) -> TaskTerminationCfg:
             # 記録・評価のループが episode_length_s で止める。環境側の時間切れはそれより後にして、最後の step で
             # 自動の reset が入らないようにする（入ると物体が置き場に戻り、最後の状態を記録できない）
+            if c.mimic:  # Mimic の生成は成功の終了条件で成否を決める
+                return TaskTerminationCfg(timeout_s=task.episode_length_s + 10.0, success=[_success_criteria(task)])
             return TaskTerminationCfg(timeout_s=task.episode_length_s + 10.0)
 
         def get_events_cfg(self):
             return EventsCfg()
 
         def get_mimic_env_cfg(self, arm_mode):
-            raise NotImplementedError("urdf2vla の Pick & Place は Isaac Lab Mimic に対応していません（scripted で収集します）")
+            from urdf2vla.sim.mimic import make_mimic_env_cfg
+
+            return make_mimic_env_cfg(task, c.mimic_trials)
 
         def get_metrics(self):
             return []

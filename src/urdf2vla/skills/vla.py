@@ -73,7 +73,8 @@ declare_sim_skill(
     outputs=["datasets/<name>.hdf5", "build/collect_report.yaml"],
     requires=["setup_teleoperation"],
     args=[
-        Arg(("--device",), {"default": "scripted", "choices": ["scripted", "keyboard", "socket"], "help": "操作デバイス"}),
+        Arg(("--device",), {"default": "scripted", "choices": ["scripted", "keyboard", "socket", "mimic"], "help": "操作デバイス（mimic: Isaac Lab Mimic で生成したエピソードを再生して記録する）"}),
+        Arg(("--source",), {"default": None, "help": "--device mimic: Mimic で生成した HDF5（プロジェクトからの相対パス）"}),
         Arg(("--num-demos",), {"type": int, "default": 10, "help": "集める成功デモ数"}),
         Arg(("--max-attempts",), {"type": int, "default": 0, "help": "試行回数の上限（0 = num-demos の 3 倍）"}),
         Arg(("--dataset",), {"default": "demos", "help": "datasets/<名前>.hdf5"}),

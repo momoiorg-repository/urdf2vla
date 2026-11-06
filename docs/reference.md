@@ -27,6 +27,7 @@
 | `configure_vla_interface` | Defines the VLA's inputs (camera images, arm joints + gripper value) and outputs (joint targets + gripper command). |
 | `setup_teleoperation` | Configures hand-space control through inverse kinematics and checks the hand moves as commanded. |
 | `collect_dataset` | Records successful demonstrations (`--device scripted`, `keyboard` or `socket`) to HDF5 and checks them. |
+| `generate_mimic` | Optional, instead of `collect_dataset`: records a few scripted source demonstrations, has Isaac Lab Mimic generate `--trials` new episodes from them, and records the successful ones with images (one object and a container). |
 | `convert_dataset` | Converts the recording to LeRobot v2.1 with GR00T N1.7's modality files and checks it with GR00T's loader. |
 | `train_vla` | Writes and checks a GR00T N1.7 fine-tuning job; trains if the GPU has 44 GB or more, otherwise packages the job. |
 | `evaluate_vla` | Runs episodes with a GR00T inference server (`--model`) or a dataset replay (`--replay`) and reports the success rate. |

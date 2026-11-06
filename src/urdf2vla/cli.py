@@ -22,7 +22,7 @@ import yaml
 from urdf2vla import skills as _skills  # noqa: F401  (Skill を登録する)
 from urdf2vla.diagnose import diagnose_text, tail
 from urdf2vla.project import Project, ProjectError, file_hash, open_logger
-from urdf2vla.registry import PIPELINE, SKILLS
+from urdf2vla.registry import OPTIONAL, PIPELINE, SKILLS
 from urdf2vla.result import SkillResult
 from urdf2vla.runtime.config import load_runtime
 from urdf2vla.runtime.dispatch import run_sim_skill, stream_hint
@@ -117,7 +117,7 @@ def cmd_init(args) -> int:
 
 
 def cmd_skills(args) -> int:
-    items = [SKILLS[n].describe() for n in PIPELINE if n in SKILLS]
+    items = [SKILLS[n].describe() for n in [*PIPELINE, *OPTIONAL] if n in SKILLS]
     if args.json:
         print(json.dumps({"pipeline": [i["name"] for i in items], "skills": items}, ensure_ascii=False, indent=2))
     else:
@@ -312,7 +312,7 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("teleop-keys", help="端末のキー入力で teleop する（collect_dataset --device socket と一緒に使う）")
     s.add_argument("--port", type=int, default=50555)
 
-    for name in PIPELINE:
+    for name in [*PIPELINE, *OPTIONAL]:
         if name not in SKILLS:
             continue
         spec = SKILLS[name]

@@ -61,6 +61,8 @@ PIPELINE = [
     "train_vla",
     "evaluate_vla",
 ]
+# 標準の順にはないが、CLI から呼べる Skill（collect_dataset の代わりに使える）
+OPTIONAL = ["generate_mimic"]
 
 
 def skill(

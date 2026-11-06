@@ -83,6 +83,38 @@ The hand moves in small steps (8 mm and 0.04 rad per control step); change `pos_
 `overrides.teleop` in `project.yaml` if it feels too slow or too fast. An episode is saved automatically as soon as the
 object has been placed in the bin. The instruction for the episode is printed when it starts.
 
+## Multiply demonstrations with Isaac Lab Mimic
+
+[Isaac Lab Mimic](https://isaac-sim.github.io/IsaacLab/main/source/overview/imitation-learning/teleop_imitation.html)
+turns a few demonstrations into many: it splits each source demonstration into *grasp the object* and *put it in the
+bin*, moves each part to where the object and the bin are in a new episode, runs it, and keeps the attempts that
+succeed. `generate_mimic` runs the whole thing for a task with **one object and a container**:
+
+```yaml
+# project.yaml
+task:
+  objects: [color_cube]
+  container: klt_bin
+```
+
+```bash
+urdf2vla generate_mimic --project projects/myrobot --source-demos 10 --trials 100
+```
+
+1. **Source demonstrations** — the scripted controller records `--source-demos` successful episodes, with the poses
+   Mimic needs (`datasets/demos_mimic_src.hdf5`).
+2. **Generation** — Mimic tries `--trials` new episodes, each with the object at a new random position, and keeps
+   the successful ones (`datasets/demos_mimic_gen.hdf5`, actions only).
+3. **Recording** — each generated episode is replayed from its start state with the cameras on and saved like any
+   other recording (`datasets/demos.hdf5`), with the same checks as `collect_dataset`.
+
+The result reports both numbers: how many of the `--trials` Mimic generated successfully, and how many of those
+replayed into the dataset. `--trials` is a fixed number of attempts, not a target number of successes.
+
+With the Franka example (`task: {objects: [color_cube], container: klt_bin}`), 10 source demonstrations gave
+**75 successful episodes out of 100 trials**, all 75 recorded with images, with the cube spread over the whole
+spawn area (±27° of yaw) — in about 45 minutes on one RTX 5080 (3 min source, 23 min generation, 18 min recording).
+
 ## How many demonstrations?
 
 Start with **50 scripted demonstrations** to get the whole pipeline working end to end. For a policy that works from

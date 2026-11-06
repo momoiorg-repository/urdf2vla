@@ -27,6 +27,7 @@
 | `configure_vla_interface` | VLA の入力（カメラ画像、腕の関節 + グリッパの値）と出力（関節の目標 + グリッパの指令）を決める |
 | `setup_teleoperation` | 逆運動学による手先の操作を設定し、指令どおりに動くかを検査する |
 | `collect_dataset` | 成功したデモを記録し（`--device scripted` / `keyboard` / `socket`）、HDF5 に保存して検査する |
+| `generate_mimic` | 任意（`collect_dataset` の代わり）: スクリプトで元のデモを少し記録し、Isaac Lab Mimic でそこから `--trials` 回の新しいエピソードを生成して、成功したものを画像付きで記録する（物体 1 つ + 容器） |
 | `convert_dataset` | 記録を GR00T N1.7 の modality のファイル付きの LeRobot v2.1 に変換し、GR00T のローダで検査する |
 | `train_vla` | GR00T N1.7 の fine-tune ジョブを書いて検査する。GPU が 44 GB 以上なら学習し、そうでなければ一式にまとめる |
 | `evaluate_vla` | GR00T の推論サーバ（`--model`）かデータセットの再生（`--replay`）でエピソードを実行し、成功率を出す |

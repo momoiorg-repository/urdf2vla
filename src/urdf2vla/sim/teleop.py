@@ -33,6 +33,7 @@ class Command:
     reset: bool = False
     quit: bool = False
     done: bool = False  # scripted: 動作を終えた
+    raw: torch.Tensor | None = None  # 環境の行動をそのまま使う（Isaac Lab Mimic で生成したエピソードの再生）
 
 
 def _rotvec(q: torch.Tensor) -> torch.Tensor:
@@ -372,7 +373,52 @@ class SocketKeyboard(TeleopDevice):
             return self.state.command(axes)
 
 
-def make_device(kind: str, cfg: TeleopConfig, view: SimView) -> TeleopDevice:
+class MimicReplay(TeleopDevice):
+    """Isaac Lab Mimic で生成したエピソード（Isaac Lab の HDF5）の行動（目標 TCP 姿勢 + グリッパ ±1）をそのまま再生する。
+    エピソードの始めに生成時の初期状態（物体の位置など）を環境に書く。"""
+
+    name = "mimic"
+
+    def __init__(self, cfg: TeleopConfig, view: SimView, path: str):
+        from isaaclab.utils.datasets import HDF5DatasetFileHandler
+
+        self.files = HDF5DatasetFileHandler()
+        self.files.open(path)
+        self.names = list(self.files.get_episode_names())
+        self.k = -1
+        self.actions = None
+        self.t = 0
+
+    def start(self, env) -> bool:
+        """次のエピソードの初期状態を環境に書く。残りがなければ False。"""
+        self.k += 1
+        if self.k >= len(self.names):
+            return False
+        ep = self.files.load_episode(self.names[self.k], env.device)
+        self.actions = ep.data["actions"]
+        self.t = 0
+        env.reset_to(ep.data["initial_state"], torch.tensor([0], device=env.device), is_relative=True)
+        return True
+
+    def advance(self, view: SimView, integ: TargetIntegrator) -> Command:
+        cmd = Command()
+        if self.t >= len(self.actions):
+            cmd.done = True
+            a = self.actions[-1:]
+        else:
+            a = self.actions[self.t : self.t + 1]
+            self.t += 1
+        cmd.raw = a
+        for g in view.cfg.grippers:
+            cmd.gripper_open[g.name] = bool(float(a[0, -1]) >= 0)
+        return cmd
+
+
+def make_device(kind: str, cfg: TeleopConfig, view: SimView, source: str | None = None) -> TeleopDevice:
+    if kind == "mimic":
+        if not source:
+            raise ValueError("--device mimic には --source（Mimic で生成した HDF5）が必要です")
+        return MimicReplay(cfg, view, source)
     if kind == "scripted":
         return ScriptedExpert(cfg, view)
     if kind == "keyboard":

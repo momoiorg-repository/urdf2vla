@@ -23,6 +23,16 @@ class Configs:
     vla: VlaInterface | None = None
     teleop: TeleopConfig | None = None
     meta: RobotMetadata | None = None
+    # launch_sim が測った、物体が台の上で落ち着く向きと高さ（build/object_rest.json）
+    rest: dict | None = None
+    # Isaac Lab Mimic で使う環境: 物体 1 つを reset で台の上にばらつかせ、成功の終了条件と Mimic の API を持つ
+    mimic: bool = False
+    # Mimic の記録（datagen_info を含む Isaac Lab の HDF5）: (出力ディレクトリ, ファイル名)
+    mimic_record: tuple[str, str] | None = None
+    mimic_trials: int = 100  # 生成の試行回数（generation_num_trials）
+    # 生成の記録: (出力ディレクトリ, ファイル名)。成功の終了条件は env_cfg から取り出してここに置く（Mimic の生成ループが使う）
+    mimic_generate: tuple[str, str] | None = None
+    mimic_success_term: object = None
 
 
 def load_configs(project: Project) -> Configs:
@@ -40,6 +50,11 @@ def load_configs(project: Project) -> Configs:
         c.vla = VlaInterface.model_validate(project.read_generated("vla_interface.yaml"))
     if project.has_generated("teleop.yaml"):
         c.teleop = TeleopConfig.model_validate(project.read_generated("teleop.yaml"))
+    rest = project.build / "object_rest.json"
+    if rest.exists():
+        import json
+
+        c.rest = json.loads(rest.read_text())
     return c
 
 

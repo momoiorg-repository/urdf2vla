@@ -156,7 +156,8 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
     env, env_id = make_env(c, "teleop")
     torch.manual_seed(int(args.seed))  # 環境の作成（Isaac Lab）が乱数の種を設定し直すので、その後で設定する
     view = SimView(env, c.robot, c.task, c.vla, project_root=project.root)
-    device = make_device(device_kind, c.teleop, view)
+    source = str(project.root / args.source) if getattr(args, "source", None) else None
+    device = make_device(device_kind, c.teleop, view, source)
     integ = TargetIntegrator(c.teleop, view)
     cams = [i.camera for i in c.vla.images]
     max_step = c.teleop.scripted_max_step if device_kind == "scripted" else c.teleop.pos_step
@@ -198,7 +199,14 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
     while saved < num_demos and attempts < max_attempts and not quit_all:
         attempts += 1
         env.reset()
-        obj_index, place_pose = view.start_episode()  # 物体の候補から 1 つを選んで台に置く
+        if device_kind == "mimic":  # Mimic で生成したエピソード: 生成時の初期状態から始める（物体は 1 つ）
+            if not device.start(env):
+                break
+            view.active = 0
+            op, oq = view.object_pose()
+            obj_index, place_pose = 0, op.tolist() + oq.tolist()
+        else:
+            obj_index, place_pose = view.start_episode()  # 物体の候補から 1 つを選んで台に置く
         render_fix(env, c.task)
         device.reset(view)
         integ.reset(view)
@@ -219,7 +227,7 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
         outcome = "timeout"
         step_start = time.time()
         for step in range(c.teleop.max_episode_steps):
-            if device_kind != "scripted":  # 人が操作するときは実時間より速く進めない（1 制御周期 = 1/control_hz 秒）
+            if device_kind in ("keyboard", "socket"):  # 人が操作するときは実時間より速く進めない（1 制御周期 = 1/control_hz 秒）
                 wait = step_start + 1.0 / c.task.control_hz - time.time() if step else 0.0
                 if wait > 0:
                     time.sleep(wait)
@@ -255,7 +263,7 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
             obj_max_z = max(obj_max_z, float(op[2]))
             buf.add("obs/object_quat", oq.cpu().numpy().astype("float32"))
             # 行動
-            action = integ.action(cmd, view, max_step)
+            action = cmd.raw if cmd.raw is not None else integ.action(cmd, view, max_step)
             env.step(action)
             render_fix(env, c.task)
             buf.add("teleop_actions", action[0].cpu().numpy().astype("float32"))
@@ -266,7 +274,7 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
             if held >= c.teleop.success_hold_steps:
                 outcome = "success"
                 break
-            if cmd.done and device_kind == "scripted":
+            if cmd.done and device_kind in ("scripted", "mimic"):
                 outcome = "failed"  # 動作を終えたのに成功していない（把持の失敗など）
                 break
         frozen_total += frozen
