@@ -12,7 +12,7 @@ first start of Isaac Sim compiles shaders and can take several minutes.
 |---|---|---|
 | [1. Create the project](#create) | `init` | instant |
 | [2. Configure](#configure) | `inspect_robot` → `configure_camera` | ~1 s |
-| [3. Import into Isaac Sim](#import) | `import_robot`, `launch_sim` | ~2 min (more the first time: the objects and tray are downloaded) |
+| [3. Import into Isaac Sim](#import) | `import_robot`, `launch_sim` | ~2 min (more the first time: the objects and bin are downloaded) |
 | [4. Record](#record) | `configure_vla_interface`, `setup_teleoperation`, `collect_dataset` | ~4 min for 10 demos |
 | [5. Convert and package training](#convert) | `convert_dataset`, `train_vla` | ~15 s |
 | [6. Evaluate](#replay) | `evaluate_vla --replay` | ~1 min |
@@ -37,7 +37,7 @@ urdf2vla configure_camera --project projects/tutorial_franka
 ```
 
 These run on your machine, not in a container. `inspect_robot` reads the URDF and finds the arm, the gripper and the
-hand link; `configure_robot` turns that into a robot configuration; `configure_task` places a table and a tray within
+hand link; `configure_robot` turns that into a robot configuration; `configure_task` places a table and a bin within
 reach and chooses the objects — an apple, a lime, a pear and a colored cube, all of which fit the Franka's 8 cm
 fingers; `configure_camera` places a wrist camera and two external cameras like the
 [DROID](https://droid-dataset.github.io/) dataset.
@@ -114,7 +114,7 @@ what it outputs (joint targets and a gripper command). `setup_teleoperation` che
 +x, −y or +z really moves it that way.
 
 `collect_dataset --device scripted` lets a scripted controller do the task — a random object at a random position each
-time, with an instruction that names it (*"put the pear in the tray"*) —
+time, with an instruction that names it (*"put the pear in the bin"*) —
 and keeps only the episodes that succeed:
 
 ```json
@@ -162,7 +162,7 @@ urdf2vla evaluate_vla --project projects/tutorial_franka --replay --dataset demo
 
 Before you have a trained model, `--replay` tests everything around it: it starts the GR00T inference server with a
 stand-in policy that plays back the converted dataset, connects Isaac Sim to it, and runs episodes exactly as a real
-evaluation would — with the same object as in the recording. If the object lands in the tray here, the data format,
+evaluation would — with the same object as in the recording. If the object lands in the bin here, the data format,
 the action conversion and the
 server–simulator connection all work.
 

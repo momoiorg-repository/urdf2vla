@@ -20,7 +20,7 @@
 |---|---|
 | `inspect_robot` | URDF を読む: link と関節、腕、グリッパ（mimic を含む）、手先の link の候補、メッシュ。曖昧なことは質問する |
 | `configure_robot` | URDF と回答からロボットの設定を作り、正規化した URDF を書く（`package://` を解決、空の root link を除去） |
-| `configure_task` | 物体と容器を選び（`task.objects`, `task.container`）、腕の届く範囲と肩の高さから台・物体を置く範囲・トレイを配置する |
+| `configure_task` | 物体と容器を選び（`task.objects`, `task.container`）、腕の届く範囲と肩の高さから台・物体を置く範囲・箱を配置する |
 | `configure_camera` | カメラを置く: 既定は DROID の配置（`wrist`, `left`, `right`）。ほかに `front` / `side` のプリセットか明示指定 |
 | `import_robot` | URDF を USD に変換し（設定があれば SimReady のグリッパを取り付け）、ロボットの検査をする。手先が下を向いていなければ IK で初期姿勢を提案する |
 | `launch_sim` | Isaac Lab Arena で Pick & Place の環境を組み立て、カメラの画像を保存し、カメラ・場面・試しの把持を検査する。`--livestream` で WebRTC のクライアント用に動かし続ける |
@@ -71,7 +71,7 @@ robot:
 
 task:
   objects: [apple, lime, pear, color_cube]   # エピソードごとに 1 つ（物体の一覧は「自分のロボットを使う」）
-  container: plastic_tray              # または "disc"（平らな緑の置き場所）
+  container: klt_bin                   # または plastic_tray、"disc"（平らな緑の置き場所）
 
 cameras:                               # プリセット: wrist, left, right, front, side。または明示指定
   - preset: wrist
@@ -92,8 +92,8 @@ overrides:                             # generated/ のファイルと同じ構�
 | `overrides.robot.asset.solver_position_iterations` | 32（SimReady のグリッパでは 64） | 接触の精度。指が物体にめり込むときに上げる |
 | `overrides.task.instruction` | "put the {object} in the {target}" | 指示文。`{object}` と `{target}` はエピソードの物体と容器の名前になる |
 | `overrides.task.spawn_x` / `.spawn_y` | 腕の届く範囲から | エピソードで物体を置く範囲 |
-| `overrides.task.target.pos` | 物体を置く範囲の横 | トレイの位置 |
-| `overrides.task.success.container_margin` | 0.01 m | 物体がトレイの縁からどれだけ内側にあれば成功か |
+| `overrides.task.target.pos` | 物体を置く範囲の横 | 箱の位置 |
+| `overrides.task.success.container_margin` | 0.01 m | 物体が箱の縁からどれだけ内側にあれば成功か |
 | `overrides.task.language_instruction` | "pick up the red cube and place it on the green target" | VLA に渡すタスクの文 |
 | `overrides.task.episode_length_s` | 30 秒 | エピソードの時間切れ |
 | `overrides.task.render_fix` | false | カメラが止まるとき、step ごとに描画を 1 回増やす |

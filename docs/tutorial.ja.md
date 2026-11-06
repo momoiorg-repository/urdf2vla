@@ -11,7 +11,7 @@ urdf2vla に同梱の Franka Panda で、URDF から記録したデータセッ�
 |---|---|---|
 | [1. プロジェクトを作る](#create) | `init` | すぐ |
 | [2. 設定する](#configure) | `inspect_robot` 〜 `configure_camera` | 約 1 秒 |
-| [3. Isaac Sim に取り込む](#import) | `import_robot`, `launch_sim` | 約 2 分（初回は物体とトレイのダウンロードでもう少し） |
+| [3. Isaac Sim に取り込む](#import) | `import_robot`, `launch_sim` | 約 2 分（初回は物体と箱のダウンロードでもう少し） |
 | [4. 記録する](#record) | `configure_vla_interface`, `setup_teleoperation`, `collect_dataset` | デモ 10 個で約 4 分 |
 | [5. 変換し、学習を用意する](#convert) | `convert_dataset`, `train_vla` | 約 15 秒 |
 | [6. 評価する](#replay) | `evaluate_vla --replay` | 約 1 分 |
@@ -36,7 +36,7 @@ urdf2vla configure_camera --project projects/tutorial_franka
 ```
 
 これらはコンテナではなく手元のマシンで動きます。`inspect_robot` が URDF を読んで腕・グリッパ・手先の link を見つけ、
-`configure_robot` がロボットの設定にまとめ、`configure_task` が台とトレイを手の届く範囲に置いて物体（Franka の 8 cm の
+`configure_robot` がロボットの設定にまとめ、`configure_task` が台と箱を手の届く範囲に置いて物体（Franka の 8 cm の
 指に入るりんご・ライム・洋梨・色付きの立方体）を選び、
 `configure_camera` が [DROID](https://droid-dataset.github.io/) のデータセットと同じように手先カメラと 2 台の外部カメラを
 置きます。
@@ -109,7 +109,7 @@ urdf2vla collect_dataset --project projects/tutorial_franka --device scripted --
 確かめます。
 
 `collect_dataset --device scripted` は、毎回ランダムに選んだ物体をランダムな位置に置き、その名前を言う指示文
-（*"put the pear in the tray"*）でスクリプトに運ばせ、成功したエピソードだけを残します。
+（*"put the pear in the bin"*）でスクリプトに運ばせ、成功したエピソードだけを残します。
 
 ```json
 {
@@ -156,7 +156,7 @@ urdf2vla evaluate_vla --project projects/tutorial_franka --replay --dataset demo
 
 学習済みのモデルがなくても、`--replay` でモデルのまわりをすべて試せます。変換したデータセットの行動を返す代わりの方策で
 GR00T の推論サーバを起動し、Isaac Sim をつないで、本番の評価と同じように（記録と同じ物体で）エピソードを
-実行します。ここで物体がトレイに置かれれば、データの形式・行動の変換・サーバとシミュレータの接続はすべて動いています。
+実行します。ここで物体が箱に置かれれば、データの形式・行動の変換・サーバとシミュレータの接続はすべて動いています。
 
 <video controls muted playsinline width="100%" src="../../assets/eval_replay.mp4"></video>
 

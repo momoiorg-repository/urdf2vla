@@ -226,7 +226,8 @@ class SimView:
         if t.is_container:
             # 容器: 物体の中心が容器の縁より内側にあり、容器の中に置かれている（持ち上げ中でない）
             inside = abs(float(pos[0]) - tx) < t.size[0] / 2 - sc.container_margin and abs(float(pos[1]) - ty) < t.size[1] / 2 - sc.container_margin
-            resting = float(pos[2]) < self.task.table.top_z + t.size[2] + obj.size[2] / 2 + sc.max_height_above_table
+            # 容器の底に置かれている（縁の上で持っている状態は含めない）。深い箱でも浅いトレイでも、底から 3 cm までを「底」とみなす
+            resting = float(pos[2]) < self.task.table.top_z + min(t.size[2], 0.03) + obj.size[2] / 2 + sc.max_height_above_table
             return inside and resting and released
         d = float(torch.linalg.norm(pos[:2] - torch.tensor([tx, ty], device=self.device)))
         resting = float(pos[2]) < self.task.table.top_z + obj.size[2] / 2 + sc.max_height_above_table

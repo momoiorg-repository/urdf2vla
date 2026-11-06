@@ -20,7 +20,7 @@
 |---|---|
 | `inspect_robot` | Reads the URDF: links and joints, the arm, the gripper (including mimic joints), hand-link candidates, mesh files. Asks about anything ambiguous. |
 | `configure_robot` | Builds the robot configuration from the URDF and your answers, and writes a normalized URDF (`package://` resolved, empty root link removed). |
-| `configure_task` | Chooses the objects and the container (`task.objects`, `task.container`) and places the table, the spawn area and the tray from the arm's reach and shoulder height. |
+| `configure_task` | Chooses the objects and the container (`task.objects`, `task.container`) and places the table, the spawn area and the bin from the arm's reach and shoulder height. |
 | `configure_camera` | Places the cameras: DROID layout by default (`wrist`, `left`, `right`), or `front` / `side` presets, or explicit cameras. |
 | `import_robot` | Converts the URDF to USD (attaching a SimReady gripper if configured) and runs the robot checks. Proposes an IK starting pose if the hand doesn't point down. |
 | `launch_sim` | Builds the pick-and-place environment with Isaac Lab Arena, saves camera snapshots, checks cameras, scene and a test grasp. `--livestream` keeps it running for a WebRTC client. |
@@ -71,7 +71,7 @@ robot:
 
 task:
   objects: [apple, lime, pear, color_cube]   # one per episode; see the object list in the "Bring your own robot" guide
-  container: plastic_tray              # or "disc" (a flat green target)
+  container: klt_bin                   # or plastic_tray, or "disc" (a flat green target)
 
 cameras:                               # presets: wrist, left, right, front, side — or explicit
   - preset: wrist
@@ -92,8 +92,8 @@ Frequently used overrides:
 | `overrides.robot.asset.solver_position_iterations` | 32 (64 with a SimReady gripper) | Contact accuracy; raise when fingers sink into objects |
 | `overrides.task.instruction` | "put the {object} in the {target}" | The instruction; `{object}` and `{target}` become the episode's object and the container |
 | `overrides.task.spawn_x` / `.spawn_y` | from the arm's reach | Where an episode puts its object |
-| `overrides.task.target.pos` | beside the spawn area | Where the tray stands |
-| `overrides.task.success.container_margin` | 0.01 m | How far inside the tray's rim the object must end up |
+| `overrides.task.target.pos` | beside the spawn area | Where the bin stands |
+| `overrides.task.success.container_margin` | 0.01 m | How far inside the bin's rim the object must end up |
 | `overrides.task.episode_length_s` | 30 s | Episode timeout |
 | `overrides.task.render_fix` | false | Render once more per step if a camera freezes |
 | `overrides.teleop.pos_step` / `.rot_step` | 0.008 m / 0.04 rad | Keyboard step size per control step |

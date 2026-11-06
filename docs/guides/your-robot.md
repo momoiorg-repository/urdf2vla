@@ -133,13 +133,13 @@ robot:
 ## 6. Choose the objects, adjust the scene and cameras {#objects}
 
 By default every episode puts one of four objects on the table — an apple, a lime, a pear or a colored cube — and the
-robot has to put it in a tray. Choose others in `project.yaml`, then run `configure_task` **and `launch_sim`** again
+robot has to put it in a bin. Choose others in `project.yaml`, then run `configure_task` **and `launch_sim`** again
 (`launch_sim` measures how each object comes to rest; episodes use that):
 
 ```yaml
 task:
   objects: [lime, color_cube, rubiks_cube]   # one per episode, named in the instruction
-  container: plastic_tray                     # or "disc" for a flat green target
+  container: klt_bin                          # or plastic_tray, or "disc" for a flat green target
 ```
 
 | Key | Object | Size (cm) | Source |
@@ -150,6 +150,7 @@ task:
 | `pear` | pear | 6.1 × 13.4 × 6.2 | NVIDIA SimReady |
 | `color_cube` | colored cube | 5.0 × 5.0 × 5.0 | Isaac Sim props |
 | `cube` | red cube (primitive, no download) | 4.5 × 4.5 × 4.5 | — |
+| `klt_bin` (container, default) | bin | 19.8 × 29.7 × 14.6 | Isaac Sim props (industrial KLT bin) |
 | `plastic_tray` (container) | tray | 25.6 × 27.0 × 2.1 | NVIDIA SimReady |
 
 Datasets recorded with a different object list can't be replayed with the new one (the episodes store which entry
@@ -160,7 +161,7 @@ Objects wider than your gripper can open are left out, with a warning (the Frank
 2F-85, 8.5 cm). The assets are downloaded from NVIDIA's asset server the first time. The catalog with the measured
 sizes is `src/urdf2vla/objects.py`.
 
-The table, spawn area and tray are placed from your arm's reach. To move them, write the generated keys under
+The table, spawn area and bin are placed from your arm's reach. To move them, write the generated keys under
 `overrides.task` (same structure as `generated/task.yaml`) and run `configure_task` again:
 
 ```yaml
@@ -168,6 +169,7 @@ overrides:
   task:
     target: {pos: [0.45, -0.18]}
     instruction: "place the {object} into the {target}"
+    table: {material: walnut}        # the table surface: oak (default), walnut or plain
 ```
 
 Cameras: the default is the [DROID](https://droid-dataset.github.io/) layout (a wrist camera plus left and right

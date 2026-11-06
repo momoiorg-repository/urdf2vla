@@ -20,7 +20,7 @@ Open the address in a browser. From another computer on your network, use the se
 
 <figure markdown="span">
   ![urdf2vla view showing a Franka Panda, the table, and three camera frustums](../assets/view_franka.png){ width="900" }
-  <figcaption>The Franka from the tutorial: the grasp point (TCP), the table with the candidate objects and the tray, and the
+  <figcaption>The Franka from the tutorial: the grasp point (TCP), the table with the candidate objects and the bin, and the
   wrist, left and right cameras with the images they captured in <code>launch_sim</code>.</figcaption>
 </figure>
 
@@ -30,7 +30,7 @@ Open the address in a browser. From another computer on your network, use the se
 |---|---|
 | **TCP（把持点）** frame with a blue and an orange arrow | Where the gripper grasps. Blue = approach direction (should point down at the table in the initial pose), orange = the direction the fingers open. |
 | **正面 (+x)** red arrow | The robot's front. The table and cameras are placed in front of it. |
-| Table, labelled boxes, orange patch, green box | The scene: the candidate objects (their bounding boxes, with names), the area where an episode puts its object, and the tray. |
+| Table, labelled boxes, orange patch, green box | The scene: the candidate objects (their bounding boxes, with names), the area where an episode puts its object, and the bin. |
 | Blue pyramids | Camera positions and fields of view. After `launch_sim`, each shows the image that camera captured. |
 | Orange shapes (optional) | Collision shapes — what the physics engine actually uses for contact. |
 

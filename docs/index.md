@@ -29,9 +29,9 @@ flowchart LR
 ## What you get
 
 - **A pick-and-place task with real objects, sized to your robot.** Each episode puts one object — an apple, a lime,
-  a pear or a colored cube — on the table, and the instruction names it: *"put the apple in the tray"*. The objects and
-  the tray are NVIDIA SimReady assets; the table, objects and tray are placed from your arm's reach, so you don't have
-  to build a scene in Omniverse.
+  a pear or a colored cube — on the table, and the instruction names it: *"put the apple in the bin"*. The objects
+  are NVIDIA SimReady assets, the bin is an industrial KLT bin and the table has a real oak surface; everything is
+  placed from your arm's reach, so you don't have to build a scene in Omniverse.
 - **Questions instead of guesswork.** When something about your robot can't be read from the URDF (which link is the hand,
   which way the fingers open, a good starting pose), urdf2vla asks — and you can answer by looking at the robot in your
   browser with [`urdf2vla view`](guides/view.md).
@@ -67,5 +67,5 @@ Python package on your machine.
 </div>
 
 !!! note "Current scope"
-    Single-arm robots with a parallel gripper, one pick-and-place task (an object into a tray). Dual-arm robots can be
+    Single-arm robots with a parallel gripper, one pick-and-place task (an object into a bin). Dual-arm robots can be
     imported and checked but not yet simulated. Training GR00T N1.7 needs a GPU with **44 GB or more**.

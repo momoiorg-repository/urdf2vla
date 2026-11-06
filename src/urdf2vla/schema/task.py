@@ -16,6 +16,7 @@ class TableConfig(BaseModel):
     center: list[float]  # [x, y]（ロボット base 基準）
     size: list[float]  # [x, y, 厚さ]
     top_z: float  # 天板上面の高さ
+    material: str = "oak"  # 見た目: oak / walnut（NVIDIA の木の材質、木目あり）/ plain（単色）
 
 
 class ObjectConfig(BaseModel):

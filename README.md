@@ -10,7 +10,7 @@ urdf2vla turns USD conversion, articulation tuning, camera placement, Isaac Lab 
 fine-tuning into a sequence of plain commands. Each command checks its own result and either moves on, asks you a
 question about your robot, or tells you what to change.
 
-- A pick-and-place task with real objects (apple, lime, pear, colored cube → tray), one per episode and named in the instruction — no scene building in Omniverse
+- A pick-and-place task with real objects (apple, lime, pear, colored cube → bin), one per episode and named in the instruction — no scene building in Omniverse
 - Questions instead of guesswork, answerable in a 3D browser view (`urdf2vla view`)
 - Physics checks that catch grippers that can't hold, fingers that sink into objects and frozen cameras before you record
 - DROID-style cameras (wrist + left + right) by default
@@ -54,7 +54,7 @@ Design notes, simulator pitfalls and verification status (in Japanese): [DEVELOP
 
 ## Status
 
-Single-arm robots with a two-finger gripper, one pick-and-place task (an object into a tray). Verified end to end with the
+Single-arm robots with a two-finger gripper, one pick-and-place task (an object into a bin). Verified end to end with the
 bundled Franka Panda up to a replay evaluation; a full GR00T training run on this version is not yet verified.
 Dual-arm robots can be imported and checked but not yet simulated. urdf2vla's command output is currently in Japanese;
 the documentation explains every key and message in English.

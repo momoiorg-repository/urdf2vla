@@ -24,8 +24,8 @@ urdf2vla convert_dataset --project projects/myrobot --dataset demos
 動画の全フレームを元の画像と比べます。変換の誤りを、何時間も学習した後ではなくここで見つけるためです。`--force` で
 作り直します。
 
-各エピソードは自分の指示文を持ちます。`meta/tasks.jsonl` に異なる指示文（*"put the apple in the tray"*、
-*"put the lime in the tray"* など）を並べ、各フレームがそのエピソードの指示文を指すので、モデルは指示文が名指しする
+各エピソードは自分の指示文を持ちます。`meta/tasks.jsonl` に異なる指示文（*"put the apple in the bin"*、
+*"put the lime in the bin"* など）を並べ、各フレームがそのエピソードの指示文を指すので、モデルは指示文が名指しする
 ものに従って動くことを学びます。
 
 ## 2. 学習する

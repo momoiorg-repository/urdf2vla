@@ -125,14 +125,14 @@ robot:
 
 ## 6. 物体を選び、場面とカメラを調整する {#objects}
 
-既定では、エピソードごとにりんご・ライム・洋梨・色付きの立方体のどれか 1 つを台に置き、ロボットはそれをトレイに
+既定では、エピソードごとにりんご・ライム・洋梨・色付きの立方体のどれか 1 つを台に置き、ロボットはそれを箱に
 入れます。ほかの物体は `project.yaml` で選び、`configure_task` と **`launch_sim`** をもう一度実行します（`launch_sim` が各物体の
 落ち着く向きを測り、エピソードはそれを使います）。
 
 ```yaml
 task:
   objects: [lime, color_cube, rubiks_cube]   # エピソードごとに 1 つ。指示文でその名前を言う
-  container: plastic_tray                     # 平らな緑の置き場所なら "disc"
+  container: klt_bin                          # トレイなら plastic_tray、平らな緑の置き場所なら "disc"
 ```
 
 | キー | 物体 | 大きさ (cm) | 出所 |
@@ -143,6 +143,7 @@ task:
 | `pear` | 洋梨 | 6.1 × 13.4 × 6.2 | NVIDIA SimReady |
 | `color_cube` | 色付きの立方体 | 5.0 × 5.0 × 5.0 | Isaac Sim の props |
 | `cube` | 赤い立方体（プリミティブ、ダウンロード不要） | 4.5 × 4.5 × 4.5 | — |
+| `klt_bin`（容器、既定） | 箱 | 19.8 × 29.7 × 14.6 | Isaac Sim の props（工場の KLT の部品箱） |
 | `plastic_tray`（容器） | トレイ | 25.6 × 27.0 × 2.1 | NVIDIA SimReady |
 
 別の物体のリストで記録したデータセットは、新しいリストでは再生できません（エピソードはリストの何番目を使ったかを記録します）。
@@ -151,7 +152,7 @@ task:
 グリッパの開きより幅の広い物体は、警告を出して除きます（Franka は 8 cm、SimReady の Robotiq 2F-85 は 8.5 cm）。
 アセットは初回に NVIDIA のアセットサーバからダウンロードします。測った大きさのカタログは `src/urdf2vla/objects.py` です。
 
-台・物体を置く範囲・トレイは腕の届く範囲から配置します。動かすには、生成されたキーを `overrides.task`
+台・物体を置く範囲・箱は腕の届く範囲から配置します。動かすには、生成されたキーを `overrides.task`
 （`generated/task.yaml` と同じ構造）に書き、`configure_task` をもう一度実行します。
 
 ```yaml
@@ -159,6 +160,7 @@ overrides:
   task:
     target: {pos: [0.45, -0.18]}
     instruction: "place the {object} into the {target}"
+    table: {material: walnut}        # 台の見た目: oak（既定）、walnut、plain（単色）
 ```
 
 カメラの既定は [DROID](https://droid-dataset.github.io/) の配置（手先カメラと、台を見下ろす左右のカメラ、256×256）です。

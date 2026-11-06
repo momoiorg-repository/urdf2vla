@@ -75,6 +75,10 @@ OBJECTS: dict[str, CatalogAsset] = {
 }
 
 CONTAINERS: dict[str, CatalogAsset] = {
+    "klt_bin": CatalogAsset(
+        "klt_bin", "bin", "Props/KLT_Bin/small_KLT.usd",
+        size=(0.198, 0.297, 0.146), bottom=-0.073, mass=0.0, source="Isaac Sim props",
+    ),  # 工場の部品箱（KLT）。内寸に物体が入り、縁の高さ 14.6 cm
     "plastic_tray": CatalogAsset(
         "plastic_tray", "tray", "SimReady/Residential/Kitchen/Dishware/Plastic_Tray_A01/sm_dishware_plastic_tray_a01_01.usd",
         size=(0.2557, 0.27, 0.0213), bottom=0.0004, mass=0.4149, variants=SIMREADY_PHYSX,
@@ -84,7 +88,7 @@ CONTAINERS: dict[str, CatalogAsset] = {
 # configure_task の既定: エピソードごとにこの中から 1 つ（グリッパの開きに入らないものは除く）をトレイに入れる
 # rubiks_cube は使えるが既定には入れない（Arena のライブラリの物体で、元のデータセット（HOT3D）の利用条件を確かめていない）
 DEFAULT_OBJECTS = ("apple", "lime", "pear", "color_cube")
-DEFAULT_CONTAINER = "plastic_tray"
+DEFAULT_CONTAINER = "klt_bin"
 
 
 def get_object(key: str) -> CatalogAsset:

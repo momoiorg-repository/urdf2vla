@@ -14,19 +14,24 @@ PARK_X = -1.5  # 使わない物体を置く場所（ロボットの後ろの床
 PARK_DY = 0.25
 
 
-def _spawn_usd_damped(prim_path, cfg, *args, **kwargs):
-    """USD のアセットを生成し、中の剛体すべてに角速度の減衰を付ける。
+WOOD_MDL = "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.2/NVIDIA/Materials/Base/Wood"
+WOOD = {"oak": "Oak", "walnut": "Walnut"}
+
+
+def _spawn_usd_rigid(prim_path, cfg, *args, **kwargs):
+    """USD のアセットを生成し、中の剛体すべてに角速度の減衰・kinematic を付ける。
 
     Isaac Lab の rigid_props は instance（instanceable な prim の中身）を書き換えられず黙って飛ばすので
-    （SimReady のりんごは剛体が instance の中にあり、減衰が付かなかった）、instance を解いてから付ける。
+    （SimReady のりんごや KLT の箱は剛体が instance の中にある）、instance を解いてから付ける。
     """
-    from pxr import Usd, UsdPhysics
+    from pxr import Sdf, Usd, UsdPhysics
 
     import isaaclab.sim as sim_utils
 
     prim = sim_utils.spawn_from_usd(prim_path, cfg, *args, **kwargs)
     damping = getattr(cfg, "_urdf2vla_angular_damping", None)
-    if damping is None:
+    kinematic = getattr(cfg, "_urdf2vla_kinematic", False)
+    if damping is None and not kinematic:
         return prim
     for root in sim_utils.find_matching_prims(prim_path):
         changed = True
@@ -38,14 +43,58 @@ def _spawn_usd_damped(prim_path, cfg, *args, **kwargs):
                     changed = True
         for p in Usd.PrimRange(root):
             if p.HasAPI(UsdPhysics.RigidBodyAPI):
-                p.CreateAttribute("physxRigidBody:angularDamping", _float()).Set(float(damping))
+                if damping is not None:
+                    p.CreateAttribute("physxRigidBody:angularDamping", Sdf.ValueTypeNames.Float).Set(float(damping))
+                if kinematic:
+                    UsdPhysics.RigidBodyAPI(p).CreateKinematicEnabledAttr().Set(True)
     return prim
 
 
-def _float():
-    from pxr import Sdf
+def _uv_box(stage, path: str, size, uv_per_m: float = 1.0) -> None:
+    """面ごとに UV（1 m あたり uv_per_m）を張った箱のメッシュ。UsdGeom.Cube には UV がなく、木目のテクスチャが出ない。"""
+    from pxr import Gf, Sdf, UsdGeom
 
-    return Sdf.ValueTypeNames.Float
+    sx, sy, sz = (float(v) / 2 for v in size)
+    faces = [
+        ([(-sx, -sy, sz), (sx, -sy, sz), (sx, sy, sz), (-sx, sy, sz)], 2 * sx, 2 * sy),
+        ([(-sx, -sy, -sz), (-sx, sy, -sz), (sx, sy, -sz), (sx, -sy, -sz)], 2 * sy, 2 * sx),
+        ([(-sx, -sy, -sz), (sx, -sy, -sz), (sx, -sy, sz), (-sx, -sy, sz)], 2 * sx, 2 * sz),
+        ([(sx, sy, -sz), (-sx, sy, -sz), (-sx, sy, sz), (sx, sy, sz)], 2 * sx, 2 * sz),
+        ([(sx, -sy, -sz), (sx, sy, -sz), (sx, sy, sz), (sx, -sy, sz)], 2 * sy, 2 * sz),
+        ([(-sx, sy, -sz), (-sx, -sy, -sz), (-sx, -sy, sz), (-sx, sy, sz)], 2 * sy, 2 * sz),
+    ]
+    mesh = UsdGeom.Mesh.Define(stage, path)
+    pts, idx, st = [], [], []
+    for verts, lu, lv in faces:
+        base = len(pts)
+        pts += [Gf.Vec3f(*v) for v in verts]
+        idx += [base, base + 1, base + 2, base + 3]
+        st += [Gf.Vec2f(0, 0), Gf.Vec2f(lu * uv_per_m, 0), Gf.Vec2f(lu * uv_per_m, lv * uv_per_m), Gf.Vec2f(0, lv * uv_per_m)]
+    mesh.CreatePointsAttr(pts)
+    mesh.CreateFaceVertexCountsAttr([4] * 6)
+    mesh.CreateFaceVertexIndicesAttr(idx)
+    UsdGeom.PrimvarsAPI(mesh).CreatePrimvar("st", Sdf.ValueTypeNames.TexCoord2fArray, UsdGeom.Tokens.faceVarying).Set(st)
+
+
+def _spawn_wood_table(prim_path, cfg, *args, **kwargs):
+    """台: 衝突用の箱（見えなくする）と、木目の UV を張った見た目の箱（NVIDIA の木の MDL 材質）。"""
+    from pxr import Usd, UsdGeom
+
+    import isaaclab.sim as sim_utils
+
+    prim = sim_utils.spawn_cuboid(prim_path, cfg, *args, **kwargs)
+    wood = WOOD[cfg._urdf2vla_wood]
+    for root in sim_utils.find_matching_prims(prim_path):
+        for p in Usd.PrimRange(root):
+            if p.IsA(UsdGeom.Gprim):
+                UsdGeom.Imageable(p).MakeInvisible()  # 衝突はそのまま（PhysX は見える・見えないに関係しない）
+        mesh_path = f"{root.GetPath()}/wood_visual"
+        _uv_box(root.GetStage(), mesh_path, cfg.size)
+        mat_path = f"{root.GetPath()}/wood_material"
+        mdl = sim_utils.MdlFileCfg(mdl_path=f"{WOOD_MDL}/{wood}.mdl")
+        mdl.func(mat_path, mdl)
+        sim_utils.bind_visual_material(mesh_path, mat_path)
+    return prim
 
 
 def parked_pose(task, i: int) -> tuple[float, float, float]:
@@ -82,25 +131,31 @@ def make_scene(c):
         (0.0, 0.0, FLOOR_Z - 0.01),
         prim_path="/World/Floor",
     )
-    table = fixed(
-        "table",
-        sim_utils.CuboidCfg(
-            size=(task.table.size[0], task.table.size[1], table_h),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.72, 0.6, 0.45)),
-        ),
-        (task.table.center[0], task.table.center[1], task.table.top_z - table_h / 2),
+    table_cfg = sim_utils.CuboidCfg(
+        size=(task.table.size[0], task.table.size[1], table_h),
+        collision_props=sim_utils.CollisionPropertiesCfg(),
+        visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.72, 0.6, 0.45)),
     )
+    if task.table.material in WOOD:  # 木目の台（見た目だけ。衝突は同じ箱）
+        table_cfg.func = _spawn_wood_table
+        table_cfg._urdf2vla_wood = task.table.material
+    table = fixed("table", table_cfg, (task.table.center[0], task.table.center[1], task.table.top_z - table_h / 2))
     tgt = task.target
     if tgt.is_container:
         # トレイなどの容器: 台の上に固定する（kinematic。物体が当たっても動かない）
+        spawn = sim_utils.UsdFileCfg(
+            func=_spawn_usd_rigid,
+            usd_path=tgt.asset,
+            scale=(tgt.scale,) * 3,
+            variants=dict(tgt.variants),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+        )
+        spawn._urdf2vla_kinematic = True  # 剛体が instance の中にあるアセット（KLT の箱）でも固定する
         target = Object(
             name="target",
             object_type=ObjectType.RIGID,
-            usd_path=tgt.asset,
-            scale=(tgt.scale,) * 3,
+            spawner_cfg=spawn,
             initial_pose=Pose(position_xyz=(tgt.pos[0], tgt.pos[1], task.table.top_z - tgt.bottom + 0.001)),
-            spawn_cfg_addon={"variants": dict(tgt.variants), "rigid_props": sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True)},
         )
     else:
         target = fixed(
@@ -129,7 +184,7 @@ def make_scene(c):
             # PhysX には転がり抵抗がないので、丸い果物は台の上で倒れて転がり出す（りんごは 2 秒ほどで倒れて 10 cm 転がった）。
             # 角速度の減衰で抑える。箱の形の物体には付けない（掴んだときに指の面に沿って回り切れず、指がめり込む）
             spawn = sim_utils.UsdFileCfg(
-                func=_spawn_usd_damped,
+                func=_spawn_usd_rigid,
                 usd_path=obj.asset,
                 scale=(obj.scale,) * 3,
                 variants=dict(obj.variants),

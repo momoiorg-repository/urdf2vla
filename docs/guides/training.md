@@ -26,7 +26,7 @@ images, so a broken conversion is caught here rather than after hours of trainin
 conversion.
 
 Each episode keeps its own instruction: `meta/tasks.jsonl` lists every distinct instruction (*"put the apple in the
-tray"*, *"put the lime in the tray"*, …) and every frame points to its episode's one, so the model learns to act on what
+bin"*, *"put the lime in the bin"*, …) and every frame points to its episode's one, so the model learns to act on what
 the instruction names.
 
 ## 2. Train

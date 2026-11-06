@@ -19,7 +19,7 @@ urdf2vla view --project projects/myrobot
 
 <figure markdown="span">
   ![Franka Panda・台・3 台のカメラの視野を表示した urdf2vla view](../assets/view_franka.png){ width="900" }
-  <figcaption>チュートリアルの Franka: 把持点（TCP）、物体の候補とトレイのある台、<code>launch_sim</code> で撮った
+  <figcaption>チュートリアルの Franka: 把持点（TCP）、物体の候補と箱のある台、<code>launch_sim</code> で撮った
   画像付きの手先・左・右のカメラ。</figcaption>
 </figure>
 
@@ -29,7 +29,7 @@ urdf2vla view --project projects/myrobot
 |---|---|
 | **TCP（把持点）** の座標軸と青・橙の矢印 | グリッパが掴む位置。青 = 接近方向（初期姿勢では台の方＝下を向くはず）、橙 = 指が開く向き |
 | **正面 (+x)** の赤い矢印 | ロボットの正面。台とカメラはこの前に置かれます |
-| 台・名前付きの箱・オレンジの範囲・緑の箱 | 場面: 物体の候補（外接箱と名前）、エピソードで物体を置く範囲、トレイ |
+| 台・名前付きの箱・オレンジの範囲・緑の箱 | 場面: 物体の候補（外接箱と名前）、エピソードで物体を置く範囲、箱 |
 | 青い四角錐 | カメラの位置と視野。`launch_sim` の後は、そのカメラが撮った画像が中に表示されます |
 | オレンジの形（任意） | 衝突形状。物理エンジンが接触に実際に使う形です |
 

@@ -44,10 +44,10 @@ robot:
   # base_pose: {{pos: [0, 0, 0], rot_xyzw: [0, 0, 0, 1]}}   # 四元数は [x, y, z, w]
   # package_paths: [../my_ws/src]       # package:// を探す追加ディレクトリ
 
-# Pick & Place の物体と容器。既定はりんご・ライム・洋梨・色付きの立方体（エピソードごとに 1 つ）とトレイ
+# Pick & Place の物体と容器。既定はりんご・ライム・洋梨・色付きの立方体（エピソードごとに 1 つ）と KLT の箱
 # task:
 #   objects: [apple, lime, pear, color_cube]   # ほかに rubiks_cube、プリミティブの cube（ダウンロード不要）
-#   container: plastic_tray                     # 平らな緑の円なら disc
+#   container: klt_bin                          # トレイなら plastic_tray、平らな緑の円なら disc
 
 # カメラ。既定は DROID と同じ配置: 手先(wrist) + ロボットの左右の高い位置から台を見下ろす外部カメラ(left / right)。
 # ほかに正面(front)・横(side)のプリセットと、明示指定ができる。明示指定の例:

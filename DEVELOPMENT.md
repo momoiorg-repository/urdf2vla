@@ -237,6 +237,10 @@ projects/<name>/
     物体は instance を解いてから剛体に角速度の減衰を付ける（scene.py の _spawn_usd_damped）。
     ただし減衰が転がりを抑える効果は測っていない（りんごの倒れ方は減衰に関係しなかった。replay を直したのは落ち着いた向きと
     置いた姿勢からの再生）。減衰と instance を解く処理は残してあるが、効果がなければ外してよい。
+  - 台の見た目は NVIDIA の木の MDL（Oak / Walnut）。UsdGeom.Cube には UV がなく、MDL を付けても色しか出ない（木目が出ない）
+    ので、衝突用の箱は見えなくし、面ごとに UV を張ったメッシュを見た目として重ねる（scene.py の _spawn_wood_table）。
+  - 既定の容器は KLT の部品箱（Isaac Sim の props）。剛体が instance の中にあるので、kinematic も instance を解いてから付ける
+    （付かないと箱が動く）。容器の「底に置かれた」判定は底から 3 cm まで（深い箱の縁の上で持っている状態を成功にしない）。
   - 環境の時間切れ（Arena の Task）は記録・評価のループの上限より 10 秒長くする。同じだと最後の step で自動の reset が入り、
     物体が置き場に戻って失敗の記録（object_final）が意味を失う。
   - Isaac Lab の環境の作成が torch の乱数の種を設定し直すので、`--seed` は環境の作成の後で設定する（前は効いていなかった）。

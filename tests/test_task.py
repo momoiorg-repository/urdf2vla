@@ -29,8 +29,9 @@ def test_default_task_is_objects_into_a_tray(tmp_path, capsys):
     # Franka の指の開き 8 cm に、既定の物体はすべて入る
     assert r["data"]["gripper_opening_m"] == 0.08
     assert [o.key for o in t.objects] == list(DEFAULT_OBJECTS)
-    assert t.target.is_container and t.target.key == "plastic_tray"
-    assert t.instruction_for(0) == "put the apple in the tray"
+    assert t.target.is_container and t.target.key == "klt_bin"
+    assert t.instruction_for(0) == "put the apple in the bin"
+    assert t.table.material == "oak"
     # トレイは物体を置く範囲と重ならず、台の上に収まる
     tray_left = t.target.pos[1] + t.target.size[1] / 2
     assert tray_left + max(o.grasp_width for o in t.objects) / 2 < t.spawn_y[0]

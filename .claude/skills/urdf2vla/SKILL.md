@@ -42,7 +42,7 @@ urdf2vla skills --json              # Skill 一覧（phase・入出力・前提�
 1. `inspect_robot` — URDF 解析。ここで **End Effector の候補が複数ある・回転関節の指の開く向きが分からない・arm/gripper 以外の可動関節がある**
    と質問が返る。メッシュが見つからないときは `error` になるので、ROS パッケージの場所を聞いて `project.yaml` の `robot.package_paths` に書く
 2. `configure_robot` — 未回答の質問が残っていれば同じ質問で `needs_input` になる
-3. `configure_task` — 物体の候補とトレイを選び（project.yaml の `task.objects` / `task.container`）、台・物体を置く範囲・トレイを自動配置
+3. `configure_task` — 物体の候補と箱を選び（project.yaml の `task.objects` / `task.container`）、台・物体を置く範囲・箱を自動配置
 4. `configure_camera` — 既定は DROID と同じ配置: 手先（wrist）+ ロボットの左右の外部カメラ（left / right）。正面（front）・横（side）も選べる。ユーザが実機カメラの情報（取付 link・位置姿勢・K 行列）を持っていれば `project.yaml` の `cameras:` に明示指定する
 5. `import_robot` — USD 変換と検査（関節名・剛体・発散・初期姿勢追従・関節限界・グリッパ開閉）。
    初期姿勢で手先が下を向いていなければ IK で推奨姿勢を求め、`robot.default_pose` を質問する
@@ -87,7 +87,7 @@ GR00T の Skill はコンテナ urdf2vla-gr00t で動く（`bash docker/run.sh g
 |---|---|
 | `robot.gripper_joints` | 指の関節名のリスト（双腕なら両手分。例: `[joint7_R, joint7_L]`）。自動で見つからないときだけ聞かれ、決まるまで End Effector は聞かれない |
 | `robot.gripper.simready` | SimReady アセットのグリッパに付け替える（`robotiq_2f_85`）。URDF のグリッパが Isaac Sim で掴めないとき（指が押し戻される・可動範囲を越えて回る）にユーザに提案する。project.yaml の `robot:` に書く（answer ではない） |
-| `task.objects` / `task.container` | project.yaml の `task:` に書く（answer ではない）。物体の候補（`apple` `lime` `pear` `color_cube` `rubiks_cube`、プリミティブは `cube`。既定は rubiks_cube 以外の 4 つ）と容器（`plastic_tray`、平らな円は `disc`）。既定は 4 つの物体とトレイ。configure_task がグリッパの開きに入らない物体を警告付きで除くので、その警告はユーザに伝える |
+| `task.objects` / `task.container` | project.yaml の `task:` に書く（answer ではない）。物体の候補（`apple` `lime` `pear` `color_cube` `rubiks_cube`、プリミティブは `cube`。既定は rubiks_cube 以外の 4 つ）と容器（`klt_bin`（既定、KLT の部品箱）、`plastic_tray`、平らな円は `disc`）。既定は 4 つの物体と KLT の箱。台の見た目は `overrides.task.table.material`（oak / walnut / plain）。configure_task がグリッパの開きに入らない物体を警告付きで除くので、その警告はユーザに伝える |
 | `robot.front_axis` | `+x` / `+y` / `-x` / `-y`（ロボットの正面。+x 以外なら正面が +x を向くように回して置く） |
 | `arms.<i>.ee_link` | link 名。候補以外の link も指定できる（`urdf2vla show --project P robot_metadata` の `ee_candidates` が全候補）。存在しない名前は再質問される |
 | `grippers.<i>.open_position` | `lower` / `upper` |
