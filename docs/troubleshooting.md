@@ -1,11 +1,15 @@
 # Troubleshooting
 
-When a step fails, its JSON result has `"status": "error"` and `errors` names the failed check. Two commands help:
+When a step fails, its JSON result has `"status": "error"` and `errors` names the failed check. Three commands help:
 
 ```bash
+urdf2vla doctor                                  # checks the machine: GPU driver, Docker, images, containers, disk
 urdf2vla diagnose --project projects/myrobot     # matches the last log against known problems and suggests a fix
 urdf2vla status   --project projects/myrobot     # which steps have run and what to run next
 ```
+
+If the problem looks like the environment rather than your robot — a container won't start, the GPU isn't found —
+start with `urdf2vla doctor`.
 
 Each step also writes a report with the measured values behind every check: `build/import_report.yaml`,
 `build/launch_report.yaml`, `build/teleop_report.yaml`, `build/collect_report.yaml`, `build/convert_report.yaml`,
@@ -86,8 +90,12 @@ from the target did it end?) and `snapshots/collect_fail_*.png` shows the last f
 
 ## Environment problems
 
+Run `urdf2vla doctor` first: it checks all of these and prints the fix for each.
+
 | Message or symptom | Cause | What to do |
 |---|---|---|
+| `nvidia-smi` fails, or `nvidia-container-cli: … driver not loaded` | The GPU driver isn't loaded. Often the kernel was updated automatically and the driver modules for the new kernel weren't. | `urdf2vla doctor` prints the `apt install` command that updates the driver and its kernel modules together (then reboot), or the older kernel you can boot instead. |
+| `permission denied` on the Docker socket | Your user isn't in the `docker` group. | `sudo usermod -aG docker $USER`, then log in again. |
 | "コンテナ … が起動していません" / `No such container` | The container isn't running. | `bash docker/run.sh` (and `bash docker/run.sh gr00t` for conversion, training and evaluation). |
 | "…秒以内に終わりませんでした" (timed out) | The first start of Isaac Sim compiles shaders and can take several minutes. | Run the step again with a larger `--timeout`. |
 | `GLXBadFBConfig` | OpenGL setup doesn't match the GPU (common on laptops with two GPUs). | Add `__NV_PRIME_RENDER_OFFLOAD: "1"` and `__GLX_VENDOR_LIBRARY_NAME: nvidia` under `env:` in `runtime.yaml`. |

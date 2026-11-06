@@ -48,11 +48,10 @@ only about your robot.
 The site is built from [`docs/`](docs/) by `.github/workflows/docs.yml`. To read it locally:
 `uv pip install -e '.[docs]' && mkdocs serve`.
 
-- [Install](https://momoiorg-repository.github.io/urdf2vla/install/)
+- [Install](https://momoiorg-repository.github.io/urdf2vla/install/) · [Use it with an AI agent (Claude Code / Codex)](https://momoiorg-repository.github.io/urdf2vla/guides/claude-code/)
 - [Tutorial: Franka end to end](https://momoiorg-repository.github.io/urdf2vla/tutorial/)
 - [Bring your own robot](https://momoiorg-repository.github.io/urdf2vla/guides/your-robot/) · [Check your robot in the browser](https://momoiorg-repository.github.io/urdf2vla/guides/view/) ·
-  [Record demonstrations](https://momoiorg-repository.github.io/urdf2vla/guides/recording/) · [Train and evaluate](https://momoiorg-repository.github.io/urdf2vla/guides/training/) ·
-  [Use it with an AI agent (Claude Code / Codex)](https://momoiorg-repository.github.io/urdf2vla/guides/claude-code/)
+  [Record demonstrations](https://momoiorg-repository.github.io/urdf2vla/guides/recording/) · [Train and evaluate](https://momoiorg-repository.github.io/urdf2vla/guides/training/)
 - [Troubleshooting](https://momoiorg-repository.github.io/urdf2vla/troubleshooting/) · [Reference](https://momoiorg-repository.github.io/urdf2vla/reference/)
 
 Design notes, simulator pitfalls and verification status (in Japanese): [DEVELOPMENT.md](DEVELOPMENT.md).

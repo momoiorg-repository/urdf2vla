@@ -1,11 +1,14 @@
 # トラブルシューティング
 
-工程が失敗すると、JSON の結果は `"status": "error"` になり、`errors` に失敗した検査の名前が入ります。役に立つコマンドは 2 つです。
+工程が失敗すると、JSON の結果は `"status": "error"` になり、`errors` に失敗した検査の名前が入ります。役に立つコマンドは 3 つです。
 
 ```bash
+urdf2vla doctor                                  # マシンを検査する: GPU ドライバ、Docker、image、コンテナ、ディスク
 urdf2vla diagnose --project projects/myrobot     # 最後のログを既知の問題と照らし合わせ、対処を提案する
 urdf2vla status   --project projects/myrobot     # どの工程が済んだか、次に何を実行するか
 ```
+
+ロボットではなく環境の問題に見えるとき（コンテナが起動しない、GPU が見つからない）は、まず `urdf2vla doctor` を実行します。
 
 各工程は、検査の元になった測定値を報告ファイルにも書きます: `build/import_report.yaml`、`build/launch_report.yaml`、
 `build/teleop_report.yaml`、`build/collect_report.yaml`、`build/convert_report.yaml`、`build/eval_report.yaml`。
@@ -84,8 +87,12 @@ urdf2vla status   --project projects/myrobot     # どの工程が済んだか�
 
 ## 環境の問題
 
+まず `urdf2vla doctor` を実行します。ここにあるものをまとめて調べ、それぞれの直し方を示します。
+
 | メッセージ・症状 | 原因 | 対処 |
 |---|---|---|
+| `nvidia-smi` が失敗する、`nvidia-container-cli: … driver not loaded` | GPU ドライバが読み込まれていない。カーネルが自動更新され、新しいカーネル用のドライバのモジュールが入っていないことが多い | `urdf2vla doctor` が、ドライバとカーネル用のモジュールを一緒に更新する `apt install` のコマンド（その後に再起動）か、代わりに起動できる古いカーネルを示す |
+| Docker のソケットで `permission denied` | ユーザが `docker` グループに入っていない | `sudo usermod -aG docker $USER` の後、ログインし直す |
 | 「コンテナ … が起動していません」/ `No such container` | コンテナが動いていない | `bash docker/run.sh`（変換・学習・評価は `bash docker/run.sh gr00t` も） |
 | 「…秒以内に終わりませんでした」 | Isaac Sim の最初の起動はシェーダのコンパイルで数分かかることがある | `--timeout` を大きくしてもう一度実行する |
 | `GLXBadFBConfig` | OpenGL の設定が GPU と合わない（GPU が 2 つあるノート PC で起きやすい） | `runtime.yaml` の `env:` に `__NV_PRIME_RENDER_OFFLOAD: "1"` と `__GLX_VENDOR_LIBRARY_NAME: nvidia` を足す |

@@ -78,12 +78,19 @@ behind), GPU memory, Docker and the NVIDIA Container Toolkit, both images and co
 the GPU and the repository), free disk space, and whether NVIDIA's asset server is reachable. Each problem comes with the
 command that fixes it. Run it again whenever something looks wrong with the environment.
 
-Then run the [tutorial](tutorial.md): its first simulation step, `import_robot`, finishes in under a minute once the
-shaders are compiled (the very first start of Isaac Sim can take several minutes).
+## 5. Choose how to continue
 
-!!! tip "New to this? Let an agent drive"
-    From here on, a coding agent can run the steps for you and ask you only about your robot — see
-    [Use it with an AI agent](guides/claude-code.md) (Claude Code or Codex).
+<div class="grid cards" markdown>
+
+- **New to robot simulation? Let an AI agent drive.** Open the repository in Claude Code or Codex and say what you
+  want; the agent runs the steps and asks you only about your robot. → [Use it with an AI agent](guides/claude-code.md)
+- **Want to see each step yourself?** Run the whole pipeline once with the bundled Franka Panda.
+  → [Tutorial](tutorial.md)
+
+</div>
+
+Either way, the first simulation step, `import_robot`, finishes in under a minute once the shaders are compiled (the
+very first start of Isaac Sim can take several minutes).
 
 ## Optional: the documentation site
 

@@ -105,12 +105,12 @@ nav:
   - Home: index.md
   - Get started:
       - Install: install.md
+      - Use it with an AI agent: guides/claude-code.md
       - "Tutorial: Franka end to end": tutorial.md
   - Guides:
       - Bring your own robot: guides/your-robot.md
       - Check your robot in the browser: guides/view.md
       - Record demonstrations: guides/recording.md
       - Train and evaluate: guides/training.md
-      - Use it with an AI agent: guides/claude-code.md
   - Troubleshooting: troubleshooting.md
   - Reference: reference.md

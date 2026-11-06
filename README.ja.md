@@ -47,11 +47,10 @@ Codex（`codex`）で開いて「自分のロボットで VLA 開発を始めた
 サイトは [`docs/`](docs/) から `.github/workflows/docs.yml` が作ります。手元で読むには
 `uv pip install -e '.[docs]' && mkdocs serve`。
 
-- [インストール](https://momoiorg-repository.github.io/urdf2vla/ja/install/)
+- [インストール](https://momoiorg-repository.github.io/urdf2vla/ja/install/) · [AI エージェントから使う（Claude Code / Codex）](https://momoiorg-repository.github.io/urdf2vla/ja/guides/claude-code/)
 - [チュートリアル: Franka で一通り](https://momoiorg-repository.github.io/urdf2vla/ja/tutorial/)
 - [自分のロボットを使う](https://momoiorg-repository.github.io/urdf2vla/ja/guides/your-robot/) · [ブラウザでロボットを確かめる](https://momoiorg-repository.github.io/urdf2vla/ja/guides/view/) ·
-  [デモを記録する](https://momoiorg-repository.github.io/urdf2vla/ja/guides/recording/) · [学習と評価](https://momoiorg-repository.github.io/urdf2vla/ja/guides/training/) ·
-  [AI エージェントから使う（Claude Code / Codex）](https://momoiorg-repository.github.io/urdf2vla/ja/guides/claude-code/)
+  [デモを記録する](https://momoiorg-repository.github.io/urdf2vla/ja/guides/recording/) · [学習と評価](https://momoiorg-repository.github.io/urdf2vla/ja/guides/training/)
 - [トラブルシューティング](https://momoiorg-repository.github.io/urdf2vla/ja/troubleshooting/) · [リファレンス](https://momoiorg-repository.github.io/urdf2vla/ja/reference/)
 
 設計の考え方・シミュレータのハマりどころ・検証状況: [DEVELOPMENT.md](DEVELOPMENT.md)

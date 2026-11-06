@@ -63,7 +63,7 @@ name: crx3ia
 
 robot:
   urdf: ../../examples/crx3ia/fanuc_description/crx3ia.urdf
-  gripper: {simready: robotiq_2f_85, mount_link: fanuc_flange}   # attach a gripper (section 5)
+  gripper: {simready: robotiq_2f_85, mount_link: fanuc_flange}   # attach a gripper (section 3)
 
 cameras:          # DROID layout: wrist + left + right
   - preset: wrist
@@ -95,91 +95,13 @@ robot:
     urdf2vla's command output, questions and the comments in `project.yaml` are currently in Japanese. The keys
     (`arms.0.ee_link`, `status`, …) and file names are the same in every language, and this guide explains each of them.
 
-## 3. Run the setup steps and answer questions
+## 3. Attach or swap the gripper {#simready}
 
-```bash
-urdf2vla inspect_robot    --project projects/crx3ia
-urdf2vla configure_robot  --project projects/crx3ia
-urdf2vla configure_task   --project projects/crx3ia
-urdf2vla configure_camera --project projects/crx3ia
-urdf2vla import_robot     --project projects/crx3ia
-```
-
-Every command prints a JSON result. `"status"` tells you what to do next:
-
-| `status` | Exit code | Meaning |
-|---|---|---|
-| `ok` | 0 | Done. `next` names the following step. Read any `warnings`. |
-| `needs_input` | 2 | urdf2vla needs a fact about your robot. Answer the `questions`, then run the step in `next`. |
-| `error` | 1 | A step or a check failed. `errors` says which; run `urdf2vla diagnose --project ...` and see [Troubleshooting](../troubleshooting.md). |
-
-With the CRX-3iA you'll see:
-
-- **`configure_robot`** — *mounting the Robotiq 2F-85 on `fanuc_flange`*. The hand questions (which link is the hand,
-  which way the fingers open) are not asked, because the gripper's geometry comes from the asset.
-- **`configure_task`** — *moved the table 10 cm closer*. The CRX-3iA is small, and a gripper pointing straight down
-  raises its wrist by the gripper's length, so urdf2vla checks with inverse kinematics that the hand can reach the
-  whole work area pointing down, and brings the table in until it can.
-- **`import_robot`** — `needs_input`: FANUC's zero pose doesn't point the hand at the table, so it proposes a starting
-  pose found by inverse kinematics and asks `robot.default_pose`.
-
-Answer on the command line, then run the step named in `next` and continue:
-
-```bash
-urdf2vla answer --project projects/crx3ia robot.default_pose=suggested
-urdf2vla configure_robot --project projects/crx3ia
-urdf2vla import_robot    --project projects/crx3ia
-urdf2vla launch_sim      --project projects/crx3ia
-```
-
-…or **answer in the browser**, looking at the robot: [`urdf2vla view`](view.md) shows the candidates in 3D and saves
-your answers to the same file (`answers.yaml`).
-
-<figure markdown="span">
-  ![The question panel of urdf2vla view with the CRX-3iA](../assets/view_questions_crx3ia.png){ width="900" }
-  <figcaption>The starting-pose question for the CRX-3iA in <code>urdf2vla view</code>. <b>提案の姿勢を見る</b> (show the
-  suggested pose) moves the robot to the proposed pose before you answer <code>suggested</code>. The gray box stands in
-  for the attached gripper, which the viewer doesn't load.</figcaption>
-</figure>
-
-### The questions you may get
-
-| Key | You answer | Asked when |
-|---|---|---|
-| `arms.0.ee_link` | the link that is the robot's hand | more than one link could be the hand |
-| `grippers.0.open_position` | `lower` or `upper` | a revolute finger joint's opening direction isn't clear |
-| `grippers.0.open_close` | `[open, closed]` angles in rad | a finger joint has no limits |
-| `robot.gripper_joints` | list of finger joint names | no gripper was found automatically |
-| `robot.front_axis` | `+x`, `+y`, `-x` or `-y` | the robot doesn't face +x; it is rotated so it does |
-| `joints.<name>.role` | `fixed_at_reset` or `passive` | a movable joint is neither arm nor gripper |
-| `robot.default_pose` | `suggested`, `keep` or `{joint: value, …}` | after import, the hand doesn't point down at the table; `suggested` is an IK solution with the hand pointing down at the working position `configure_task` chose |
-
-## 4. Check the result and record
-
-`launch_sim` saves what each camera sees at the start and end of a short test into `snapshots/`, and runs physics
-checks — including picking up each object — before you spend time recording. For the CRX-3iA all 21 checks pass,
-including `grasp_hold` with the apple, the lime, the pear and the cube. Then record, exactly as in the tutorial:
-
-```bash
-urdf2vla configure_vla_interface --project projects/crx3ia
-urdf2vla setup_teleoperation     --project projects/crx3ia
-urdf2vla collect_dataset         --project projects/crx3ia --device scripted --num-demos 10
-```
-
-On our machine the scripted controller recorded 10 demonstrations in 12 attempts, and all four replayed from the
-converted dataset succeeded (`convert_dataset`, then `evaluate_vla --replay --episodes 4`).
-
-<figure markdown="span">
-  ![A recorded CRX-3iA episode replayed](../assets/crx3ia_replay.gif){ width="900" }
-  <figcaption>A scripted CRX-3iA demonstration, replayed from the converted dataset (<code>evaluate_vla
-  --replay</code>).</figcaption>
-</figure>
-
-## 5. Attach or swap the gripper {#simready}
-
-The gripper decides what the robot can pick up, so it is the part you'll change most often. urdf2vla can attach a
+Decide this before you run the steps: an arm without a gripper needs one, and the first step asks about the gripper.
+The gripper decides what the robot can pick up, so it is also the part you'll change most often. urdf2vla can attach a
 gripper from **NVIDIA's asset library** — the robot and gripper models that ship with Isaac Sim, with physics already
-set up — to any arm, with one line in `project.yaml`.
+set up — to any arm, with one line in `project.yaml`. The CRX-3iA example already has that line, so you can go
+straight to [running the steps](#run) and come back here to swap grippers later.
 
 <figure markdown="span">
   ![Gripper models in the Isaac Sim asset library](../assets/simready_grippers.png){ width="900" }
@@ -282,6 +204,86 @@ It lists the asset's joints (type, limits, drive, which joints follow which) and
 is, with the gripper open. Then run `import_robot` and `launch_sim` on a project that uses it: the checks tell you
 whether the values are right. If round objects slip out of the fingertips, move the grasp point (`grasp_depth`) further
 in — but not so far that the fingertips touch the table when the hand goes down to a low object.
+
+## 4. Run the setup steps and answer questions {#run}
+
+```bash
+urdf2vla inspect_robot    --project projects/crx3ia
+urdf2vla configure_robot  --project projects/crx3ia
+urdf2vla configure_task   --project projects/crx3ia
+urdf2vla configure_camera --project projects/crx3ia
+urdf2vla import_robot     --project projects/crx3ia
+```
+
+Every command prints a JSON result. `"status"` tells you what to do next:
+
+| `status` | Exit code | Meaning |
+|---|---|---|
+| `ok` | 0 | Done. `next` names the following step. Read any `warnings`. |
+| `needs_input` | 2 | urdf2vla needs a fact about your robot. Answer the `questions`, then run the step in `next`. |
+| `error` | 1 | A step or a check failed. `errors` says which; run `urdf2vla diagnose --project ...` and see [Troubleshooting](../troubleshooting.md). |
+
+With the CRX-3iA you'll see:
+
+- **`configure_robot`** — *mounting the Robotiq 2F-85 on `fanuc_flange`*. The hand questions (which link is the hand,
+  which way the fingers open) are not asked, because the gripper's geometry comes from the asset.
+- **`configure_task`** — *moved the table 10 cm closer*. The CRX-3iA is small, and a gripper pointing straight down
+  raises its wrist by the gripper's length, so urdf2vla checks with inverse kinematics that the hand can reach the
+  whole work area pointing down, and brings the table in until it can.
+- **`import_robot`** — `needs_input`: FANUC's zero pose doesn't point the hand at the table, so it proposes a starting
+  pose found by inverse kinematics and asks `robot.default_pose`.
+
+Answer on the command line, then run the step named in `next` and continue:
+
+```bash
+urdf2vla answer --project projects/crx3ia robot.default_pose=suggested
+urdf2vla configure_robot --project projects/crx3ia
+urdf2vla import_robot    --project projects/crx3ia
+urdf2vla launch_sim      --project projects/crx3ia
+```
+
+…or **answer in the browser**, looking at the robot: [`urdf2vla view`](view.md) shows the candidates in 3D and saves
+your answers to the same file (`answers.yaml`).
+
+<figure markdown="span">
+  ![The question panel of urdf2vla view with the CRX-3iA](../assets/view_questions_crx3ia.png){ width="900" }
+  <figcaption>The starting-pose question for the CRX-3iA in <code>urdf2vla view</code>. <b>提案の姿勢を見る</b> (show the
+  suggested pose) moves the robot to the proposed pose before you answer <code>suggested</code>. The gray box stands in
+  for the attached gripper, which the viewer doesn't load.</figcaption>
+</figure>
+
+### The questions you may get
+
+| Key | You answer | Asked when |
+|---|---|---|
+| `arms.0.ee_link` | the link that is the robot's hand | more than one link could be the hand |
+| `grippers.0.open_position` | `lower` or `upper` | a revolute finger joint's opening direction isn't clear |
+| `grippers.0.open_close` | `[open, closed]` angles in rad | a finger joint has no limits |
+| `robot.gripper_joints` | list of finger joint names | no gripper was found automatically |
+| `robot.front_axis` | `+x`, `+y`, `-x` or `-y` | the robot doesn't face +x; it is rotated so it does |
+| `joints.<name>.role` | `fixed_at_reset` or `passive` | a movable joint is neither arm nor gripper |
+| `robot.default_pose` | `suggested`, `keep` or `{joint: value, …}` | after import, the hand doesn't point down at the table; `suggested` is an IK solution with the hand pointing down at the working position `configure_task` chose |
+
+## 5. Check the result and record
+
+`launch_sim` saves what each camera sees at the start and end of a short test into `snapshots/`, and runs physics
+checks — including picking up each object — before you spend time recording. For the CRX-3iA all 21 checks pass,
+including `grasp_hold` with the apple, the lime, the pear and the cube. Then record, exactly as in the tutorial:
+
+```bash
+urdf2vla configure_vla_interface --project projects/crx3ia
+urdf2vla setup_teleoperation     --project projects/crx3ia
+urdf2vla collect_dataset         --project projects/crx3ia --device scripted --num-demos 10
+```
+
+On our machine the scripted controller recorded 10 demonstrations in 12 attempts, and all four replayed from the
+converted dataset succeeded (`convert_dataset`, then `evaluate_vla --replay --episodes 4`).
+
+<figure markdown="span">
+  ![A recorded CRX-3iA episode replayed](../assets/crx3ia_replay.gif){ width="900" }
+  <figcaption>A scripted CRX-3iA demonstration, replayed from the converted dataset (<code>evaluate_vla
+  --replay</code>).</figcaption>
+</figure>
 
 ## 6. Choose the objects, adjust the scene and cameras {#objects}
 

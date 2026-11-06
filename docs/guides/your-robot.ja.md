@@ -62,7 +62,7 @@ name: crx3ia
 
 robot:
   urdf: ../../examples/crx3ia/fanuc_description/crx3ia.urdf
-  gripper: {simready: robotiq_2f_85, mount_link: fanuc_flange}   # グリッパを取り付ける（5 章）
+  gripper: {simready: robotiq_2f_85, mount_link: fanuc_flange}   # グリッパを取り付ける（3 章）
 
 cameras:          # DROID の配置: 手先 + 左右
   - preset: wrist
@@ -90,87 +90,12 @@ robot:
   # package_paths: [../my_ws/src]
 ```
 
-## 3. 設定の工程を実行し、質問に答える
+## 3. グリッパを取り付ける・付け替える {#simready}
 
-```bash
-urdf2vla inspect_robot    --project projects/crx3ia
-urdf2vla configure_robot  --project projects/crx3ia
-urdf2vla configure_task   --project projects/crx3ia
-urdf2vla configure_camera --project projects/crx3ia
-urdf2vla import_robot     --project projects/crx3ia
-```
-
-各コマンドは結果を JSON で出力します。`"status"` が次にすることを示します。
-
-| `status` | 終了コード | 意味 |
-|---|---|---|
-| `ok` | 0 | 完了。`next` が次の工程。`warnings` があれば読んでください。 |
-| `needs_input` | 2 | ロボットについての事実が必要です。`questions` に答えてから、`next` の工程を実行します。 |
-| `error` | 1 | 工程か検査が失敗しました。`errors` がどれかを示します。`urdf2vla diagnose --project ...` を実行し、[トラブルシューティング](../troubleshooting.md) を見てください。 |
-
-CRX-3iA では次のようになります。
-
-- **`configure_robot`** — 「Robotiq 2F-85 を `fanuc_flange` に取り付けます」。手先の link や指の開く向きの質問は
-  出ません。グリッパの形はアセットから分かるからです。
-- **`configure_task`** — 「台を 10 cm 手前に寄せました」。CRX-3iA は小さく、グリッパを真下に向けるとその長さの分だけ
-  手首が高くなります。urdf2vla は、手先を真下に向けたまま作業域の全体に届くかを逆運動学（IK）で確かめ、届くまで台を手前に寄せます。
-- **`import_robot`** — `needs_input`。FANUC の URDF のゼロ姿勢は手先が台の方を向かないので、IK で求めた初期姿勢を提案し、
-  `robot.default_pose` を質問します。
-
-コマンドで答え、`next` の工程を実行して続けます。
-
-```bash
-urdf2vla answer --project projects/crx3ia robot.default_pose=suggested
-urdf2vla configure_robot --project projects/crx3ia
-urdf2vla import_robot    --project projects/crx3ia
-urdf2vla launch_sim      --project projects/crx3ia
-```
-
-または **ブラウザでロボットを見ながら答えます**。[`urdf2vla view`](view.md) は候補を 3D で表示し、答えを同じファイル
-（`answers.yaml`）に保存します。
-
-<figure markdown="span">
-  ![CRX-3iA の urdf2vla view の質問の欄](../assets/view_questions_crx3ia.png){ width="900" }
-  <figcaption><code>urdf2vla view</code> での CRX-3iA の初期姿勢の質問。<b>提案の姿勢を見る</b> で、<code>suggested</code>
-  と答える前にその姿勢を確かめられます。灰色の箱は取り付けたグリッパの代わりの表示です（view はグリッパのアセットを読みません）。</figcaption>
-</figure>
-
-### 質問される可能性のあること
-
-| キー | 答えるもの | 質問されるとき |
-|---|---|---|
-| `arms.0.ee_link` | ロボットの手先の link | 手先になりうる link が複数あるとき |
-| `grippers.0.open_position` | `lower` / `upper` | 回転する指の関節で、開く向きが分からないとき |
-| `grippers.0.open_close` | `[開, 閉]` の角度 [rad] | 指の関節に可動範囲がないとき |
-| `robot.gripper_joints` | 指の関節名のリスト | グリッパが自動で見つからないとき |
-| `robot.front_axis` | `+x` / `+y` / `-x` / `-y` | ロボットの正面が +x でないとき（+x を向くように回して置きます） |
-| `joints.<name>.role` | `fixed_at_reset` / `passive` | 腕でもグリッパでもない可動関節があるとき |
-| `robot.default_pose` | `suggested` / `keep` / `{関節: 値, …}` | 取り込み後、手先が台の方（下）を向いていないとき。`suggested` は `configure_task` が決めた作業の構えの位置で手先が真下を向く IK の解 |
-
-## 4. 結果を確かめ、記録する
-
-`launch_sim` は短い試運転の最初と最後に各カメラが見たものを `snapshots/` に保存し、記録に時間を使う前に物理の検査
-（物体を掴むことを含む）をします。CRX-3iA では 21 の検査がすべて通り、りんご・ライム・洋梨・キューブの `grasp_hold`
-も通ります。あとはチュートリアルと同じように記録します。
-
-```bash
-urdf2vla configure_vla_interface --project projects/crx3ia
-urdf2vla setup_teleoperation     --project projects/crx3ia
-urdf2vla collect_dataset         --project projects/crx3ia --device scripted --num-demos 10
-```
-
-手元では、スクリプトが 12 回の試行で 10 個のデモを記録し、変換したデータセットからの再生は 4 回すべて成功しました
-（`convert_dataset` の後に `evaluate_vla --replay --episodes 4`）。
-
-<figure markdown="span">
-  ![記録した CRX-3iA のエピソードの再生](../assets/crx3ia_replay.gif){ width="900" }
-  <figcaption>スクリプトで記録した CRX-3iA のデモを、変換したデータセットから再生したところ（<code>evaluate_vla --replay</code>）。</figcaption>
-</figure>
-
-## 5. グリッパを取り付ける・付け替える {#simready}
-
-何を掴めるかはグリッパで決まるので、いちばんよく変える部分です。urdf2vla は、**NVIDIA のアセットライブラリ**
+工程を実行する前に決めます。グリッパのない腕には取り付けが必要で、最初の工程がグリッパについて質問するからです。
+何を掴めるかはグリッパで決まるので、いちばんよく変える部分でもあります。urdf2vla は、**NVIDIA のアセットライブラリ**
 （Isaac Sim に付属の、物理が設定済みのロボットとグリッパのモデル）のグリッパを、`project.yaml` の 1 行でどの腕にも取り付けられます。
+CRX-3iA の例にはこの 1 行がすでに入っているので、先に[工程の実行](#run)へ進み、付け替えるときにここへ戻ってきても構いません。
 
 <figure markdown="span">
   ![Isaac Sim のアセットライブラリのグリッパ](../assets/simready_grippers.png){ width="900" }
@@ -269,6 +194,83 @@ python -m urdf2vla.sim.gripper_probe Isaac/Robots/Robotiq/Hand-E/Robotiq_Hand_E_
 出力します。そのグリッパを使うプロジェクトで `import_robot` と `launch_sim` を実行すれば、値が正しいかを検査が教えてくれます。
 丸い物体が指先から抜けるなら、把持点（`grasp_depth`）を奥にします。ただし、低い物体まで下ろしたときに指先が台に
 当たらない範囲にします。
+
+## 4. 設定の工程を実行し、質問に答える {#run}
+
+```bash
+urdf2vla inspect_robot    --project projects/crx3ia
+urdf2vla configure_robot  --project projects/crx3ia
+urdf2vla configure_task   --project projects/crx3ia
+urdf2vla configure_camera --project projects/crx3ia
+urdf2vla import_robot     --project projects/crx3ia
+```
+
+各コマンドは結果を JSON で出力します。`"status"` が次にすることを示します。
+
+| `status` | 終了コード | 意味 |
+|---|---|---|
+| `ok` | 0 | 完了。`next` が次の工程。`warnings` があれば読んでください。 |
+| `needs_input` | 2 | ロボットについての事実が必要です。`questions` に答えてから、`next` の工程を実行します。 |
+| `error` | 1 | 工程か検査が失敗しました。`errors` がどれかを示します。`urdf2vla diagnose --project ...` を実行し、[トラブルシューティング](../troubleshooting.md) を見てください。 |
+
+CRX-3iA では次のようになります。
+
+- **`configure_robot`** — 「Robotiq 2F-85 を `fanuc_flange` に取り付けます」。手先の link や指の開く向きの質問は
+  出ません。グリッパの形はアセットから分かるからです。
+- **`configure_task`** — 「台を 10 cm 手前に寄せました」。CRX-3iA は小さく、グリッパを真下に向けるとその長さの分だけ
+  手首が高くなります。urdf2vla は、手先を真下に向けたまま作業域の全体に届くかを逆運動学（IK）で確かめ、届くまで台を手前に寄せます。
+- **`import_robot`** — `needs_input`。FANUC の URDF のゼロ姿勢は手先が台の方を向かないので、IK で求めた初期姿勢を提案し、
+  `robot.default_pose` を質問します。
+
+コマンドで答え、`next` の工程を実行して続けます。
+
+```bash
+urdf2vla answer --project projects/crx3ia robot.default_pose=suggested
+urdf2vla configure_robot --project projects/crx3ia
+urdf2vla import_robot    --project projects/crx3ia
+urdf2vla launch_sim      --project projects/crx3ia
+```
+
+または **ブラウザでロボットを見ながら答えます**。[`urdf2vla view`](view.md) は候補を 3D で表示し、答えを同じファイル
+（`answers.yaml`）に保存します。
+
+<figure markdown="span">
+  ![CRX-3iA の urdf2vla view の質問の欄](../assets/view_questions_crx3ia.png){ width="900" }
+  <figcaption><code>urdf2vla view</code> での CRX-3iA の初期姿勢の質問。<b>提案の姿勢を見る</b> で、<code>suggested</code>
+  と答える前にその姿勢を確かめられます。灰色の箱は取り付けたグリッパの代わりの表示です（view はグリッパのアセットを読みません）。</figcaption>
+</figure>
+
+### 質問される可能性のあること
+
+| キー | 答えるもの | 質問されるとき |
+|---|---|---|
+| `arms.0.ee_link` | ロボットの手先の link | 手先になりうる link が複数あるとき |
+| `grippers.0.open_position` | `lower` / `upper` | 回転する指の関節で、開く向きが分からないとき |
+| `grippers.0.open_close` | `[開, 閉]` の角度 [rad] | 指の関節に可動範囲がないとき |
+| `robot.gripper_joints` | 指の関節名のリスト | グリッパが自動で見つからないとき |
+| `robot.front_axis` | `+x` / `+y` / `-x` / `-y` | ロボットの正面が +x でないとき（+x を向くように回して置きます） |
+| `joints.<name>.role` | `fixed_at_reset` / `passive` | 腕でもグリッパでもない可動関節があるとき |
+| `robot.default_pose` | `suggested` / `keep` / `{関節: 値, …}` | 取り込み後、手先が台の方（下）を向いていないとき。`suggested` は `configure_task` が決めた作業の構えの位置で手先が真下を向く IK の解 |
+
+## 5. 結果を確かめ、記録する
+
+`launch_sim` は短い試運転の最初と最後に各カメラが見たものを `snapshots/` に保存し、記録に時間を使う前に物理の検査
+（物体を掴むことを含む）をします。CRX-3iA では 21 の検査がすべて通り、りんご・ライム・洋梨・キューブの `grasp_hold`
+も通ります。あとはチュートリアルと同じように記録します。
+
+```bash
+urdf2vla configure_vla_interface --project projects/crx3ia
+urdf2vla setup_teleoperation     --project projects/crx3ia
+urdf2vla collect_dataset         --project projects/crx3ia --device scripted --num-demos 10
+```
+
+手元では、スクリプトが 12 回の試行で 10 個のデモを記録し、変換したデータセットからの再生は 4 回すべて成功しました
+（`convert_dataset` の後に `evaluate_vla --replay --episodes 4`）。
+
+<figure markdown="span">
+  ![記録した CRX-3iA のエピソードの再生](../assets/crx3ia_replay.gif){ width="900" }
+  <figcaption>スクリプトで記録した CRX-3iA のデモを、変換したデータセットから再生したところ（<code>evaluate_vla --replay</code>）。</figcaption>
+</figure>
 
 ## 6. 物体を選び、場面とカメラを調整する {#objects}
 

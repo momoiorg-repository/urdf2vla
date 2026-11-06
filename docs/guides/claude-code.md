@@ -61,3 +61,6 @@ from there.
 Nothing in urdf2vla depends on the agent. Every step is a plain `urdf2vla` command with a JSON result, so you can run it
 by hand, script it or call it from another agent: `urdf2vla skills --json` lists the steps with their inputs, outputs
 and prerequisites, `urdf2vla status --project ...` tells you what to run next, and `urdf2vla doctor` checks your machine.
+
+Next: to see what each step does, go through the [tutorial](../tutorial.md) — you can ask the agent to run it with you
+("run the Franka tutorial"). Then [bring your own robot](your-robot.md).
