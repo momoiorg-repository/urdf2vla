@@ -126,22 +126,26 @@ urdf2vla view --project projects/myrobot         # → http://localhost:8080（�
 - 台・物体・置き場所、正面（+x）の矢印、カメラの視野（`launch_sim` の後は、その画像を視野の中に表示）
 - 工程の状態と検査の結果、まだ答えていない質問（選んで「回答を保存」すると `answers.yaml` に記録）
 
-### グリッパを SimReady アセットに付け替える（例: CRX-3iA + Robotiq 2F-85）
+### グリッパを SimReady アセットに付け替える（例: FANUC CRX-3iA + Robotiq 2F-85）
 
-URDF のグリッパが Isaac Sim でうまく動かない（閉リンクの簡略化・mimic の変換の問題など）ときは、NVIDIA の
-SimReady アセット（Isaac Sim のアセットライブラリ）のグリッパに付け替えられます。`project.yaml` に 1 行書くだけです:
+腕にグリッパがない（FANUC の URDF など）、または URDF のグリッパが Isaac Sim でうまく動かない（閉リンクの簡略化・
+mimic の変換の問題など）ときは、NVIDIA の Isaac Sim のアセットライブラリのグリッパを付けられます。`project.yaml` に 1 行:
 
 ```yaml
 robot:
-  urdf: /path/to/crx3ia.urdf
-  gripper: {simready: robotiq_2f_85}   # 対応: robotiq_2f_85（urdf2vla/grippers.py）
+  urdf: fanuc_description/crx3ia.urdf   # examples/crx3ia/fetch_urdf.sh（FANUC の公式, Apache-2.0）
+  gripper: {simready: robotiq_2f_85, mount_link: fanuc_flange}   # 対応: robotiq_2f_85 / ufactory_xarm
 ```
 
-- `configure_robot` が URDF のグリッパの link を外し、同じ取付位置・向き（接近方向と指の開く向きを合わせる）に付ける設定を作る。
-  グリッパと End Effector の質問は出ない。URDF にグリッパがなければ `gripper: {simready: ..., mount_link: flange}` で取付先を指定する。
+- `configure_robot` が取付の位置・向きと TCP を決める。URDF にグリッパがあればその link を外し、同じ取付位置・向き
+  （接近方向と指の開く向きを合わせる）に付ける。なければ `mount_link` の +z に指が伸びる向きで付ける（FANUC は
+  `fanuc_flange`。ROS 式の `flange` は +x が外向き）。グリッパと End Effector の質問は出ない。
+- `configure_task` は、手先を真下に向けて作業域に届くかをホストの IK（`urdf2vla/urdf/reach.py`）で確かめ、届かなければ
+  台を手前に寄せる（腕が短くグリッパが長いと、真下に向けた手首が高くなる。CRX-3iA は 2F-85 で 10 cm、xArm で 12 cm）。
 - `import_robot` が腕を USD に変換し、Isaac Sim の Robot Assembler でグリッパを取り付ける（ロボットの USD の
   variant `Gripper=<キー>` として保存）。グリッパのアセットはネットから読むので、初回はネット接続が必要。
-- 開閉・把持点・mimic の追従関節・把持力・ソルバーの反復回数は、アセットで測った値を `urdf2vla/grippers.py` に持つ。
+- 開閉・把持点・mimic の追従関節・把持力・ソルバーの反復回数は、アセットで測った値を
+  `urdf2vla/grippers.py` に持つ。測るのは `python -m urdf2vla.sim.gripper_probe <USD>`（シミュレーションのコンテナで実行）。
 
 ### Agent から使う
 
@@ -304,6 +308,6 @@ Isaac Lab 3.0 版で試したのは scripted の収集だけで、socket / keybo
 - 学習済み checkpoint での評価（大きな GPU で train.sh を実行した後）
 - 場面・タスクを SimReady アセット（NVIDIA の Hugging Face にある物体・台など）から選べるようにする（Arena の Object と
   配置の relations を使う）。いまは台・立方体・置き場所のプリミティブだけ
-- SimReady のグリッパを増やす（Robotiq 2F-140 / Hand-E など。値はアセットで測る）
+- SimReady のグリッパを増やす。Robotiq 2F-140 は閉リンクの残りの関節（inner knuckle は excludeFromArticulation）を受け身にしても指がばらけて何も保持できなかった。Hand-E は 2 つの顎を別々に駆動する（駆動する関節を複数持てるようにする）。SCHUNK は mm 単位のアセットで開きが小さい。xArm はりんごが抜ける
 - 双腕の環境（Arena の Embodiment に 2 本の腕と 2 つのグリッパ）
 - URDF のないロボット（USD しかないもの）: USD 入力への対応（schema は双腕・関節の役割・mimic グリッパに対応済み）

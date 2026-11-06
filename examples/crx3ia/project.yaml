@@ -1,15 +1,16 @@
-# urdf2vla の例: FANUC CRX-3iA + Robotiq 2F-85
-# URDF は同梱していません。手元の CRX-3iA の URDF（Robotiq 2F-85 付き）のパスを robot.urdf に書いてください。
+# urdf2vla の例: FANUC CRX-3iA + Robotiq 2F-85（NVIDIA SimReady のグリッパ）
+# URDF は FANUC の公式（FANUC-CORPORATION/fanuc_description, Apache-2.0）。同梱していないので、先に取得する:
+#   source /opt/ros/jazzy/setup.bash            # xacro
+#   bash examples/crx3ia/fetch_urdf.sh          # → examples/crx3ia/fanuc_description/crx3ia.urdf
 #   urdf2vla init projects/crx3ia --from examples/crx3ia/project.yaml
-# この URDF に含まれる簡略版 Robotiq（内側リンクが fixed）は、Isaac Sim 6.2 では左指の可動範囲が効かず
-# 物体をつかめない。グリッパは NVIDIA の SimReady アセットの Robotiq 2F-85 に付け替え、Isaac Sim の
-# Robot Assembler で URDF のグリッパと同じ位置・向きに取り付ける（import_robot が行う）。
-# グリッパを付け替えるので End Effector と指の開く向きの質問は出ません（初期姿勢は IK の提案を質問します）。
+# FANUC の URDF にはグリッパがない。NVIDIA SimReady の Robotiq 2F-85 を、FANUC のフランジ座標 fanuc_flange
+# （+z がフランジ面から外向き）に取り付ける。configure_robot が取付の位置・向きと手先（TCP）を決め、
+# import_robot が Isaac Sim の Robot Assembler で腕に取り付ける。End Effector と指の開く向きの質問は出ない。
 name: crx3ia
 
 robot:
-  urdf: /path/to/crx3ia.urdf   # 手元の URDF のパスに書き換える
-  gripper: {simready: robotiq_2f_85}
+  urdf: fanuc_description/crx3ia.urdf
+  gripper: {simready: robotiq_2f_85, mount_link: fanuc_flange}
 
 cameras:
   - preset: wrist   # DROID と同じ配置: 手先 + 左右の外部カメラ

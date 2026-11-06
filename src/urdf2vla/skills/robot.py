@@ -541,7 +541,7 @@ def configure_robot(project: Project, opts: dict, result: SkillResult, log) -> N
             body = A.rigid_ancestor(model, ee)
             ee_offset = A.relative_transform(model, body, ee) if body != ee else Transform()
             g_in_body = ee_offset @ Transform(tuple(grippers[0].mount.pos), tuple(grippers[0].mount.rot_xyzw))
-            tcp_g = tuple(c * (sr.fingertip - A.PAD_FROM_TIP) for c in sr.approach_axis)
+            tcp_g = tuple(c * sr.tcp_depth for c in sr.approach_axis)
             rot_g = Transform((0, 0, 0), g_in_body.rot)
             prov[ee_key] = "inferred"
             prov[f"arms.{i}.approach_axis"] = prov[f"arms.{i}.tcp_offset"] = "simready"
@@ -602,7 +602,9 @@ def configure_robot(project: Project, opts: dict, result: SkillResult, log) -> N
 
     # ---- default pose
     hint_pose: dict = _default_pose_hint(project, robot_in, answers)
-    unknown = [n for n in hint_pose if n not in model.joints]
+    # SimReady のグリッパの関節は URDF にない（推奨姿勢に含まれる。グリッパは開いた状態から始めるので使わない）
+    sr_joints = set(sr.joints) if sr is not None else set()
+    unknown = [n for n in hint_pose if n not in model.joints and n not in sr_joints]
     if unknown:
         result.fail(f"robot.default_pose に存在しない関節があります: {unknown}")
         return

@@ -37,10 +37,19 @@ class SimReadyGripper:
     # （Isaac Lab Arena の DROID も 64）
     solver_position_iterations: int = 64
     max_opening: float = 0.0  # 指先の間の最大の開き [m]（製品仕様。掴める物体の幅の上限に使う）
+    # 把持点（TCP）の base_link 原点からの距離 [m]。なし = 指先から PAD_FROM_TIP 手前。指の腹が長く先だけで挟むと
+    # 丸い物体が抜けるグリッパでは、指の腹の奥にする（低い物体で指先が台に当たらない範囲で）
+    grasp_depth: float | None = None
 
     @property
     def url(self) -> str:
         return f"{ISAAC_ASSETS_ROOT}/{self.usd}"
+
+    @property
+    def tcp_depth(self) -> float:
+        from urdf2vla.urdf.analysis import PAD_FROM_TIP
+
+        return self.grasp_depth if self.grasp_depth is not None else self.fingertip - PAD_FROM_TIP
 
     @property
     def joints(self) -> list[str]:
@@ -71,6 +80,37 @@ GRIPPERS: dict[str, SimReadyGripper] = {
         approach_axis=(0.0, 0.0, 1.0),
         finger_axis=(0.0, 1.0, 0.0),
         fingertip=0.1484,
+    ),
+    "ufactory_xarm": SimReadyGripper(
+        key="ufactory_xarm",
+        title="UFactory xArm Gripper",
+        usd="Isaac/Robots/Ufactory/xarm_gripper/xarm_gripper.usd",
+        variants={"Physics": "PhysX"},
+        base_body="xarm_gripper_base_link",
+        driven="drive_joint",
+        max_opening=0.088,  # アセットで測った開いた状態の指の間隔 88.9 mm
+        # 2026-11-06 にアセットで確認（urdf2vla.sim.gripper_probe）: drive_joint の範囲 0〜48.7°、5 つの関節が
+        # PhysxMimicJointAPI で追従（2F-85 と同じ作り）。開いた状態の指は base の z 0.095〜0.162、y ±0.044〜±0.076
+        open=0.0,
+        close=0.80,
+        lower=0.0,
+        upper=0.85,
+        followers=(
+            "left_finger_joint",
+            "left_inner_knuckle_joint",
+            "right_inner_knuckle_joint",
+            "right_outer_knuckle_joint",
+            "right_finger_joint",
+        ),
+        approach_axis=(0.0, 0.0, 1.0),
+        finger_axis=(0.0, 1.0, 0.0),
+        fingertip=0.1621,
+        # 指の腹（base の z 0.095〜0.162）の指先から 2 cm で挟む（2026-11-06、CRX-3iA で確かめた）:
+        # - ライムは launch_sim の grasp_hold も、スクリプトの記録（5 回中 5 回）も通る
+        # - りんご（丸く幅 5.4 cm）はどの値でも、閉じる位置を可動範囲の端（0.85）にしても抜ける
+        # - 洋梨は 0.130 では保持できたが、0.142・0.150 では抜けた
+        # - キューブは保持できるが、記録では掴む高さまで下ろす前に指先が台に当たる（0.130 ではさらに当たる）
+        grasp_depth=0.142,
     ),
 }
 

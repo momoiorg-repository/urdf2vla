@@ -44,6 +44,13 @@ def arm_geometry(project: Project, cfg: RobotConfig) -> tuple[list[list[float]],
 GRASP_CLEAR = 0.05  # 把持点の台からの高さの目安
 SQRT_HALF = math.sqrt(0.5)
 GRASP_MARGIN = 0.012  # 物体の幅がグリッパの開きよりこれ以上小さいこと [m]（指の厚み・位置のずれ）
+HOME_ABOVE_RIM = 0.06  # 作業の構えの TCP を容器の縁からこれ以上高くする [m]
+REACH_TEST = 0.064  # setup_teleoperation が作業の構えから手先を動かす距離 [m]（8 mm × 8 step）
+REACH_MARGIN = 0.02  # 届くかを調べる点に足す余裕 [m]（届く範囲の端は特異姿勢に近い）
+APPROACH_HEIGHT = 0.12  # スクリプトの把持で物体の上から近づく高さ [m]（teleop の approach_height の既定値）
+PLACE_HEIGHT_OFFSET = 0.012  # スクリプトの把持で置く高さの余裕 [m]（teleop の place_height_offset の既定値）
+REACH_STEP = 0.02  # 届かないときに台を手前に寄せる刻み [m]
+REACH_MIN_FRACTION = 0.2  # 作業域の中心をこれより（腕の長さに対する比）手前にはしない
 
 
 def gripper_opening(project: Project, cfg: RobotConfig) -> float | None:
@@ -94,15 +101,10 @@ def configure_task(project: Project, opts: dict, result: SkillResult, log) -> No
         top_z = lane[2] - drop - GRASP_CLEAR
         d = drop
     s = min(max(length / 1.09, 0.4), 1.5)  # Franka を 1 とした大きさの比
-    wx, wy = lane[0] + d, (lane[1] if len(shoulders) > 1 else sum(sh[1] for sh in shoulders) / len(shoulders))
+    wy = lane[1] if len(shoulders) > 1 else sum(sh[1] for sh in shoulders) / len(shoulders)
     # 台はロボットの正面中央に。手前の端がロボットの base にかからないようにする
     cy = sum(sh[1] for sh in shoulders) / len(shoulders)
     spread = max(sh[1] for sh in shoulders) - min(sh[1] for sh in shoulders)
-    size_x = max(min(0.65 * length, 2 * (wx - base[0] - 0.06)), 0.2)
-    size_y = max(1.04 * length, spread + 0.3)
-    home = {}
-    for arm, sh in zip(cfg.arms, shoulders):
-        home[arm.name] = [round(wx, 3), round(sh[1] if len(shoulders) > 1 else wy, 3), round(top_z + GRASP_CLEAR + 0.6 * drop, 3)]
 
     # 物体と置き場所: project.yaml の task.objects（カタログの key のリスト）と task.container（key、"disc" は円）
     spec = project.config().get("task") or {}
@@ -131,25 +133,88 @@ def configure_task(project: Project, opts: dict, result: SkillResult, log) -> No
     if not objs:
         result.fail(f"グリッパの開き（{(opening or 0) * 100:.1f} cm）に入る物体がありません。task.objects に小さい物体（例: cube, lime）を選んでください。")
         return
-    spawn_x = [round(wx - 0.06 * s, 3), round(wx + 0.06 * s, 3)]
-    spawn_y = [round(wy + 0.06 * s, 3), round(wy + 0.16 * s, 3)]
-    if container in (None, "disc"):
-        target = TargetConfig(pos=[round(wx, 3), round(wy - 0.12 * s, 3)], radius=0.06)
-    else:
+    box = None
+    if container not in (None, "disc"):
         try:
-            c = catalog.get_container(container)
+            box = catalog.get_container(container)
         except KeyError as e:
             result.fail(str(e))
             return
-        size = c.scaled_size
-        # 容器は物体を置く範囲の右（-y）に、縁と物体の間に隙間をあけて置く
-        widest = max(o.grasp_width for o in objs)
-        ty = min(wy - 0.12 * s, spawn_y[0] - widest / 2 - 0.04 - size[1] / 2)
-        target = TargetConfig(pos=[round(wx, 3), round(ty, 3)], key=c.key, name=c.name, asset=c.url, variants=dict(c.variants),
-                              scale=c.scale, size=size, bottom=c.scaled_bottom, radius=round(min(size[0], size[1]) / 2, 3))  # fmt: skip
-        if abs(ty - cy) + size[1] / 2 > size_y / 2 or size[0] > size_x:
-            size_y = round(max(size_y, 2 * (abs(ty - cy) + size[1] / 2) + 0.04), 3)
-            size_x = round(max(size_x, size[0] + 0.04), 3)
+
+    def layout(wx: float):
+        """作業域の中心の x から、台・物体を置く範囲・置き場所・作業の構えを決める。"""
+        size_x = max(min(0.65 * length, 2 * (wx - base[0] - 0.06)), 0.2)
+        size_y = max(1.04 * length, spread + 0.3)
+        home = {}
+        for arm, sh in zip(cfg.arms, shoulders):
+            home[arm.name] = [round(wx, 3), round(sh[1] if len(shoulders) > 1 else wy, 3), round(top_z + GRASP_CLEAR + 0.6 * drop, 3)]
+        spawn_x = [round(wx - 0.06 * s, 3), round(wx + 0.06 * s, 3)]
+        spawn_y = [round(wy + 0.06 * s, 3), round(wy + 0.16 * s, 3)]
+        if box is None:
+            target = TargetConfig(pos=[round(wx, 3), round(wy - 0.12 * s, 3)], radius=0.06)
+        else:
+            size = box.scaled_size
+            # 容器は物体を置く範囲の右（-y）に、縁と物体の間に隙間をあけて置く
+            widest = max(o.grasp_width for o in objs)
+            ty = min(wy - 0.12 * s, spawn_y[0] - widest / 2 - 0.04 - size[1] / 2)
+            target = TargetConfig(pos=[round(wx, 3), round(ty, 3)], key=box.key, name=box.name, asset=box.url, variants=dict(box.variants),
+                                  scale=box.scale, size=size, bottom=box.scaled_bottom, radius=round(min(size[0], size[1]) / 2, 3))  # fmt: skip
+            if abs(ty - cy) + size[1] / 2 > size_y / 2 or size[0] > size_x:
+                size_y = round(max(size_y, 2 * (abs(ty - cy) + size[1] / 2) + 0.04), 3)
+                size_x = round(max(size_x, size[0] + 0.04), 3)
+            # 作業の構えは容器の縁より上に（肩の低いロボット、例: CRX-3iA では、そのままだと指が縁より下にあり、
+            # 容器の方へ動かすと縁に当たる）
+            rim = top_z + size[2] + HOME_ABOVE_RIM
+            for p in home.values():
+                p[2] = round(max(p[2], rim), 3)
+        return size_x, size_y, home, spawn_x, spawn_y, target
+
+    def reach_points(home, spawn_x, spawn_y, target) -> list[tuple]:
+        """手先を真下に向けて届くべき点: 作業の構えとそこから teleop の検査で動かす先（余裕を足す）、
+        物体を置く範囲の奥・左右の角（掴む高さと、その上の近づく高さ）、スクリプトの把持が物体を置く点とその上
+        （容器の縁 + 物体の高さの半分 + place_height_offset、その上 approach_height。teleop.ScriptedDevice と同じ）。"""
+        hx, hy, hz = next(iter(home.values()))
+        m = REACH_TEST + REACH_MARGIN
+        grasp_z = top_z + 0.03
+        half = max(o.size[2] for o in objs) / 2
+        place_z = top_z + (target.size[2] if target.is_container else 0.0) + half + PLACE_HEIGHT_OFFSET
+        tx, ty = target.pos
+        return [
+            (hx, hy, hz), (hx + m, hy, hz), (hx, hy, hz + m), (hx, hy - m, hz),
+            (spawn_x[1], spawn_y[0], grasp_z), (spawn_x[1], spawn_y[1], grasp_z), (spawn_x[0], spawn_y[1], grasp_z),
+            (spawn_x[1], spawn_y[1], grasp_z + APPROACH_HEIGHT),
+            (tx, ty, place_z), (tx, ty, place_z + APPROACH_HEIGHT + REACH_MARGIN / 2),
+        ]  # fmt: skip
+
+    # 腕の長さから決めた位置で、手先を真下に向けて作業域に届くかを IK で確かめ、届かなければ台を手前に寄せる
+    # （腕が短くグリッパが長いロボットでは、真下に向けた手首が高くなり、奥や上に届かない）
+    wx = lane[0] + d
+    checker = None
+    if len(cfg.arms) == 1:
+        from urdf2vla.urdf.parser import parse_urdf
+        from urdf2vla.urdf.reach import ReachChecker
+
+        checker = ReachChecker(parse_urdf(cfg.asset.host_path), cfg, cfg.arms[0])
+    moved_from, unreachable = wx, []
+    while True:
+        size_x, size_y, home, spawn_x, spawn_y, target = layout(wx)
+        if checker is None:
+            break
+        unreachable = [p for p in reach_points(home, spawn_x, spawn_y, target) if not checker.reachable(p)]
+        if not unreachable or wx - REACH_STEP < lane[0] + REACH_MIN_FRACTION * length:
+            break
+        wx -= REACH_STEP
+    if wx < moved_from:
+        result.warnings.append(
+            f"手先を真下に向けると作業域の奥・上に届かないので、台を {(moved_from - wx) * 100:.0f} cm 手前に寄せました"
+            f"（作業域の中心 x = {wx:.3f} m）。"
+        )
+    if unreachable:
+        result.warnings.append(
+            "手先を真下に向けて届かない点が作業域に残っています: "
+            + ", ".join(f"({p[0]:.2f}, {p[1]:.2f}, {p[2]:.2f})" for p in unreachable)
+            + "。overrides.task で台・置き場所を動かすか、短いグリッパを選んでください。"
+        )
     task = TaskConfig(
         table=TableConfig(center=[round(wx, 3), round(cy, 3)], size=[round(size_x, 3), round(size_y, 3), 0.05], top_z=round(top_z, 3)),
         objects=objs,

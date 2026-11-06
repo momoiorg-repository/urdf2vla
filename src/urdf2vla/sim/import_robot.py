@@ -59,7 +59,8 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
     sim.reset()
 
     # (a) USD の関節 = URDF の可動関節（mimic の follower も関節として残る）
-    expected = set(cfg.joint_limits) | followers  # URDF の可動関節（付け替えたグリッパを除く）+ SimReady のグリッパの関節
+    sr_joints = {j for sr in simready.values() for j in sr.joints}
+    expected = set(cfg.joint_limits) | sr_joints  # URDF の可動関節（付け替えたグリッパを除く）+ SimReady のグリッパの関節
     actual = set(robot.joint_names)
     _check(
         checks,
@@ -182,6 +183,7 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
 
         task = TaskConfig.model_validate(project.read_generated("task.yaml"))
         cx, cy = task.table.center
+        top_z = task.table.top_z
         targets = {}
         for k, arm in enumerate(cfg.arms):
             if arm.name in task.home_tcp:
@@ -229,7 +231,12 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
                 key="robot.default_pose",
                 prompt=(
                     "現在の初期姿勢では手先が下を向いていません（上から掴む Pick & Place に不向き）。"
-                    + ("台の上 20cm で手先が真下を向く姿勢を IK で求めました。" if conv else "IK で近い姿勢を求めましたが、完全には一致しませんでした。")
+                    + (
+                        f"作業の構えの位置（台の上 {min(t[2] for t in targets.values()) * 100 - top_z * 100:.0f} cm、configure_task が決めたもの）"
+                        "で手先が真下を向く姿勢を IK で求めました。"
+                        if conv
+                        else "IK で近い姿勢を求めましたが、完全には一致しませんでした。"
+                    )
                     + "この推奨姿勢を初期姿勢にしますか？"
                 ),
                 candidates=["suggested", "keep"],

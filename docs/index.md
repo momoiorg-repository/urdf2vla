@@ -61,7 +61,7 @@ Python package on your machine.
 
 - **[Install](install.md)** — what you need and how to build the containers (about 1–2 hours the first time).
 - **[Tutorial](tutorial.md)** — run the whole pipeline once with the bundled Franka Panda.
-- **[Bring your own robot](guides/your-robot.md)** — start from your URDF, answer the questions, swap in a SimReady gripper.
+- **[Bring your own robot](guides/your-robot.md)** — the FANUC CRX-3iA as the example: start from a URDF, answer the questions, attach and swap grippers.
 - **[Troubleshooting](troubleshooting.md)** — what each failed check means and what to change.
 
 </div>

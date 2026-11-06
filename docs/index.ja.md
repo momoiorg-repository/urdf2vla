@@ -60,7 +60,7 @@ flowchart LR
 
 - **[インストール](install.md)** — 必要なものと、コンテナの作り方（初回は 1〜2 時間）。
 - **[チュートリアル](tutorial.md)** — 同梱の Franka Panda で全工程を一度通す。
-- **[自分のロボットを使う](guides/your-robot.md)** — URDF から始めて質問に答え、SimReady のグリッパに付け替える。
+- **[自分のロボットを使う](guides/your-robot.md)** — FANUC CRX-3iA を例に、URDF から始めて質問に答え、グリッパを取り付け・付け替える。
 - **[トラブルシューティング](troubleshooting.md)** — 失敗した検査の意味と、何を変えればよいか。
 
 </div>

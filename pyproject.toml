@@ -23,7 +23,7 @@ view = ["viser>=1.0", "yourdfpy>=0.0.56", "trimesh>=4.0"]
 # ドキュメントのサイト（mkdocs serve / mkdocs build）
 docs = ["mkdocs-material>=9.5", "mkdocs-static-i18n>=1.2", "mkdocs-glightbox>=0.4"]
 # ドキュメントの画像・動画を作る（docs/make_media.py。playwright install chromium も必要）
-docs-media = ["urdf2vla[view]", "playwright>=1.40", "imageio-ffmpeg>=0.5"]
+docs-media = ["urdf2vla[view]", "playwright>=1.40", "imageio-ffmpeg>=0.5", "pillow>=10"]
 
 [project.scripts]
 urdf2vla = "urdf2vla.cli:main"

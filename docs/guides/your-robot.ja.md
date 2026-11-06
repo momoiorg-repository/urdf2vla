@@ -1,41 +1,62 @@
 # 自分のロボットを使う
 
-自分の URDF から、シミュレーションが動くところまでの手順です。まだなら先に Franka の [チュートリアル](../tutorial.md)
-を通してください。手順は同じで、うまくいったときの様子が分かります。
+ロボットの URDF から、シミュレーションが動くところまでの手順です。例として **FANUC CRX-3iA** を使います。FANUC は
+URDF を公開していて、多くの産業用ロボットと同じく CRX には**グリッパが付いていません**。そこで、グリッパを取り付ける方法と、
+別のグリッパに付け替える方法も合わせて説明します。手順はどの URDF でも同じです。まだなら先に Franka の
+[チュートリアル](../tutorial.md) を通してください。うまくいったときの様子が分かります。
 
-## 1. URDF を確かめる
+<figure markdown="span">
+  ![CRX-3iA の手先・左・右のカメラ（エピソードの開始時）](../assets/crx3ia_cameras.png){ width="900" }
+  <figcaption>NVIDIA のアセットライブラリの Robotiq 2F-85 を付けた FANUC CRX-3iA を、手先・左・右のカメラで見たところ。
+  腕は FANUC の URDF から、グリッパは urdf2vla が取り付けたものです。</figcaption>
+</figure>
 
-urdf2vla は URDF から読めることはすべて読みます。始める前に次を確かめてください。
+## 1. URDF を用意する
 
-- **メッシュが見つかること。** `package://my_robot_description/meshes/...` は、URDF の親フォルダと `robot.package_paths`
-  に書いたフォルダから探します。リポジトリの外にあるメッシュは、コンテナから読めるようにプロジェクトに自動でコピーします。
-- **関節の可動範囲とトルクが実際の値であること。** すべての関節のトルクが同じ値だったり、可動範囲のない関節があったり
-  すると警告します（CAD から書き出した URDF には仮の値がよく入っています）。トルクは URDF を編集せずに上書きできます（下記）。
-- **グリッパが URDF に入っていること**、または [SimReady のグリッパ](#simready) を付ける予定であること。
-  いま対応しているのは、2 本指のグリッパの付いた単腕のロボットです（直動・回転の指、mimic の有無は問いません）。
+=== "FANUC CRX（この例）"
+
+    FANUC はロボットの記述を [FANUC-CORPORATION/fanuc_description](https://github.com/FANUC-CORPORATION/fanuc_description)
+    （Apache-2.0）で xacro 形式で公開しています。例のスクリプトが、版を固定してダウンロードし、CRX-3iA を URDF に展開します。
+    `xacro` が必要です（ROS 2 のもの、または `pip install xacro`）。
+
+    ```bash
+    source /opt/ros/jazzy/setup.bash      # xacro
+    bash examples/crx3ia/fetch_urdf.sh    # → examples/crx3ia/fanuc_description/crx3ia.urdf
+    ```
+
+    ほかの CRX も同じように展開できます: `bash examples/crx3ia/fetch_urdf.sh crx10ia_l`（ほかに `crx5ia`、`crx10ia`、
+    `crx10ia_lp`、`crx20ia_l`、`crx30ia`）。urdf2vla で確かめているのは CRX-3iA です。
+
+=== "自分の URDF"
+
+    urdf2vla は URDF から読めることはすべて読みます。始める前に次を確かめてください。
+
+    - **メッシュが見つかること。** `package://my_robot_description/meshes/...` は、URDF の親フォルダと
+      `robot.package_paths` に書いたフォルダから探します。リポジトリの外にあるメッシュは、コンテナから読めるように
+      プロジェクトに自動でコピーします。
+    - **関節の可動範囲とトルクが実際の値であること。** すべての関節のトルクが同じ値だったり、可動範囲のない関節が
+      あったりすると警告します（CAD から書き出した URDF には仮の値がよく入っています）。トルクは URDF を編集せずに
+      上書きできます（下記）。
+    - **グリッパがあること。** URDF に入っているか、[NVIDIA のアセットライブラリから取り付ける](#simready) ものです。
+      いま対応しているのは、2 本指のグリッパの付いた単腕のロボットです。
+
+    xacro は先に展開します: `xacro my_robot.urdf.xacro -o my_robot.urdf`
 
 ## 2. プロジェクトを作る
 
 ```bash
-urdf2vla init projects/myrobot --urdf /path/to/my_robot.urdf
+urdf2vla init projects/crx3ia --from examples/crx3ia/project.yaml
 ```
 
-`projects/myrobot/project.yaml` ができます。編集するのはこのファイルだけです。urdf2vla が作るものは、同じフォルダの
+`projects/crx3ia/project.yaml` ができます。編集するのはこのファイルだけです。urdf2vla が作るものは、同じフォルダの
 `generated/`、`build/`、`snapshots/`、`logs/` に入ります。これらは手で編集しないでください。
 
-```yaml title="projects/myrobot/project.yaml"
-name: myrobot
+```yaml title="projects/crx3ia/project.yaml"
+name: crx3ia
 
 robot:
-  urdf: /path/to/my_robot.urdf
-  # 以下は任意。書いておくと質問されません。
-  # end_effector: tool0
-  # gripper_joints: [finger_left, finger_right]
-  # gripper_open_position: upper        # 指が開くのは関節の lower / upper どちらの限界か
-  # default_pose: {joint1: 0.0, joint2: -0.6}
-  # effort_limits: {"joint[1-6]": 50.0} # N·m（関節名の正規表現 → 値）
-  # base_pose: {pos: [0, 0, 0], rot_xyzw: [0, 0, 0, 1]}
-  # package_paths: [../my_ws/src]
+  urdf: ../../examples/crx3ia/fanuc_description/crx3ia.urdf
+  gripper: {simready: robotiq_2f_85, mount_link: fanuc_flange}   # グリッパを取り付ける（5 章）
 
 cameras:          # DROID の配置: 手先 + 左右
   - preset: wrist
@@ -48,15 +69,29 @@ overrides:        # generated/ を編集せずに、生成された値を変え�
   cameras: {}
 ```
 
+ほかのロボットは URDF から始めます（`urdf2vla init projects/myrobot --urdf /path/to/my_robot.urdf`）。分かっていることは
+`robot:` の下に書いておくと、質問されません。
+
+```yaml
+robot:
+  urdf: /path/to/my_robot.urdf
+  # end_effector: tool0
+  # gripper_joints: [finger_left, finger_right]
+  # gripper_open_position: upper        # 指が開くのは関節の lower / upper どちらの限界か
+  # default_pose: {joint1: 0.0, joint2: -0.6}
+  # effort_limits: {"joint[1-6]": 50.0} # N·m（関節名の正規表現 → 値）
+  # base_pose: {pos: [0, 0, 0], rot_xyzw: [0, 0, 0, 1]}
+  # package_paths: [../my_ws/src]
+```
+
 ## 3. 設定の工程を実行し、質問に答える
 
 ```bash
-urdf2vla inspect_robot    --project projects/myrobot
-urdf2vla configure_robot  --project projects/myrobot
-urdf2vla configure_task   --project projects/myrobot
-urdf2vla configure_camera --project projects/myrobot
-urdf2vla import_robot     --project projects/myrobot
-urdf2vla launch_sim       --project projects/myrobot
+urdf2vla inspect_robot    --project projects/crx3ia
+urdf2vla configure_robot  --project projects/crx3ia
+urdf2vla configure_task   --project projects/crx3ia
+urdf2vla configure_camera --project projects/crx3ia
+urdf2vla import_robot     --project projects/crx3ia
 ```
 
 各コマンドは結果を JSON で出力します。`"status"` が次にすることを示します。
@@ -66,6 +101,33 @@ urdf2vla launch_sim       --project projects/myrobot
 | `ok` | 0 | 完了。`next` が次の工程。`warnings` があれば読んでください。 |
 | `needs_input` | 2 | ロボットについての事実が必要です。`questions` に答えてから、`next` の工程を実行します。 |
 | `error` | 1 | 工程か検査が失敗しました。`errors` がどれかを示します。`urdf2vla diagnose --project ...` を実行し、[トラブルシューティング](../troubleshooting.md) を見てください。 |
+
+CRX-3iA では次のようになります。
+
+- **`configure_robot`** — 「Robotiq 2F-85 を `fanuc_flange` に取り付けます」。手先の link や指の開く向きの質問は
+  出ません。グリッパの形はアセットから分かるからです。
+- **`configure_task`** — 「台を 10 cm 手前に寄せました」。CRX-3iA は小さく、グリッパを真下に向けるとその長さの分だけ
+  手首が高くなります。urdf2vla は、手先を真下に向けたまま作業域の全体に届くかを逆運動学（IK）で確かめ、届くまで台を手前に寄せます。
+- **`import_robot`** — `needs_input`。FANUC の URDF のゼロ姿勢は手先が台の方を向かないので、IK で求めた初期姿勢を提案し、
+  `robot.default_pose` を質問します。
+
+コマンドで答え、`next` の工程を実行して続けます。
+
+```bash
+urdf2vla answer --project projects/crx3ia robot.default_pose=suggested
+urdf2vla configure_robot --project projects/crx3ia
+urdf2vla import_robot    --project projects/crx3ia
+urdf2vla launch_sim      --project projects/crx3ia
+```
+
+または **ブラウザでロボットを見ながら答えます**。[`urdf2vla view`](view.md) は候補を 3D で表示し、答えを同じファイル
+（`answers.yaml`）に保存します。
+
+<figure markdown="span">
+  ![CRX-3iA の urdf2vla view の質問の欄](../assets/view_questions_crx3ia.png){ width="900" }
+  <figcaption><code>urdf2vla view</code> での CRX-3iA の初期姿勢の質問。<b>提案の姿勢を見る</b> で、<code>suggested</code>
+  と答える前にその姿勢を確かめられます。灰色の箱は取り付けたグリッパの代わりの表示です（view はグリッパのアセットを読みません）。</figcaption>
+</figure>
 
 ### 質問される可能性のあること
 
@@ -77,51 +139,133 @@ urdf2vla launch_sim       --project projects/myrobot
 | `robot.gripper_joints` | 指の関節名のリスト | グリッパが自動で見つからないとき |
 | `robot.front_axis` | `+x` / `+y` / `-x` / `-y` | ロボットの正面が +x でないとき（+x を向くように回して置きます） |
 | `joints.<name>.role` | `fixed_at_reset` / `passive` | 腕でもグリッパでもない可動関節があるとき |
-| `robot.default_pose` | `suggested` / `keep` / `{関節: 値, …}` | 取り込み後、手先が台の方（下）を向いていないとき。`suggested` は台の上 20 cm で真下を向く IK の解 |
+| `robot.default_pose` | `suggested` / `keep` / `{関節: 値, …}` | 取り込み後、手先が台の方（下）を向いていないとき。`suggested` は `configure_task` が決めた作業の構えの位置で手先が真下を向く IK の解 |
 
-コマンドで答え、`next` の工程を実行します。
-
-```bash
-urdf2vla answer --project projects/myrobot arms.0.ee_link=tool0 grippers.0.open_position=lower
-urdf2vla configure_robot --project projects/myrobot
-```
-
-または **ブラウザでロボットを見ながら答えます**。[`urdf2vla view`](view.md) は候補を 3D で表示し、答えを同じファイル
-（`answers.yaml`）に保存します。
-
-<figure markdown="span">
-  ![urdf2vla view の質問の欄](../assets/view_questions.png){ width="900" }
-  <figcaption><code>urdf2vla view</code> での初期姿勢の質問。手先が台の方を向いていなかったので、<code>import_robot</code> が
-  逆運動学（IK）で姿勢を求めて提案しています。<b>提案の姿勢を見る</b> で、<code>suggested</code> と答える前にその姿勢を確かめられます。</figcaption>
-</figure>
-
-## 4. 結果を確かめる
+## 4. 結果を確かめ、記録する
 
 `launch_sim` は短い試運転の最初と最後に各カメラが見たものを `snapshots/` に保存し、記録に時間を使う前に物理の検査
-（物体を掴むことを含む）をします。すべての検査が `OK` なら、[デモの記録](recording.md) へ進みます。
+（物体を掴むことを含む）をします。CRX-3iA では 21 の検査がすべて通り、りんご・ライム・洋梨・キューブの `grasp_hold`
+も通ります。あとはチュートリアルと同じように記録します。
 
-## 5. SimReady のグリッパに付け替える {#simready}
+```bash
+urdf2vla configure_vla_interface --project projects/crx3ia
+urdf2vla setup_teleoperation     --project projects/crx3ia
+urdf2vla collect_dataset         --project projects/crx3ia --device scripted --num-demos 10
+```
 
-URDF のグリッパの中には、見た目は正しくてもシミュレーションでうまく動かないものがあります。閉リンクが簡略化されている、
-mimic 関節がうまく変換されない、可動範囲が効かない、などです。症状は「開閉はできるが物体を保持できない」グリッパで、
-urdf2vla の `joint_limits_hold` と `grasp_hold` の検査が失敗します。
+手元では、スクリプトが 12 回の試行で 10 個のデモを記録し、変換したデータセットからの再生は 4 回すべて成功しました
+（`convert_dataset` の後に `evaluate_vla --replay --episodes 4`）。
 
-直し方は `project.yaml` の 1 行です。URDF のグリッパを、NVIDIA の SimReady アセット（Isaac Sim に付属のロボットと
-グリッパのアセット）の、物理が調整済みのグリッパに置き換えます。
+<figure markdown="span">
+  ![記録した CRX-3iA のエピソードの再生](../assets/crx3ia_replay.gif){ width="900" }
+  <figcaption>スクリプトで記録した CRX-3iA のデモを、変換したデータセットから再生したところ（<code>evaluate_vla --replay</code>）。</figcaption>
+</figure>
+
+## 5. グリッパを取り付ける・付け替える {#simready}
+
+何を掴めるかはグリッパで決まるので、いちばんよく変える部分です。urdf2vla は、**NVIDIA のアセットライブラリ**
+（Isaac Sim に付属の、物理が設定済みのロボットとグリッパのモデル）のグリッパを、`project.yaml` の 1 行でどの腕にも取り付けられます。
+
+<figure markdown="span">
+  ![Isaac Sim のアセットライブラリのグリッパ](../assets/simready_grippers.png){ width="900" }
+  <figcaption>NVIDIA の Isaac Sim のアセットライブラリにあるグリッパの一部（NVIDIA のサムネイル）。</figcaption>
+</figure>
+
+<small>NVIDIA Isaac Sim 6.2 のアセットライブラリのサムネイル。Robotiq 2F-85、SCHUNK EGK 25・EGU 50 のアセットは
+CC BY 4.0、Robotiq 2F-140・Hand-E は BSD-3-Clause（© 2013 ROS-Industrial）。詳細は
+[THIRD_PARTY_NOTICES.txt](../assets/THIRD_PARTY_NOTICES.txt)。</small>
+
+### 使うとき
+
+- **腕にグリッパがない**とき（FANUC の URDF など）。
+- **URDF のグリッパがシミュレーションで物体を保持できない**とき。閉リンクが簡略化されている、mimic 関節がうまく変換されない、
+  可動範囲が効かない、などです。症状は「開閉はできるが物体を保持できない」グリッパで、urdf2vla の `joint_limits_hold` と
+  `grasp_hold` の検査が失敗します。
+- **別のグリッパを試したい**とき。大きな物体を掴むために開きの広いもの、実機に付けているものなど。
+
+### `project.yaml` の 1 行
 
 ```yaml
 robot:
-  urdf: /path/to/my_robot.urdf
-  gripper: {simready: robotiq_2f_85}
+  gripper: {simready: robotiq_2f_85, mount_link: fanuc_flange}
 ```
 
-- `configure_robot` が URDF のグリッパの link を外し、同じ場所に、接近方向と指の向きを合わせて SimReady のグリッパを
-  付ける設定を作ります。手先と指の質問は出なくなります。
-- `import_robot` が腕を変換し、Isaac Sim の **Robot Assembler** でグリッパを取り付けます。グリッパのアセットは初回に
-  ダウンロードします。
-- URDF にグリッパがなければ、取付先を指定します: `gripper: {simready: robotiq_2f_85, mount_link: flange}`
-- 対応: `robotiq_2f_85`（Robotiq 2F-85）。調整した値（把持力、ソルバーの反復回数、把持点）は
-  `src/urdf2vla/grippers.py` にあります。
+| `simready:` | グリッパ | 開き | 長さ（フランジから指先） | 使える物体（CRX-3iA） | アセットのライセンス |
+|---|---|---|---|---|---|
+| `robotiq_2f_85` | Robotiq 2F-85 | 85 mm | 14.8 cm | りんご・ライム・洋梨・キューブ（スクリプトの記録は 12 回中 10 回成功） | CC BY 4.0 |
+| `ufactory_xarm` | UFactory xArm Gripper | 88 mm | 16.2 cm | ライム（記録は 5 回中 5 回成功）。りんごと洋梨は抜ける。キューブは保持できるが、長い指が台に当たって掴む高さまで下ろせない | 記載なし（アセットのフォルダにライセンスのファイルがない） |
+
+値は各アセットで測ったもので、`src/urdf2vla/grippers.py` にあります。上の図のほかのグリッパは、まだ対応していません。
+Robotiq 2F-140 は閉リンクがこの設定ではばらけ、Hand-E は 2 つの顎を別々に駆動し、SCHUNK のグリッパは物体の幅より
+開きが小さいためです。
+
+### 付け替えの手順
+
+キーを変えて、`configure_robot` からやり直します。グリッパによって変わるものは、すべて計算し直されます。
+
+```bash
+# robot.gripper.simready: ufactory_xarm
+urdf2vla configure_robot  --project projects/crx3ia   # 把持点（TCP）の位置、接近方向と指の向き
+urdf2vla configure_task   --project projects/crx3ia   # 指の間に入る物体、台の位置
+urdf2vla configure_camera --project projects/crx3ia   # 手先カメラは新しいグリッパに合わせて付く
+urdf2vla import_robot     --project projects/crx3ia   # Isaac Sim の Robot Assembler でグリッパを取り付ける
+urdf2vla launch_sim       --project projects/crx3ia   # 開閉と、各物体を保持できるかを検査する
+```
+
+| 変わるもの | 行う工程 | 2F-85 を xArm Gripper にしたとき |
+|---|---|---|
+| 把持点（TCP）、接近方向と指の向き | `configure_robot` | 把持点が指先から 1.2 cm ではなく 2 cm になる（xArm は指の腹が長い） |
+| グリッパに入らない幅の物体を、警告を出して除く | `configure_task` | なし（4 つの物体はすべて指の間に入る） |
+| 手先を真下に向けて作業域に届かなければ、台を手前に寄せる | `configure_task` | 台を 10 cm ではなく 12 cm 手前に寄せる |
+| 腕の USD にグリッパを取り付ける（アセットは初回にダウンロード） | `import_robot` | xArm Gripper のアセットをダウンロードして取り付ける |
+| 把持力・ソルバーの反復回数と、開閉・各物体の保持の検査 | `import_robot`、`launch_sim` | りんごと洋梨の `grasp_hold` が失敗する |
+
+`grasp_hold` が失敗した物体はそのグリッパで保持できない物体、`build/collect_report.yaml` の試行で失敗が続く物体は
+スクリプトの記録で掴めない物体です。それを除いて、`configure_task` と `launch_sim` をもう一度実行します。
+
+```yaml
+task:
+  objects: [lime]
+```
+
+<figure markdown="span">
+  ![2 種類のグリッパを付けた CRX-3iA](../assets/crx3ia_grippers.png){ width="900" }
+  <figcaption>同じ CRX-3iA に Robotiq 2F-85 と UFactory xArm Gripper を付けたところ（<code>launch_sim</code> の開始時）。
+  2 つのプロジェクトで違うのは <code>robot.gripper.simready</code>（と、xArm では物体のリスト）だけです。</figcaption>
+</figure>
+
+### `mount_link` の選び方
+
+グリッパは `mount_link` に、指がそのフレームの **+z** の方向に伸びる向きで付きます。+z がフランジ面から外を向くフレームを選びます。
+
+| ロボットの記述 | `mount_link` |
+|---|---|
+| FANUC（`fanuc_description`） | `fanuc_flange`（FANUC のフランジ座標）。ROS 式の `flange` は **+x** がフランジ面から外向きなので、グリッパが横向きに付きます |
+| ROS-Industrial の記述 | `tool0` |
+| そのほか | +z がフランジ面から出るフランジやツールのフレーム。[`urdf2vla view`](view.md) で確かめます |
+
+取り付けた向きが違っていれば、`launch_sim` の snapshot ですぐ分かります。
+
+### URDF にあるグリッパを置き換える
+
+URDF にグリッパが入っているなら、`gripper: {simready: robotiq_2f_85}` だけを書きます。`configure_robot` が URDF のグリッパの
+link を外し、同じ場所に、接近方向と指の向きを元のグリッパに合わせて新しいグリッパを付けます。別の場所に付けるときだけ
+`mount_link` を書きます。
+
+### グリッパを追加する
+
+アセットライブラリのグリッパは、`src/urdf2vla/grippers.py` に 1 項目を足すと使えます。アセットのパス、駆動する指の関節と
+その開閉の位置、それに追従する関節、接近方向と指の向き、指先までの距離、開きです。値はシミュレーションのコンテナで
+プローブを使って測ります（`docker exec` を含む全体のコマンドは `src/urdf2vla/sim/gripper_probe.py` の冒頭にあります）。
+
+```bash
+python -m urdf2vla.sim.gripper_probe Isaac/Robots/Robotiq/Hand-E/Robotiq_Hand_E_edit.usd --out hand_e.yaml
+```
+
+アセットの関節（種類、可動範囲、駆動、どの関節がどれに追従するか）と、グリッパを開いた状態での各指の衝突形状の位置を
+出力します。そのグリッパを使うプロジェクトで `import_robot` と `launch_sim` を実行すれば、値が正しいかを検査が教えてくれます。
+丸い物体が指先から抜けるなら、把持点（`grasp_depth`）を奥にします。ただし、低い物体まで下ろしたときに指先が台に
+当たらない範囲にします。
 
 ## 6. 物体を選び、場面とカメラを調整する {#objects}
 
@@ -149,11 +293,11 @@ task:
 別の物体のリストで記録したデータセットは、新しいリストでは再生できません（エピソードはリストの何番目を使ったかを記録します）。
 物体のリストを導入する前の記録を再生するには `task: {objects: [cube], container: disc}` にします。
 
-グリッパの開きより幅の広い物体は、警告を出して除きます（Franka は 8 cm、SimReady の Robotiq 2F-85 は 8.5 cm）。
+グリッパの開きより幅の広い物体は、警告を出して除きます（Franka は 8 cm。ほかは上のグリッパの表）。
 アセットは初回に NVIDIA のアセットサーバからダウンロードします。測った大きさのカタログは `src/urdf2vla/objects.py` です。
 
-台・物体を置く範囲・箱は腕の届く範囲から配置します。動かすには、生成されたキーを `overrides.task`
-（`generated/task.yaml` と同じ構造）に書き、`configure_task` をもう一度実行します。
+台・物体を置く範囲・箱は腕の届く範囲から配置し、単腕のロボットでは手先を真下に向けて届くかを IK で確かめます。
+動かすには、生成されたキーを `overrides.task`（`generated/task.yaml` と同じ構造）に書き、`configure_task` をもう一度実行します。
 
 ```yaml
 overrides:
