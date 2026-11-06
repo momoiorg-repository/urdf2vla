@@ -14,9 +14,9 @@ urdf2vla setup_teleoperation     --project projects/myrobot   # checks the hand 
 
 | | Contents |
 |---|---|
-| Images | Every camera (default: wrist, left, right), 256×256 RGB, at the control rate (20 Hz by default) |
-| State | Arm joint positions + one gripper value (0 = closed, 1 = open) |
-| Action | The arm joint targets + the gripper command — what the controller was told to do |
+| Images | Every camera (default: one wrist per arm, plus left and right), 256×256 RGB, at the control rate (20 Hz by default) |
+| State | Every arm's joint positions + one gripper value per gripper (0 = closed, 1 = open) |
+| Action | Every arm's joint targets + every gripper command — what the controller was told to do |
 | Task text | The instruction for this episode, naming its object, e.g. "put the apple in the bin" |
 
 Each episode puts one of the task's objects on the table at a random position. It counts as a success when the
@@ -29,7 +29,8 @@ to `datasets/<name>.hdf5` (`demos` by default; choose another with `--dataset`).
 === "Scripted (no human)"
 
     A scripted controller picks up the object and puts it in the bin, with a new random object and position each episode.
-    This is the quickest way to get a dataset and to check the whole pipeline.
+    On a dual-arm robot it uses the nearer arm and keeps the other arm open at its initial pose. This is the quickest
+    way to get a dataset and to check the whole pipeline.
 
     ```bash
     urdf2vla collect_dataset --project projects/myrobot --device scripted --num-demos 50
@@ -75,7 +76,8 @@ to `datasets/<name>.hdf5` (`demos` by default; choose another with `--dataset`).
 | ++a++ / ++d++ | left / right (±y) |
 | ++q++ / ++e++ | up / down (±z) |
 | ++z++ / ++x++, ++t++ / ++g++, ++c++ / ++v++ | roll, pitch, yaw |
-| ++k++ | open / close the gripper |
+| ++k++ | open / close the gripper on the active arm |
+| ++n++ | switch the active arm (dual-arm robots) |
 | ++r++ | discard this episode and start again |
 | ++esc++ | finish recording |
 

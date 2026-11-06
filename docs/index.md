@@ -37,7 +37,7 @@ flowchart LR
   browser with [`urdf2vla view`](guides/view.md).
 - **Checks that catch silent failures before you record data.** A gripper that opens and closes but can't hold an object,
   fingers that sink into objects, cameras that stop updating — each has a check with a concrete fix.
-- **DROID-style cameras by default.** A wrist camera plus left and right external cameras, scaled to your workspace.
+- **DROID-style cameras by default.** A wrist camera per arm plus left and right external cameras, scaled to your workspace.
 - **Data and training for NVIDIA GR00T N1.7.** Recordings are converted to the LeRobot v2.1 format GR00T expects, and
   training is packaged for a large GPU when yours is too small.
 - **An agent workflow.** Open the repository in [Claude Code](guides/claude-code.md) and say "I want to start VLA development
@@ -67,5 +67,6 @@ Python package on your machine.
 </div>
 
 !!! note "Current scope"
-    Single-arm robots with a parallel gripper, one pick-and-place task (an object into a bin). Dual-arm robots can be
-    imported and checked but not yet simulated. Training GR00T N1.7 needs a GPU with **44 GB or more**.
+    Single- and dual-arm robots with a parallel gripper, one pick-and-place task (an object into a bin). Dual-arm
+    projects expose both arms and both grippers to the policy; the scripted expert uses the nearer arm and holds the
+    other open. Training GR00T N1.7 needs a GPU with **44 GB or more**.

@@ -12,7 +12,7 @@ urdf2vla は URDF から読めることはすべて読みます。始める前�
 - **関節の可動範囲とトルクが実際の値であること。** すべての関節のトルクが同じ値だったり、可動範囲のない関節があったり
   すると警告します（CAD から書き出した URDF には仮の値がよく入っています）。トルクは URDF を編集せずに上書きできます（下記）。
 - **グリッパが URDF に入っていること**、または [SimReady のグリッパ](#simready) を付ける予定であること。
-  いま対応しているのは、2 本指のグリッパの付いた単腕のロボットです（直動・回転の指、mimic の有無は問いません）。
+  いま対応しているのは、2 本指のグリッパの付いた単腕・双腕のロボットです（直動・回転の指、mimic の有無は問いません）。
 
 ## 2. プロジェクトを作る
 
@@ -29,9 +29,11 @@ name: myrobot
 robot:
   urdf: /path/to/my_robot.urdf
   # 以下は任意。書いておくと質問されません。
-  # end_effector: tool0
+  # end_effector: tool0                 # 双腕なら [left_tool0, right_tool0]
   # gripper_joints: [finger_left, finger_right]
   # gripper_open_position: upper        # 指が開くのは関節の lower / upper どちらの限界か
+  # gripper_open_close: [[-0.8, 0.0], [-0.8, 0.0]]  # 連続回転の指だけ。グリッパごとの [開, 閉]
+  # front_axis: +y                      # ロボットの正面が +x でないとき
   # default_pose: {joint1: 0.0, joint2: -0.6}
   # effort_limits: {"joint[1-6]": 50.0} # N·m（関節名の正規表現 → 値）
   # base_pose: {pos: [0, 0, 0], rot_xyzw: [0, 0, 0, 1]}
@@ -71,9 +73,9 @@ urdf2vla launch_sim       --project projects/myrobot
 
 | キー | 答えるもの | 質問されるとき |
 |---|---|---|
-| `arms.0.ee_link` | ロボットの手先の link | 手先になりうる link が複数あるとき |
-| `grippers.0.open_position` | `lower` / `upper` | 回転する指の関節で、開く向きが分からないとき |
-| `grippers.0.open_close` | `[開, 閉]` の角度 [rad] | 指の関節に可動範囲がないとき |
+| `arms.<i>.ee_link` | ロボットの手先の link | 手先になりうる link が複数あるとき（双腕は腕ごとに質問） |
+| `grippers.<i>.open_position` | `lower` / `upper` | 回転する指の関節で、開く向きが分からないとき |
+| `grippers.<i>.open_close` | `[開, 閉]` の角度 [rad] | 指の関節に可動範囲がないとき |
 | `robot.gripper_joints` | 指の関節名のリスト | グリッパが自動で見つからないとき |
 | `robot.front_axis` | `+x` / `+y` / `-x` / `-y` | ロボットの正面が +x でないとき（+x を向くように回して置きます） |
 | `joints.<name>.role` | `fixed_at_reset` / `passive` | 腕でもグリッパでもない可動関節があるとき |
@@ -164,7 +166,8 @@ overrides:
 ```
 
 カメラの既定は [DROID](https://droid-dataset.github.io/) の配置（手先カメラと、台を見下ろす左右のカメラ、256×256）です。
-ほかに `front`（正面）と `side`（横）のプリセットがあります。実機のカメラに合わせるなら、明示的に書きます。
+双腕では腕ごとに手先カメラが付くので、既定は 4 台になります。ほかに `front`（正面）と `side`（横）のプリセットがあります。
+実機のカメラに合わせるなら、明示的に書きます。
 
 ```yaml
 cameras:
@@ -175,8 +178,33 @@ cameras:
 
 四元数は常に `[x, y, z, w]` です。
 
+## 双腕ロボット
+
+2 本の arm の連鎖を別々に検出し、設定・シミュレーション・学習まで別々に保ちます。ロボット固有の Python コードは要りません。
+腕ごとに関節・IK の剛体・TCP・接近方向・指の開閉方向と、任意の手先カメラを作ります。VLA の state / action は
+「右腕の関節、左腕の関節、右グリッパ、左グリッパ」の順です（検出順。上の例では right が先）。
+
+台は左右の肩の中央に置きます。内蔵の Pick & Place の scripted 操作は、物体に近い方の腕で把持し、もう一方の腕は
+初期姿勢のままグリッパを開いて保持します。タスクは 1 物体のままですが、policy は両腕を観測・操作できます。
+`launch_sim` の把持検査は、グリッパがある腕ごとに実行します。
+
+同梱の Dual Scorpion の例では、各腕の 8 番目の関節（joint7）をグリッパにし、joint0〜6 を腕にします。
+
+```yaml
+robot:
+  urdf: /path/to/dual_scorpion_Full_urdf/urdf/scorpion.urdf
+  front_axis: +y
+  gripper_joints: [joint7_R, joint7_L]
+  gripper_open_close: [[-0.8, 0.0], [-0.8, 0.0]]  # 仮値。開閉方向は snapshot で確認する
+```
+
+Dual Scorpion の URDF は全関節が `effort: 1.0` で、元プロジェクトも仮値としています。シミュレーションで把持を判断する前に、
+実機のモータ値で `robot.effort_limits` を上書きしてください。またグリッパの開き幅は連続回転の 1 関節からは決まらないので、
+物体が開きに入るかの自動スクリーニングは行われません。
+
 ## いまの制限
 
-- **双腕のロボット**は、解析・設定・取り込み（すべての検査を含む）まではできますが、`launch_sim` 以降はまだ対応していません。
+- 腕は 1 本か 2 本です。3 本以上の arm 連鎖はシミュレーションの Embodiment では対応していません。
 - タスクは 1 つ: 物体を掴んで容器に入れる（または平らな置き場所に置く）Pick & Place。物体は `src/urdf2vla/objects.py` のカタログから選びます。
 - グリッパ: 2 本指の平行グリッパと、片側の顎だけが動くグリッパ。吸着や多指ハンドには対応していません。
+- SimReady のグリッパへの付け替え（`robot.gripper.simready`）は、いまは単腕のロボットだけです。
