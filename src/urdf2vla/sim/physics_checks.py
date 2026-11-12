@@ -70,17 +70,20 @@ def joint_limits_hold(sim, robot, cfg, jtype: dict[str, str]) -> list[dict]:
     return checks
 
 
-def grasp_hold(env, view, c, base_action: torch.Tensor, jtype: dict[str, str], index: int = 0) -> tuple[list[dict], dict]:
+def grasp_hold(
+    env, view, c, base_action: torch.Tensor, jtype: dict[str, str], index: int = 0, arm_name: str | None = None
+) -> tuple[list[dict], dict]:
     """指の間（TCP）に物体の候補 index を置いて閉じ、物体を離しても落ちないか、直動の指なら指の開きが物体の幅と合うかを調べる。
 
     物体は外接箱の中心を TCP に、x 軸（短い辺の側）を指の開閉方向に向けて置き、指が閉じ終わるまでその場に保持してから離す。
-    腕は初期姿勢のまま。物体の候補が複数あれば、検査の名前に物体の key を付ける。
+    腕は初期姿勢のまま。arm_name を指定するとその腕のグリッパで調べる（双腕は腕ごとに検査する）。
+    物体の候補が複数あれば、検査の名前に物体の key を付ける。
     """
     from isaaclab.utils.math import quat_apply, quat_from_matrix
 
     checks, report = [], {}
     robot_cfg = c.robot
-    arm = robot_cfg.arms[0]
+    arm = next((a for a in robot_cfg.arms if a.name == arm_name), robot_cfg.arms[0])
     g = robot_cfg.gripper_for(arm.name)
     if g is None:
         return checks, report
@@ -91,7 +94,8 @@ def grasp_hold(env, view, c, base_action: torch.Tensor, jtype: dict[str, str], i
     n_arm = sum(len(a.joints) for a in robot_cfg.arms)
     open_a, close_a = base_action.clone(), base_action.clone()
     open_a[0, n_arm:] = 1.0
-    close_a[0, n_arm:] = -1.0
+    close_a[0, n_arm:] = 1.0
+    close_a[0, n_arm + robot_cfg.grippers.index(g)] = -1.0  # 調べる腕のグリッパだけ閉じる
     env.reset()
     for _ in range(20):
         env.step(open_a)

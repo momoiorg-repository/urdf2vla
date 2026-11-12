@@ -45,7 +45,7 @@ urdf2vla view --project projects/myrobot
 工程が `needs_input` を返すと、**質問** の欄に、まだ答えていない質問と urdf2vla が見つけた候補が並びます。答えを選んで
 **回答を保存** を押すと、`urdf2vla answer` と同じように `answers.yaml` に書き込みます。その後、`next` の工程を実行します。
 
-- 手先の link の候補（`arms.0.ee_link`）を選ぶと、その link が 3D で強調されます。
+- 手先の link の候補（`arms.<i>.ee_link`。双腕では腕ごとに質問が出ます）を選ぶと、その link が 3D で強調されます。
 - urdf2vla が関節の値を提案しているとき（IK で求めた初期姿勢など）は、**提案の姿勢を見る** でロボットをその姿勢にして、
   答える前に確かめられます。
 

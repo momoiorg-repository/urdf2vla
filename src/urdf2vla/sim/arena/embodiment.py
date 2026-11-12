@@ -70,11 +70,9 @@ def make_embodiment(c, mode: str):
     from urdf2vla.sim.robot_builder import articulation_cfg
 
     robot = c.robot
-    if len(robot.arms) != 1:
-        raise ValueError(
-            f"双腕（arm {len(robot.arms)} 本）のロボットは、Isaac Lab 3.0 版の urdf2vla ではまだ環境を作れません"
-            "（import_robot の USD 変換と検査までは使えます）。単腕のロボットで試してください。"
-        )
+    if len(robot.arms) not in (1, 2):
+        raise ValueError(f"arm は 1 本（単腕）か 2 本（双腕）にしてください（設定: {len(robot.arms)} 本）。")
+    arm_mode = ArmMode.DUAL_ARM if len(robot.arms) == 2 else ArmMode.SINGLE_ARM
     link_paths = c.imported["usd"]["link_paths"]
 
     # ---- scene: ロボットと台座（台座はロボットが宙に浮いて見えないようにする見た目だけ。当たり判定なし）
@@ -154,7 +152,7 @@ def make_embodiment(c, mode: str):
 
     class Urdf2VlaEmbodiment(EmbodimentBase):
         registry_name = "urdf2vla_robot"
-        default_arm_mode = ArmMode.SINGLE_ARM
+        default_arm_mode = arm_mode
 
         def __init__(self):
             super().__init__(enable_cameras=True)
@@ -171,6 +169,8 @@ def make_embodiment(c, mode: str):
                 self.mimic_env = make_mimic_env_class(robot)
 
         def get_command_body_name(self) -> str:
+            # Arena の単一 command body API 向け。双腕の IK は action term ごとに body_name を持つため、
+            # ここは代表として 1 本目を返す（scripted / keyboard は arm ごとに TargetIntegrator で制御する）。
             return robot.arms[0].ik_body
 
     return Urdf2VlaEmbodiment()

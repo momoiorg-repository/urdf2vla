@@ -47,7 +47,7 @@ urdf2vla skills --json              # Skill 一覧（phase・入出力・前提�
    `project.yaml` の `robot:` に `gripper: {simready: robotiq_2f_85}` を書いてグリッパを付けるかをユーザに聞く
 2. `configure_robot` — 未回答の質問が残っていれば同じ質問で `needs_input` になる
 3. `configure_task` — 物体の候補と箱を選び（project.yaml の `task.objects` / `task.container`）、台・物体を置く範囲・箱を自動配置
-4. `configure_camera` — 既定は DROID と同じ配置: 手先（wrist）+ ロボットの左右の外部カメラ（left / right）。正面（front）・横（side）も選べる。ユーザが実機カメラの情報（取付 link・位置姿勢・K 行列）を持っていれば `project.yaml` の `cameras:` に明示指定する
+4. `configure_camera` — 既定は DROID と同じ配置: 手先（wrist）+ ロボットの左右の外部カメラ（left / right）。双腕では `wrist` が腕ごとに展開され 4 台になる。正面（front）・横（side）も選べる。ユーザが実機カメラの情報（取付 link・位置姿勢・K 行列）を持っていれば `project.yaml` の `cameras:` に明示指定する
 5. `import_robot` — USD 変換と検査（関節名・剛体・発散・初期姿勢追従・関節限界・グリッパ開閉）。
    初期姿勢で手先が下を向いていなければ IK で推奨姿勢を求め、`robot.default_pose` を質問する
 6. `launch_sim` — 環境を起動し `snapshots/*.png` を保存。**`*_start.png` と `*_end.png` を開いて、ロボット・台・物体・置き場所が写っているか確認し、ユーザにも見せる**
@@ -117,7 +117,11 @@ urdf2vla answer --project P 'robot.gripper_joints=[joint7_R, joint7_L]' 'gripper
   コンテナから見えない場所のメッシュは `build/meshes/` に自動でコピーされるので、マウントの追加は不要。
 - 実行環境は Isaac Lab 3.0 + Isaac Lab Arena（Isaac Sim 6.2）。四元数は `(x, y, z, w)`、設定のキーは `rot_xyzw`
   （旧キー `rot_wxyz` は変換されるが警告が出るので、ユーザに書き換えを勧める）。
-- 双腕のロボットは import_robot（USD 変換と検査）までは使えるが、Isaac Lab 3.0 版ではまだ環境を作れない（launch_sim 以降）。
+- 双腕ロボットでは、VLA の state / action に両腕の関節と両グリッパを含める。`configure_camera` の `wrist` は腕ごとに
+  展開されるため、既定のカメラは 4 台（左右の手先 + 左右の外部カメラ）。台は左右の肩の中央に置かれる。
+  scripted 収集は物体に近い方の腕を使い、もう一方は初期姿勢のままグリッパを開いて保持する。
+- 双腕のグリッパ関節が自動検出されないときは `robot.gripper_joints` に両手分を書く。連続回転の指なら
+  `robot.gripper_open_close` に `[[開, 閉], [開, 閉]]` を書く（例は `examples/dual_scorpion/project.yaml`）。
 - Isaac Lab 2.x 版で記録したデータ（HDF5 の urdf2vla_format 1）は convert_dataset が拒否する。記録し直す。
 
 ## 自動で直してよい範囲 / ユーザに聞く範囲

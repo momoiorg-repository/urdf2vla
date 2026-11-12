@@ -256,9 +256,9 @@ your answers to the same file (`answers.yaml`).
 
 | Key | You answer | Asked when |
 |---|---|---|
-| `arms.0.ee_link` | the link that is the robot's hand | more than one link could be the hand |
-| `grippers.0.open_position` | `lower` or `upper` | a revolute finger joint's opening direction isn't clear |
-| `grippers.0.open_close` | `[open, closed]` angles in rad | a finger joint has no limits |
+| `arms.<i>.ee_link` | the link that is the robot's hand | more than one link could be the hand; dual-arm robots get one question per arm |
+| `grippers.<i>.open_position` | `lower` or `upper` | a revolute finger joint's opening direction isn't clear |
+| `grippers.<i>.open_close` | `[open, closed]` angles in rad | a finger joint has no limits |
 | `robot.gripper_joints` | list of finger joint names | no gripper was found automatically |
 | `robot.front_axis` | `+x`, `+y`, `-x` or `-y` | the robot doesn't face +x; it is rotated so it does |
 | `joints.<name>.role` | `fixed_at_reset` or `passive` | a movable joint is neither arm nor gripper |
@@ -329,8 +329,8 @@ overrides:
 ```
 
 Cameras: the default is the [DROID](https://droid-dataset.github.io/) layout (a wrist camera plus left and right
-cameras looking down at the table, 256×256). Other presets are `front` and `side`. If you have a real camera to match,
-describe it explicitly:
+cameras looking down at the table, 256×256). A dual-arm robot gets one wrist camera per arm, so the default is four
+images. Other presets are `front` and `side`. If you have a real camera to match, describe it explicitly:
 
 ```yaml
 cameras:
@@ -341,6 +341,30 @@ cameras:
 
 Quaternions are always `[x, y, z, w]`.
 
+## Dual-arm robots
+
+Two arm chains are detected separately and kept separate through setup, simulation and training. Nothing needs to be
+hard-coded in a Python file. For each arm, urdf2vla derives its joints, IK body, TCP, approach/finger axes and optional
+wrist camera; the VLA state and action are ordered as both arm joint groups followed by both gripper scalars.
+
+The table is centred between the shoulders. The built-in pick-and-place expert uses the arm nearer to the object and
+keeps the other arm at its initial pose with its gripper open. This is still a one-object task, but both arms are
+observable and controllable by the policy. `launch_sim` runs the grasp checks for each gripper that exists.
+
+For the bundled Dual Scorpion example, set the 8th joint of each arm as the gripper (the first 7 joints are the arm):
+
+```yaml
+robot:
+  urdf: /path/to/dual_scorpion_Full_urdf/urdf/scorpion.urdf
+  front_axis: +y
+  gripper_joints: [joint7_R, joint7_L]
+  gripper_open_close: [[-0.8, 0.0], [-0.8, 0.0]]  # provisional; confirm the opening direction
+```
+
+The Dual Scorpion URDF gives every joint `effort: 1.0`, which the project README calls provisional. Replace it with
+the real motor values under `robot.effort_limits` before judging grasp behaviour in simulation. Its gripper opening
+width also cannot be derived from a single continuous joint, so object fit is not screened automatically.
+
 ## Limitations
 
 - **Dual-arm robots** can be inspected, configured and imported (with all checks), but `launch_sim` and later steps
@@ -348,3 +372,4 @@ Quaternions are always `[x, y, z, w]`.
 - One task: pick an object and place it in a container (or on a flat target). Objects come from the catalog in
   `src/urdf2vla/objects.py`.
 - Grippers: two-finger parallel or single-moving-jaw grippers. Suction and multi-finger hands are not supported.
+- The SimReady gripper replacement (`robot.gripper.simready`) is currently limited to single-arm robots.

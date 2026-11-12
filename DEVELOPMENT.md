@@ -38,7 +38,7 @@ URDF → ロボット解析 → 必要な情報だけ質問 → Isaac Sim へ導
 | Isaac Lab Arena | `main` b9e37c5（2026-11-04）。リリース前のブランチなのでコミットで固定 |
 | GR00T | N1.7（Isaac-GR00T 23ace64）。変換・学習・推論サーバは別コンテナ（Isaac Lab のバージョンとは独立、ZMQ で通信） |
 
-Arena の GR00T 連携（変換・評価）は N1.6 で、変換が 1 カメラのみなので使っていません（urdf2vla は DROID と同じ手先 + 左右の 3 カメラ、N1.7）。
+Arena の GR00T 連携（変換・評価）は N1.6 で、変換が 1 カメラのみなので使っていません（urdf2vla は DROID と同じ手先 + 左右のカメラ、双腕は手先 2 台で計 4 台、N1.7）。
 
 ## 必要なもの
 
@@ -258,11 +258,15 @@ projects/<name>/
 - カメラの既定は DROID（https://droid-dataset.github.io/）と同じ 3 台: 手先 + ロボットの左（+y）と右（-y）の高い位置から
   台の中央を見下ろす外部カメラ。DROID の外部カメラの配置（Franka の base から前 0.05 m・左右 0.57 m・上 0.66 m、焦点距離 2.1）を
   台の大きさで拡大縮小する（腕の大きさが違うロボットでも作業域が写る）。画像は正方形 256×256・画角 約 70°。
+  双腕では手先カメラを腕ごとに付けるので 4 台（左右の手先 + 左右の外部）。
 - 手先カメラは link の下に置き、launch_sim の `camera_mount` 検査で設定どおりの位置・向きかを確かめる
   （2.x 版の DUAL_SCORPION では描画側（Fabric）のローカル変換がずれて手先カメラが手首に埋まったため、環境を作った直後に
-  書き直していた。3.0 版では Franka / CRX でずれないことを確認し、書き直しはやめた。双腕は 3.0 版ではまだ環境を作れない）。
+  書き直していた。3.0 版では Franka / CRX でずれないことを確認し、書き直しはやめた。双腕の手先カメラは 3.0 版で未実行）。
 - 正面が +x でないロボット（Fusion から出した URDF など）は、肩の並びと腕の伸びる向きから正面を推定して確認し、+x を向くように回して置く。
 - 台の配置は、肩の高さと腕の長さから「肩から腕の長さの半分・斜め下 45°」に把持点が来るように決める（肩が高く腕が短いロボットは台を高くする）。
+- 双腕の Embodiment は腕ごとに IK / 関節目標の ActionTerm とグリッパの ActionTerm を並べ、Arena の `ArmMode.DUAL_ARM` にする。
+  state / action は腕の順、グリッパの順。台の中心は左右の肩の中央、scripted は物体に近い腕だけを動かし、もう一方は開いたまま保持する。
+  launch_sim の `grasp_hold` / `grasp_opening` はグリッパのある腕ごとに検査する。
 - 片側だけ動く顎のグリッパは、arm の最後の関節として見えるので質問する。把持点は「固定側の顎と開いた顎の間」。
 - URDF 変換は `merge_fixed_joints=False`（True だと `panda_hand` のような End Effector が剛体でなくなる）、
   USD は `build/usd/` に固定してキャッシュを効かせる（Isaac Lab 3.0 の importer は `build/usd/robot/robot.usda` + payloads の階層 USD を作る）。
@@ -282,16 +286,16 @@ projects/<name>/
 ## テスト
 
 ```bash
-pytest            # ホスト側（URDF 解析・設定生成・質問の出方）。Franka / CRX-3iA / 合成した双腕ロボット
+pytest            # ホスト側（URDF 解析・設定生成・質問の出方）。Franka / CRX-3iA / 合成双腕
 ```
 
-## 検証状況（2026-11-05, RTX 5080, Isaac Lab 3.0.0 / Isaac Sim 6.2.0 / Isaac Lab Arena b9e37c5）
+## 検証状況（2026-11-06 時点。Isaac Sim の結果は 2026-11-05, RTX 5080, Isaac Lab 3.0.0 / Isaac Sim 6.2.0 / Isaac Lab Arena b9e37c5）
 
-カメラは既定の DROID 配置（手先 + 左右の外部カメラ、各 256×256）。
+単腕のカメラは既定の DROID 配置（手先 + 左右の外部カメラ、各 256×256）。双腕は腕ごとの手先 + 左右の外部の 4 台。
 
 | | Franka | CRX-3iA + Robotiq 2F-85（SimReady に付け替え） | DUAL_SCORPION（双腕） |
 |---|---|---|---|
-| Phase 1（質問・導入・検査・起動） | 質問なしで通る。import_robot 9 検査・launch_sim 9 検査 OK | 初期姿勢（IK の提案）だけ質問。Robot Assembler でグリッパを取り付け、import_robot 9 検査・launch_sim 9 検査 OK | import_robot（USD 変換と 10 検査）まで通る。環境は 3.0 版ではまだ作れない（launch_sim が明示的なエラー） |
+| Phase 1（質問・導入・検査・起動） | 質問なしで通る。import_robot 9 検査・launch_sim 9 検査 OK | 初期姿勢（IK の提案）だけ質問。Robot Assembler でグリッパを取り付け、import_robot 9 検査・launch_sim 9 検査 OK | macOS のホストで実 URDF から 2 腕・2 グリッパ・4 カメラ・16 次元 state / action の生成まで確認。Isaac Sim は未実行 |
 | Phase 2（scripted 収集） | 4/4、ラベル再生・最初の画像の検査 OK | 4/4、ラベル再生・最初の画像の検査 OK | 未実施 |
 | Phase 3（変換） | GR00T ローダで読める、3 カメラの動画は元画像と一致 | 同左 | 未実施 |
 | Phase 4（replay 評価、`--video`） | 4/4（動画で把持・配置を確認） | 4/4（同左） | 未実施 |
