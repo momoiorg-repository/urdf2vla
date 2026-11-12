@@ -15,6 +15,7 @@ from urdf2vla.schema.robot import (
     ActuatorGroup,
     ArmConfig,
     AssetConfig,
+    CameraCandidate,
     GripperConfig,
     JointRoles,
     Pose,
@@ -110,6 +111,9 @@ def analyze(project: Project, model: UrdfModel) -> RobotMetadata:
     grippers = A.find_grippers(model, art_root, forced=forced or None)
     arms, others = A.find_arms(model, art_root, grippers)
     package_paths = [project.path(p) for p in robot_in.get("package_paths", [])]
+    from urdf2vla.urdf.cameras import find_cameras
+
+    cameras = [CameraCandidate(**c.to_dict()) for c in find_cameras(model, [(a.name, a.joints) for a in arms])]
     return RobotMetadata(
         robot_name=robot_in.get("name") or project.name,
         urdf_path=str(model.path),
@@ -123,6 +127,7 @@ def analyze(project: Project, model: UrdfModel) -> RobotMetadata:
         grippers=grippers,
         other_joints=others,
         meshes=mesh_report(model, runtime, package_paths),
+        cameras=cameras,
     )
 
 
@@ -366,7 +371,13 @@ def inspect_robot(project: Project, opts: dict, result: SkillResult, log) -> Non
         "grippers": [{"mount_link": g.mount_link, "joints": g.joints, "leader": g.leader, "mimic": list(g.mimic)} for g in meta.grippers],
         "other_joints": meta.other_joints,
         "meshes": {"total": meta.meshes.total, "resolved": len(meta.meshes.resolved), "unresolved": meta.meshes.unresolved},
+        "cameras": [{"link": c.link, "arm": c.arm, "role": c.role} for c in meta.cameras],
     }
+    if meta.cameras:
+        result.warnings.append(
+            f"URDF にカメラの frame が {len(meta.cameras)} 個あります（{', '.join(c.link for c in meta.cameras)}）。"
+            "configure_camera は既定でこれらを使います（向き・視野は `urdf2vla view` で確認・調整できます）。"
+        )
     if meta.meshes.unresolved:
         essential, optional = _classify_unresolved(meta, model, robot_in)
         if essential:

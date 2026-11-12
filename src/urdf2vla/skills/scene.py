@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 
+from urdf2vla.camera_edit import APERTURE, focal_for_hfov
 from urdf2vla.project import Project
 from urdf2vla.registry import Arg, skill
 from urdf2vla.result import SkillResult
@@ -12,6 +13,7 @@ from urdf2vla.schema.robot import RobotConfig
 from urdf2vla.schema.task import ObjectConfig, TableConfig, TargetConfig, TaskConfig
 from urdf2vla import objects as catalog
 from urdf2vla.urdf import analysis as A
+from urdf2vla.urdf.cameras import UrdfCamera, default_camera_names, find_cameras
 from urdf2vla.urdf.kinematics import Transform, cross, look_at_ros, normalize
 from urdf2vla.urdf.parser import parse_urdf
 
@@ -364,6 +366,84 @@ def _world_camera(project: Project, spec: dict, side: str) -> CameraConfig:
     )
 
 
+# URDF のカメラ: 視野角が URDF（Gazebo の horizontal_fov）になければこの値（実機の値が分かれば intrinsic_matrix か hfov_deg で）
+URDF_WRIST_HFOV = 80.0  # 手先のカメラ（例: RealSense D405 は 87°）
+URDF_HEAD_HFOV = 70.0  # 頭・体のカメラ（DROID の外部カメラの正方形の画角と同じくらい）
+# URDF のカメラの frame はカメラの筐体や手のメッシュの中にあることが多い（OpenArm の手のカメラは手のひらの中で、メッシュの
+# 外に出るまで 2 cm）。中から写すと画像が真っ黒になるので、手前のこの距離までは描かない（spec の clip_near で変えられる）
+URDF_CLIP_NEAR = 0.03
+
+
+def urdf_cameras(cfg: RobotConfig) -> list[tuple[str, UrdfCamera]]:
+    """URDF のカメラの frame と既定の名前（<arm>_wrist_cam / head_cam ...）。"""
+    cams = find_cameras(parse_urdf(cfg.asset.host_path), [(a.name, a.joints) for a in cfg.arms])
+    return list(zip(default_camera_names(cams, len(cfg.arms)), cams))
+
+
+def _urdf_camera(cfg: RobotConfig, spec: dict, found: list, result: SkillResult) -> list[CameraConfig] | None:
+    """preset: urdf。link を書けばその frame、書かなければ URDF のカメラすべて。"""
+    model = parse_urdf(cfg.asset.host_path)
+    link = spec.get("link")
+    if link:
+        hit = next(((n, c) for n, c in found if c.link == link or link in c.alternatives), None)
+        if hit is None:
+            if link not in model.links:
+                result.fail(f"カメラの link '{link}' は URDF にありません（URDF のカメラ: {', '.join(c.link for _, c in found) or 'なし'}）")
+                return None
+            # カメラらしい名前でない link でも、明示されれば使う（向きは名前から: optical なら ros、ほかは x 前方）
+            hit = (spec.get("name") or f"{link}_cam", UrdfCamera(link=link, convention="ros" if "optical" in link.lower() else "world"))
+        elif hit[1].link != link:  # 同じ機器のほかの frame（ステレオの右目など）
+            n, c = hit
+            hit = (n, UrdfCamera(link=link, convention="ros" if "optical" in link.lower() else "world", arm=c.arm, role=c.role, hfov_deg=c.hfov_deg))
+        targets = [hit]
+    else:
+        if not found:
+            result.fail("preset: urdf ですが、URDF にカメラの frame が見つかりません（名前に camera / cam / optical を含む link）。")
+            return None
+        targets = found
+    out = []
+    for name, cam in targets:
+        hfov = float(spec.get("hfov_deg") or cam.hfov_deg or (URDF_HEAD_HFOV if cam.role == "head" else URDF_WRIST_HFOV))
+        body = A.rigid_ancestor(model, cam.link)
+        t = A.relative_transform(model, body, cam.link)
+        out.append(
+            CameraConfig(
+                name=spec.get("name", name) if link else name,
+                mount="link",
+                parent_link=cam.link,
+                mount_body=body,
+                pos=[round(c, 6) for c in t.pos],
+                rot_xyzw=[round(c, 6) for c in t.rot],
+                convention=cam.convention,
+                width=int(spec.get("width", 256)),
+                height=int(spec.get("height", 256)),
+                focal_length=focal_for_hfov(hfov),
+                horizontal_aperture=APERTURE,
+                clipping_range=[float(spec.get("clip_near", URDF_CLIP_NEAR)), 10.0 if cam.role == "head" else 3.0],
+                preset="urdf",
+            )
+        )
+    return out
+
+
+def default_camera_specs(cfg: RobotConfig, found: list) -> list[dict]:
+    """project.yaml に cameras がないときの既定。URDF にカメラがあればそれを使い、足りない分だけ preset で補う:
+    手先のカメラのない arm には wrist、頭・体のカメラがなければ DROID の左右の外部カメラ。URDF にカメラがなければ DROID の配置。"""
+    if not found:
+        return [{"preset": p} for p in DROID_PRESETS]
+    specs = []
+    for i, arm in enumerate(cfg.arms):
+        mine = [(n, c) for n, c in found if c.arm == arm.name]
+        if not any(c.role == "wrist" for _, c in mine):
+            specs.append({"preset": "wrist", "arm": i, "name": "wrist_cam" if len(cfg.arms) == 1 else f"{arm.name}_wrist_cam"})
+        specs += [{"preset": "urdf", "link": c.link, "name": n} for n, c in mine]
+    heads = [(n, c) for n, c in found if c.arm is None]
+    specs += [{"preset": "urdf", "link": c.link, "name": n} for n, c in heads]
+    if not heads:
+        specs += [{"preset": "left"}, {"preset": "right"}]
+    return specs
+
+
 def _explicit_camera(cfg: RobotConfig, spec: dict, result: SkillResult) -> CameraConfig | None:
     cam = CameraConfig.model_validate(spec)
     if cam.mount == "link":
@@ -379,29 +459,42 @@ def _explicit_camera(cfg: RobotConfig, spec: dict, result: SkillResult) -> Camer
     return cam
 
 
-@skill(
-    "configure_camera",
-    phase=1,
-    runs_in="host",
-    summary="カメラ（既定は DROID と同じ手先 + 左右の外部カメラ。正面・横のプリセット、または取付 link と位置姿勢の明示指定も可）を設定する",
-    inputs=["generated/robot_config.yaml", "generated/task.yaml", "project.yaml: cameras"],
-    outputs=["generated/cameras.yaml"],
-    requires=["configure_task"],
-    args=[Arg(("--preset",), {"help": "project.yaml に cameras がないときに使うプリセット（既定: wrist,left,right = DROID の配置）"})],
-)
-def configure_camera(project: Project, opts: dict, result: SkillResult, log) -> None:
-    cfg = _robot(project)
-    specs = project.config().get("cameras")
-    if not specs:
-        presets = (opts.get("preset") or ",".join(DROID_PRESETS)).split(",")
-        specs = [{"preset": p.strip()} for p in presets if p.strip()]
+def camera_specs(project: Project, cfg: RobotConfig, found: list, preset_opt: str | None = None) -> tuple[list[dict], str]:
+    """カメラの指定と、その出どころ。`urdf2vla view` で保存したもの（answers.yaml の cameras）> project.yaml の cameras >
+    --preset > 既定（URDF のカメラ、なければ DROID の配置）。"""
+    saved = project.answers().get("cameras")
+    if saved:
+        return list(saved), "view"
+    if project.config().get("cameras"):
+        return list(project.config()["cameras"]), "project"
+    if preset_opt:
+        return [{"preset": p.strip()} for p in preset_opt.split(",") if p.strip()], "preset"
+    return default_camera_specs(cfg, found), ("urdf" if found else "droid")
+
+
+def build_cameras(
+    project: Project, cfg: RobotConfig, specs: list[dict], found: list, result: SkillResult, origins: dict[str, dict] | None = None
+) -> list[CameraConfig] | None:
+    """カメラの指定（preset・明示指定）から CameraConfig を作る。失敗したら result.fail して None。
+    origins を渡すと、カメラ名 → そのカメラ 1 台だけを作る指定（`urdf2vla view` が触っていないカメラを元のまま保存するのに使う）。"""
+    origins = {} if origins is None else origins
     cams: list[CameraConfig] = []
     for spec in specs:
         preset = spec.get("preset")
+        if preset == "urdf":
+            got = _urdf_camera(cfg, spec, found, result)
+            if got is None:
+                return None
+            for c in got:
+                origins[c.name] = {**spec, "link": c.parent_link, "name": c.name}
+            cams += got
+            continue
         if preset == "wrist" and "arm" not in spec and len(cfg.arms) > 1:
             # 双腕: 腕ごとに手先カメラを付ける（<arm>_wrist_cam）
             for i, arm in enumerate(cfg.arms):
-                cams.append(_wrist_camera(project, cfg, {**spec, "arm": i, "name": f"{arm.name}_wrist_cam"}))
+                one = {**spec, "arm": i, "name": f"{arm.name}_wrist_cam"}
+                cams.append(_wrist_camera(project, cfg, one))
+                origins[one["name"]] = one
             continue
         if preset == "wrist":
             cam = _wrist_camera(project, cfg, spec)
@@ -412,18 +505,52 @@ def configure_camera(project: Project, opts: dict, result: SkillResult, log) -> 
         elif preset is None:
             cam = _explicit_camera(cfg, spec, result)
         else:
-            result.fail(f"未知のカメラ preset '{preset}'（wrist / left / right / front / side、または明示指定）")
-            return
+            result.fail(f"未知のカメラ preset '{preset}'（wrist / left / right / front / side / urdf、または明示指定）")
+            return None
         if cam is None:
-            return
+            return None
+        origins[cam.name] = dict(spec)
         cams.append(cam)
     names = [c.name for c in cams]
     if len(set(names)) != len(names):
         result.fail(f"カメラ名が重複しています: {names}")
+        return None
+    return cams
+
+
+@skill(
+    "configure_camera",
+    phase=1,
+    runs_in="host",
+    summary="カメラを設定する（既定は URDF にあるカメラ、なければ DROID と同じ手先 + 左右の外部カメラ。プリセット、取付 link と位置姿勢の明示指定、`urdf2vla view` での調整も可）",
+    inputs=["generated/robot_config.yaml", "generated/task.yaml", "project.yaml: cameras", "answers.yaml: cameras"],
+    outputs=["generated/cameras.yaml"],
+    requires=["configure_task"],
+    args=[Arg(("--preset",), {"help": "cameras の指定がないときに使うプリセット（例: wrist,left,right = DROID の配置。既定は URDF のカメラ、なければ DROID）"})],
+)
+def configure_camera(project: Project, opts: dict, result: SkillResult, log) -> None:
+    cfg = _robot(project)
+    found = urdf_cameras(cfg)
+    specs, source = camera_specs(project, cfg, found, opts.get("preset"))
+    if source == "urdf":
+        result.warnings.append(
+            f"URDF のカメラを使います: {', '.join(f'{n}（{c.link}）' for n, c in found)}。視野角は "
+            + ", ".join(f"{n} {c.hfov_deg or (URDF_HEAD_HFOV if c.role == 'head' else URDF_WRIST_HFOV):g}°" for n, c in found)
+            + "（URDF に書かれていなければ既定値）。`urdf2vla view` で向きと写る範囲を確認・調整できます。"
+            "DROID の配置にするには project.yaml に cameras: [{preset: wrist}, {preset: left}, {preset: right}] と書きます。"
+        )
+    elif source == "view":
+        result.warnings.append("`urdf2vla view` で保存したカメラ（answers.yaml の cameras）を使います。project.yaml の cameras より優先します。")
+    cams = build_cameras(project, cfg, specs, found, result)
+    if cams is None:
         return
     data = CamerasConfig(cameras=cams).model_dump(mode="json")
     path = project.write_generated("cameras.yaml", data, section="cameras")
     CamerasConfig.model_validate(project.read_generated("cameras.yaml"))
     result.outputs["cameras"] = project.rel(path)
-    result.data = {"cameras": [{"name": c.name, "mount": c.mount_body or "world", "preset": c.preset, "resolution": [c.width, c.height]} for c in cams]}
+    result.data = {
+        "cameras": [{"name": c.name, "mount": c.mount_body or "world", "preset": c.preset, "resolution": [c.width, c.height]} for c in cams],
+        "source": source,
+        "urdf_cameras": [c.link for _, c in found],
+    }
     result.next = ["import_robot"]

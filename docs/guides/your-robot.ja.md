@@ -312,16 +312,33 @@ overrides:
     table: {material: walnut}        # 台の見た目: oak（既定）、walnut、plain（単色）
 ```
 
-カメラの既定は [DROID](https://droid-dataset.github.io/) の配置（手先カメラと、台を見下ろす左右のカメラ、256×256）です。
-双腕では腕ごとに手先カメラが付くので、既定は 4 台になります。ほかに `front`（正面）と `side`（横）のプリセットがあります。
-実機のカメラに合わせるなら、明示的に書きます。
+カメラ: URDF にカメラの frame（名前に `camera`・`cam`・`optical` を含む link。頭のカメラの光学 frame や手のカメラなど）が
+あれば、それを使います。足りないところだけプリセットで補います（手のカメラのない腕には手先カメラ、頭・体のカメラがなければ
+DROID の左右のカメラ）。見つかったカメラの frame は `inspect_robot` が表示します。URDF にカメラがなければ、既定は
+[DROID](https://droid-dataset.github.io/) の配置（手先カメラと、台を見下ろす左右のカメラ、256×256）です。双腕では腕ごとに
+手先カメラが付くので、その既定は 4 台になります。
+
+URDF のカメラの読み方:
+
+- 機器ごとに 1 台。ステレオカメラは左目の光学 frame を使い、右目は候補として残します。深度・赤外・IMU の frame は使いません。
+- 向きは ROS の約束（REP 103）: 名前に `optical` を含む frame は +z、ほかのカメラの frame は +x の方向を見ます。
+- 視野角: URDF に Gazebo の `<sensor type="camera">` の `horizontal_fov` があればその値、なければ手のカメラ 80°・頭のカメラ 70°。
+- 手前 3 cm は描きません（`clip_near`）。カメラの frame はカメラや手のメッシュの中にあることが多く、OpenArm の手のカメラは
+  手のひらの 2 cm 内側にあって、そのままでは画像が真っ黒になります。
+
+プリセットは `wrist`・`left`・`right`・`front`・`side`・`urdf`（URDF のカメラ）です。実機のカメラに合わせるなら、明示的に書きます。
 
 ```yaml
 cameras:
   - preset: wrist
+  - {preset: urdf, link: head_camera_optical_frame, hfov_deg: 87, clip_near: 0.02}
   - {name: head_cam, mount: link, parent_link: head_link, pos: [0, 0, 0], rot_xyzw: [0, 0, 0, 1],
      convention: ros, width: 640, height: 480, intrinsic_matrix: [600, 0, 320, 0, 600, 240, 0, 0, 1]}
 ```
+
+カメラの位置や向きを見ながら決めるには、[`urdf2vla view`](view.md#cameras) のカメラの欄を使います。そこで保存したものは
+`answers.yaml` に入り、`project.yaml` の `cameras:` より優先します。`configure_camera` と `launch_sim` をやり直すと、
+実際の画像を確かめられます。
 
 四元数は常に `[x, y, z, w]` です。
 
@@ -382,7 +399,7 @@ Dual Scorpion の URDF は全関節が `effort: 1.0` で、元プロジェクト
 - 物理ソルバの位置の反復回数を 64 にする（`overrides.robot.asset.solver_position_iterations`）。既定の 32 では左手の
   把持検査にわずかに失敗する（立方体が TCP から 2.2 cm ずれる。許容は 2 cm）
 
-この設定で OpenArm はすべての検査を通り、scripted の収集は 10 回中 8 回成功（毎回左腕）、replay の評価は 8 回中 8 回成功です。
+カメラは URDF にある両手のカメラと頭の ZED Mini を使います。この設定で OpenArm はすべての検査を通り、scripted の収集は 10 回中 8 回成功（毎回左腕）、replay の評価は 8 回中 8 回成功です。
 失敗した 2 回はどちらも物体が置く範囲のトレイ側の端にあり、手先が把持の高さの 6 mm 上で止まりました。開いた指がトレイの縁に
 当たっているとみられます。
 
