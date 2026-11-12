@@ -18,7 +18,7 @@ urdf2vla は 2 つの部分からなります。
 | ディスク | 空き **150 GB** 程度（シミュレーション用 image が約 60 GB、GR00T 用が約 42 GB） |
 | Python | Python 3.10 以降と [uv](https://docs.astral.sh/uv/) |
 | ネットワーク | 初回のビルド、初回の取り込み（Isaac Sim の拡張と SimReady アセットを取得）、GR00T のベースモデルの取得で必要 |
-| 学習 | **44 GB 以上**の GPU（A100, H100, L40S, RTX 6000 Ada など）。別のマシンでもかまいません（[学習と評価](guides/training.md)） |
+| 学習 | **44 GB 以上**の GPU（A100, H100, L40S, RTX 6000 Ada など）。別のマシンでもかまいません（[学習と評価](guides/training.md)）。全部を[クラウドの GPU](#cloud)で動かすこともできます |
 
 始める前に、Docker から GPU が見えることを確かめます。
 
@@ -90,6 +90,31 @@ GPU のメモリ、Docker と NVIDIA Container Toolkit、2 つの image とコ�
 
 どちらでも、最初のシミュレーションの工程 `import_robot` は、シェーダのコンパイルが済んでいれば 1 分以内に終わります
 （Isaac Sim の最初の起動は数分かかることがあります）。
+
+## クラウドの GPU（NVIDIA Brev）で使う {#cloud}
+
+ここまでの手順は、クラウドの GPU のマシン（たとえば NVIDIA Brev のインスタンス）でも同じです。**L40S（48 GB）** なら
+シミュレーションが動き、GR00T の学習にも足りるので、`train_vla` がそのマシンで学習します。
+
+- **インスタンス:** Ubuntu 22.04 か 24.04、Docker と NVIDIA Container Toolkit、ディスクは **200 GB** 以上
+  （2 つの image で約 100 GB、ほかにデータセットと GR00T の元のモデル）。
+- **ドライバ:** urdf2vla はドライバ 580 以降で確かめています。インスタンスのドライバが古ければ `urdf2vla doctor` が警告します。
+  新しいドライバのイメージを選ぶか、更新して再起動してください。
+- **画面は要りません:** どの工程も画面なしで動きます。
+- **テストとドキュメント:** `uv pip install -e '.[view,dev,docs]'` で追加のパッケージを入れ、`pytest` と
+  `mkdocs build --strict` を実行します。
+- **FANUC の例:** ROS がないので、URDF を取得する前に `xacro` を urdf2vla の環境に入れます:
+  `uv pip install xacro && bash examples/crx3ia/fetch_urdf.sh`。
+- **ブラウザの画面:** `urdf2vla view` はインスタンスのポート 8080 で開きます。自分の PC から SSH で転送し、
+  `http://localhost:8080` を開きます。
+
+    ```bash
+    ssh -L 8080:localhost:8080 <インスタンス>
+    ```
+
+- **teleop:** SSH ではターミナルのキー操作で記録します。1 つ目の SSH で `collect_dataset --device socket`
+  （または `generate_mimic --source-device socket`）、2 つ目の SSH で `urdf2vla teleop-keys`。`--livestream`（WebRTC）は、
+  映像が SSH の転送を通らないので、配信のクライアントからインスタンスに直接つながる必要があります（Brev では試していません）。
 
 ## 任意: このドキュメントのサイト
 

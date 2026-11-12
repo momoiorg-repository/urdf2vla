@@ -328,7 +328,7 @@ OpenArm は URDF にあるカメラ（両手の camera_view_frame + 頭の ZED M
 | Phase 3（変換） | GR00T ローダで読める、3 カメラの動画は元画像と一致 | 同左 | GR00T ローダで読める、4 カメラの動画は元画像と一致 | 未実施 | GR00T ローダで読める、3 カメラ（両手 + 頭）の動画は元画像と一致 |
 | Phase 4（replay 評価、`--video`） | 4/4（動画で把持・配置を確認） | 4/4（同左） | 8/8（動画で左腕の把持・配置と右腕の静止を確認） | 未実施 | 8/8（動画で左腕の把持・配置と右腕の静止を確認） |
 
-Isaac Lab 2.3.2 版（git タグ `isaaclab2-last`）では、CRX は URDF のグリッパで収集 3/4〜6/7・replay 4/6、
+Isaac Lab 2.3.2 版（git タグ `isaaclab2-last`。公開前の履歴にあり、公開のリポジトリにはない）では、CRX は URDF のグリッパで収集 3/4〜6/7・replay 4/6、
 DUAL_SCORPION は scripted 収集 0/8（回転する顎が物体を台に押し付けながら閉じ、腕が押し上げられる。URDF のトルクは仮値）だった。
 
 双腕の Mimic（2026-11-12、元のデモ 5 個はスクリプトで記録、20 回の試行）: Franka 2 本 15/20（作業する腕は左）、OpenArm 20/20、
@@ -339,6 +339,60 @@ DUAL_SCORPION は scripted 収集 0/8（回転する顎が物体を台に押し�
 未検証: GR00T の実際の学習（44GB 以上の GPU が必要。Isaac Lab 3.0 版では `train_vla` のジョブ作成も未実行。データセット側は
 `convert_dataset` の GR00T ローダ検査で確認済み）と、学習済みモデルでの評価（`evaluate_vla --model`）。
 Isaac Lab 3.0 版で試したのは scripted の収集だけで、socket / keyboard の teleop と `--livestream` は未検証（2.x 版では socket は検証済み）。
+
+## 次の作業: NVIDIA Brev（L40S）で FANUC の例を最後まで
+
+ここまでの検証は RTX 5080（16 GB）で、GR00T の学習（44 GB 以上）と学習済みモデルでの評価はまだしていない。Brev の L40S（48 GB）
+では、FANUC CRX-3iA の例でこの残りを確かめ、結果をドキュメントに書く。
+
+準備（インストールの「クラウドの GPU」の節と同じ）:
+
+```bash
+git clone https://github.com/momoiorg-repository/urdf2vla.git && cd urdf2vla
+uv venv .venv && uv pip install -e '.[view,dev,docs]' xacro && source .venv/bin/activate
+bash docker/build.sh                          # 1〜2 時間、約 100 GB。ディスクは 200 GB 以上のインスタンスで
+bash docker/run.sh && bash docker/run.sh gr00t
+urdf2vla doctor                               # ドライバ 580 以降（古いと警告）、image・コンテナ・ディスク
+pytest                                        # 51 passed / 4 skipped が期待値（下記）
+bash examples/crx3ia/fetch_urdf.sh            # ROS なし。PyPI の xacro で ROS 2 のものと同じ URDF になる
+pytest                                        # FANUC の URDF があると CRX の例の試験も走る
+```
+
+FANUC の例（`docs/guides/your-robot.md` の手順。`import_robot` で初期姿勢だけ質問される）:
+
+```bash
+urdf2vla init projects/crx3ia --from examples/crx3ia/project.yaml
+for s in inspect_robot configure_robot configure_task configure_camera import_robot; do urdf2vla $s --project projects/crx3ia; done
+urdf2vla answer --project projects/crx3ia robot.default_pose=suggested
+for s in configure_robot import_robot launch_sim configure_vla_interface setup_teleoperation; do urdf2vla $s --project projects/crx3ia; done
+urdf2vla collect_dataset --project projects/crx3ia --device scripted --num-demos 50     # または generate_mimic
+urdf2vla convert_dataset --project projects/crx3ia
+urdf2vla train_vla       --project projects/crx3ia --dataset demos                      # 48 GB なのでその場で学習する
+urdf2vla evaluate_vla    --project projects/crx3ia --model training/crx3ia_demos/checkpoints/<checkpoint> --episodes 20 --video
+```
+
+確かめて書くこと:
+
+1. L40S での動作（RTX 5080 以外の GPU は初めて）: 各工程の検査、描画、時間、GPU メモリ。「検証状況」の表に L40S の列を足す。
+2. GR00T の実際の学習（`train_vla`）: 学習時間、checkpoint、GPU メモリ。`docs/guides/training.md` に実測値を書く。
+3. 学習済みモデルでの評価（`evaluate_vla --model`）: 成功率と動画。FANUC で学習した VLA はまだどこにもない
+   （以前の FANUC 向けと思われたモデルは Franka のものだった）。
+4. FANUC での Mimic（`generate_mimic`。単腕では Franka で 75/100）と、Mimic のデータで学習した場合との比較。
+5. 人の操作（`--device socket` / `generate_mimic --source-device socket`）で記録した元のデモからの Mimic（経路はスクリプトで
+   キーを送って確かめただけ）。
+
+注意:
+
+- `tests/test_inspect.py` の CRX の試験 3 つは、URDF の Robotiq グリッパ付きの非公開の CRX URDF（`URDF2VLA_CRX_URDF`）が要る。
+  Brev では飛ばされる。公開の FANUC の例の試験は `fetch_urdf.sh` の後に走る。4 つ目の skip は OpenArm
+  （`external/openarm_description` を clone すると走る）。
+- Isaac Lab 2.x 版のデータは 3.0 で再生できない（四元数の並びと URDF importer が変わった。CRX は SimReady のグリッパになった）。記録し直す。
+- git タグ `isaaclab2-last`（2.x 版のコード）は公開のリポジトリにない（公開前の履歴）。
+- GR00T の元のモデル（nvidia/GR00T-N1.7-3B）は初回に Hugging Face から取得する。RTX 5080 のマシンでは途中で止まったことがある。
+  止まったら実行し直すと続きから取得する。
+- 2026-11-12 に、このマシンの新しい clone で Brev と同じ条件（ROS なし）を確かめた: PyPI の xacro の FANUC の URDF は
+  ROS 2 Jazzy のものと link・関節・可動範囲・メッシュ・質量が同じ、pytest 51 passed / 4 skipped、`mkdocs build --strict`、
+  FANUC の例のホスト側の工程（台を 10 cm 手前に寄せる警告も同じ）。Brev のインスタンスそのものではまだ動かしていない。
 
 ## 今後
 

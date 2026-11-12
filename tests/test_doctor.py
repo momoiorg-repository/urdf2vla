@@ -61,6 +61,18 @@ def test_gpu_and_docker_all_good():
     assert docker["docker"] == "ok" and docker["image:sim"] == "ok" and docker["container_gpu:sim"] == "ok" and docker["container_mount:sim"] == "ok"
 
 
+def test_old_driver_is_a_warning_and_a_48gb_gpu_can_train():
+    """クラウドの古いイメージ（例: L40S に 550）: 動くが、確かめた 580 より古いので警告。48 GB なら学習できる（info を出さない）。"""
+    run = fake({"nvidia-smi --query-gpu=name,driver_version,memory.total": (0, "NVIDIA L40S, 550.127.05, 46068\n", "")})
+    checks = {c.name: c for c in check_gpu(run)}
+    assert checks["nvidia_driver"].level == "ok"
+    assert checks["driver_version"].level == "warning" and "550.127.05" in checks["driver_version"].detail
+    assert "nvidia-driver-580-open" in checks["driver_version"].fix
+    assert "gpu_training" not in checks
+    run = fake({"nvidia-smi --query-gpu=name,driver_version,memory.total": (0, "NVIDIA L40S, 580.95.05, 46068\n", "")})
+    assert "driver_version" not in {c.name for c in check_gpu(run)}
+
+
 def test_missing_image_and_docker_permission_are_errors_with_fixes():
     run = fake({"docker info --format": (0, "{}", ""), "docker image inspect": (1, "", "No such image")})
     c = next(c for c in check_docker([SIM], run) if c.name == "image:sim")

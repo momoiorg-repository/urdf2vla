@@ -17,10 +17,10 @@ URDF を公開していて、多くの産業用ロボットと同じく CRX に�
 
     FANUC はロボットの記述を [FANUC-CORPORATION/fanuc_description](https://github.com/FANUC-CORPORATION/fanuc_description)
     （Apache-2.0）で xacro 形式で公開しています。例のスクリプトが、版を固定してダウンロードし、CRX-3iA を URDF に展開します。
-    `xacro` が必要です（ROS 2 のもの、または `pip install xacro`）。
+    `xacro` が必要です。ROS がなければ（クラウドの GPU など）urdf2vla の環境に入れます。ROS 2 の xacro と同じ URDF になります。
 
     ```bash
-    source /opt/ros/jazzy/setup.bash      # xacro
+    uv pip install xacro                  # ROS 2 があれば: source /opt/ros/jazzy/setup.bash
     bash examples/crx3ia/fetch_urdf.sh    # → examples/crx3ia/fanuc_description/crx3ia.urdf
     ```
 

@@ -18,7 +18,7 @@ You run every command on your machine. urdf2vla starts the work inside the right
 | Disk | About **150 GB** free (the simulation image is ~60 GB and the GR00T image ~42 GB) |
 | Python | Python 3.10 or newer and [uv](https://docs.astral.sh/uv/) |
 | Network | Needed for the first build, the first import (Isaac Sim extensions and SimReady assets are downloaded) and the GR00T base model |
-| Training | A GPU with **44 GB or more** (A100, H100, L40S, RTX 6000 Ada, …). It can be a different machine — see [Train and evaluate](guides/training.md) |
+| Training | A GPU with **44 GB or more** (A100, H100, L40S, RTX 6000 Ada, …). It can be a different machine — see [Train and evaluate](guides/training.md), or run everything on a [cloud GPU](#cloud) |
 
 Check that Docker can see your GPU before you start:
 
@@ -91,6 +91,32 @@ command that fixes it. Run it again whenever something looks wrong with the envi
 
 Either way, the first simulation step, `import_robot`, finishes in under a minute once the shaders are compiled (the
 very first start of Isaac Sim can take several minutes).
+
+## On a cloud GPU (NVIDIA Brev) {#cloud}
+
+Everything above works the same on a cloud GPU machine, for example an NVIDIA Brev instance. An **L40S (48 GB)** runs
+the simulation and is also big enough for GR00T training, so `train_vla` trains on the machine itself.
+
+- **Instance:** Ubuntu 22.04 or 24.04 with Docker and the NVIDIA Container Toolkit, and at least **200 GB** of disk:
+  about 100 GB for the two images, plus datasets and the GR00T base model.
+- **Driver:** urdf2vla is tested with driver 580 or newer. `urdf2vla doctor` warns if the instance's driver is older.
+  Pick an image with a newer driver, or upgrade it and reboot.
+- **No display needed:** every step runs headless.
+- **Tests and docs:** install the extras with `uv pip install -e '.[view,dev,docs]'`, then run `pytest` and
+  `mkdocs build --strict`.
+- **FANUC example:** there is no ROS, so install `xacro` into urdf2vla's environment before fetching the URDF:
+  `uv pip install xacro && bash examples/crx3ia/fetch_urdf.sh`.
+- **Browser viewer:** `urdf2vla view` serves on port 8080 on the instance. Forward it over SSH from your own computer
+  and open `http://localhost:8080`:
+
+    ```bash
+    ssh -L 8080:localhost:8080 <instance>
+    ```
+
+- **Teleoperation:** record over SSH with the terminal keyboard: `collect_dataset --device socket` (or
+  `generate_mimic --source-device socket`) in one SSH session and `urdf2vla teleop-keys` in a second one.
+  `--livestream` (WebRTC) needs the streaming client to reach the instance directly, because its video doesn't go
+  through an SSH tunnel; that hasn't been tried on Brev.
 
 ## Optional: the documentation site
 

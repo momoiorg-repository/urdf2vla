@@ -22,6 +22,7 @@ from urdf2vla.result import SkillResult
 
 GPU_MEMORY_MIN_GB = 12  # Isaac Sim + カメラ 3 台 + GR00T の推論サーバで約 11 GB（RTX 5080 16 GB で確かめた）
 GPU_MEMORY_TRAIN_GB = 44  # train_vla がその場で学習する GPU メモリ
+DRIVER_TESTED = 580  # Isaac Sim 6.2 を確かめた NVIDIA ドライバの版（クラウドの古いイメージで 535 / 550 / 570 のことがある）
 DISK_WARN_GB = 50  # データセット（75 エピソードで約 4.5 GB）・USD・ログ
 DISK_ERROR_GB = 10
 IMAGE_DISK_GB = 40  # docker/build.sh の 2 つの image の大きさの目安
@@ -78,6 +79,11 @@ def driver_hint(kernel: str, modules_root: Path = Path("/lib/modules"), run=_run
     return "nvidia-smi が動きません（NVIDIA ドライバが入っていないか、読み込まれていません）。", "NVIDIA ドライバ（580 以降）を入れ、nvidia-smi が動くことを確かめてください。"
 
 
+def _driver_major(version: str) -> int | None:
+    m = re.match(r"(\d+)", version)
+    return int(m.group(1)) if m else None
+
+
 def check_gpu(run=_run, modules_root: Path = Path("/lib/modules")) -> list[Check]:
     rc, out, _ = run(["nvidia-smi", "--query-gpu=name,driver_version,memory.total", "--format=csv,noheader,nounits"])
     if rc != 0 or not out.strip():
@@ -88,6 +94,14 @@ def check_gpu(run=_run, modules_root: Path = Path("/lib/modules")) -> list[Check
         name, driver, mem = (x.strip() for x in line.split(","))
         gpus.append((name, driver, float(mem) / 1024))
     checks = [Check("nvidia_driver", "ok", ", ".join(f"{n}（ドライバ {d}、{m:.0f} GB）" for n, d, m in gpus))]
+    old = sorted({d for _, d, _ in gpus if _driver_major(d) is not None and _driver_major(d) < DRIVER_TESTED})
+    if old:
+        checks.append(Check(
+            "driver_version", "warning",
+            f"NVIDIA ドライバが {', '.join(old)} です。urdf2vla（Isaac Sim 6.2）は {DRIVER_TESTED} 以降で確かめています。古いドライバでは Isaac Sim が起動しない・描画が崩れることがあります。",
+            f"ドライバを {DRIVER_TESTED} 以降に上げて再起動します（Ubuntu: sudo apt install nvidia-driver-{DRIVER_TESTED}-open && sudo reboot）。"
+            f"クラウドの GPU（NVIDIA Brev など）では、{DRIVER_TESTED} 以降のドライバの入ったイメージを選ぶと早いです。",
+        ))  # fmt: skip
     mem = max(m for _, _, m in gpus)
     if mem < GPU_MEMORY_MIN_GB:
         checks.append(Check("gpu_memory", "warning", f"GPU のメモリが {mem:.0f} GB です（Isaac Sim とカメラ、GR00T の推論サーバで約 11 GB を使います。16 GB で確かめています）。", "カメラの解像度や台数を減らすと動くことがあります。"))

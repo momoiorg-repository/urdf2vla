@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # FANUC の公式の URDF（FANUC-CORPORATION/fanuc_description, Apache-2.0）を取得し、xacro で URDF に展開する。
 #
-#   source /opt/ros/jazzy/setup.bash          # xacro（ROS 2）。ROS がなければ `pip install xacro`
+#   uv pip install xacro                      # xacro（PyPI。ROS 2 の xacro と同じ URDF になる）。ROS 2 があれば source /opt/ros/jazzy/setup.bash
 #   bash examples/crx3ia/fetch_urdf.sh        # → examples/crx3ia/fanuc_description/crx3ia.urdf
 #   bash examples/crx3ia/fetch_urdf.sh crx10ia_l   # 他の CRX: crx5ia crx10ia crx10ia_l crx10ia_lp crx20ia_l crx30ia
 #
@@ -27,7 +27,7 @@ if [ ! -f "$DIR/$MACRO" ]; then
   exit 1
 fi
 if ! command -v xacro >/dev/null; then
-  echo "xacro が見つかりません。ROS 2 の環境を読み込む（source /opt/ros/<distro>/setup.bash）か、pip install xacro を実行してください。" >&2
+  echo "xacro が見つかりません。uv pip install xacro（urdf2vla の環境に入れる）か、ROS 2 の環境を読み込んで（source /opt/ros/<distro>/setup.bash）ください。" >&2
   exit 1
 fi
 

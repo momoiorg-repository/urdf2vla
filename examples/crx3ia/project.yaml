@@ -1,6 +1,6 @@
 # urdf2vla の例: FANUC CRX-3iA + Robotiq 2F-85（NVIDIA SimReady のグリッパ）
 # URDF は FANUC の公式（FANUC-CORPORATION/fanuc_description, Apache-2.0）。同梱していないので、先に取得する:
-#   source /opt/ros/jazzy/setup.bash            # xacro
+#   uv pip install xacro                        # xacro（ROS 2 があれば source /opt/ros/jazzy/setup.bash でもよい）
 #   bash examples/crx3ia/fetch_urdf.sh          # → examples/crx3ia/fanuc_description/crx3ia.urdf
 #   urdf2vla init projects/crx3ia --from examples/crx3ia/project.yaml
 # FANUC の URDF にはグリッパがない。NVIDIA SimReady の Robotiq 2F-85 を、FANUC のフランジ座標 fanuc_flange
