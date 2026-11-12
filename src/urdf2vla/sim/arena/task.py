@@ -9,14 +9,14 @@
 from __future__ import annotations
 
 
-def _success_criteria(task):
+def _success_criteria(task, robot_cfg=None):
     """物体が容器の中に置かれ、グリッパに開く指令が出ている状態が 10 step 続く（SimView.task_success と同じ考え方）。"""
     from isaaclab_arena.progress_tracking.completion_criteria import CompletionCriteria
     from isaaclab_arena.tasks.predicates.temporal import TrueForConsecutiveStepsCfg
 
     from urdf2vla.sim.mimic import success_predicate
 
-    pred = success_predicate(task)
+    pred = success_predicate(task, robot_cfg)
     return CompletionCriteria(name="object_in_container", predicate_sequence=[TrueForConsecutiveStepsCfg(predicate=pred, required_steps=10)])
 
 
@@ -61,7 +61,7 @@ def make_task(c):
             # 記録・評価のループが episode_length_s で止める。環境側の時間切れはそれより後にして、最後の step で
             # 自動の reset が入らないようにする（入ると物体が置き場に戻り、最後の状態を記録できない）
             if c.mimic:  # Mimic の生成は成功の終了条件で成否を決める
-                return TaskTerminationCfg(timeout_s=task.episode_length_s + 10.0, success=[_success_criteria(task)])
+                return TaskTerminationCfg(timeout_s=task.episode_length_s + 10.0, success=[_success_criteria(task, c.robot)])
             return TaskTerminationCfg(timeout_s=task.episode_length_s + 10.0)
 
         def get_events_cfg(self):
@@ -70,7 +70,7 @@ def make_task(c):
         def get_mimic_env_cfg(self, arm_mode):
             from urdf2vla.sim.mimic import make_mimic_env_cfg
 
-            return make_mimic_env_cfg(task, c.mimic_trials)
+            return make_mimic_env_cfg(task, c.mimic_trials, c.robot, c.mimic_working_arm)
 
         def get_metrics(self):
             return []

@@ -120,7 +120,10 @@ urdf2vla answer --project P 'robot.gripper_joints=[joint7_R, joint7_L]' 'gripper
 - 双腕ロボットでは、VLA の state / action に両腕の関節と両グリッパを含める。`configure_camera` の `wrist` は腕ごとに
   展開されるため、既定のカメラは 4 台（左右の手先 + 左右の外部カメラ）。台は左右の肩の中央に置かれる。
   scripted 収集は物体に近い方の腕を使い、もう一方は初期姿勢のままグリッパを開いて保持する（既定の配置では毎回同じ腕）。
-  `generate_mimic` と `evaluate_vla --droid` は単腕だけ（双腕ではエラー）。2 本の腕をつなぐ root link に質量がないと
+  双腕では scripted 収集は設定の確認用。データは、ユーザが teleop で数個のデモを記録し（`generate_mimic --source-device socket`、
+  別の端末で `urdf2vla teleop-keys`。N で腕を切替）、Mimic で増やす。Mimic は元のデモで掴んだ腕が作業し、もう一方は止まったまま
+  （元のデモはすべて同じ腕で。混ざるとエラー）。scripted がうまくいかないロボット（OpenArm・Dual Scorpion など）で scripted の
+  成功率を上げようとしない。`evaluate_vla --droid` は単腕だけ。2 本の腕をつなぐ root link に質量がないと
   import_robot が `Expected 1 prims at '/World/Robot', found 2` で止まる → URDF の root link に inertial を書くようユーザに伝える。
 - グリッパが前腕の延長上にあるロボット（例: OpenArm）は手首の曲げが 90° までなので手先が真下を向くのは前腕が水平か下向きのときだけで、自動配置の台では
   IK の推奨姿勢が上腕を肩より上に回す。その姿勢を採用せず、`overrides.task` で台を下げ、容器・物体を届く範囲に置き、肘を下げた

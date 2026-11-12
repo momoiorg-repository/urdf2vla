@@ -100,11 +100,16 @@ task:
 ```
 
 ```bash
+# record the source demonstrations yourself: run `urdf2vla teleop-keys` in a second terminal
+urdf2vla generate_mimic --project projects/myrobot --source-device socket --source-demos 5 --trials 100
+# or let the scripted controller record them (a quick first test)
 urdf2vla generate_mimic --project projects/myrobot --source-demos 10 --trials 100
 ```
 
-1. **Source demonstrations** — the scripted controller records `--source-demos` successful episodes, with the poses
-   Mimic needs (`datasets/demos_mimic_src.hdf5`).
+1. **Source demonstrations** — `--source-demos` successful episodes, recorded with the poses Mimic needs
+   (`datasets/demos_mimic_src.hdf5`). By default the scripted controller records them; with `--source-device socket`
+   (keys from `urdf2vla teleop-keys`) or `keyboard` you record them yourself. Only episodes that put the object in the
+   container and let go of it count. Press R to retry an episode and Esc to stop.
 2. **Generation** — Mimic tries `--trials` new episodes, each with the object at a new random position, and keeps
    the successful ones (`datasets/demos_mimic_gen.hdf5`, actions only).
 3. **Recording** — each generated episode is replayed from its start state with the cameras on and saved like any
@@ -116,6 +121,26 @@ replayed into the dataset. `--trials` is a fixed number of attempts, not a targe
 With the Franka example (`task: {objects: [color_cube], container: klt_bin}`), 10 source demonstrations gave
 **75 successful episodes out of 100 trials**, all 75 recorded with images, with the cube spread over the whole
 spawn area (±27° of yaw) — in about 45 minutes on one RTX 5080 (3 min source, 23 min generation, 18 min recording).
+
+### Two-arm robots
+
+Each arm is its own end-effector for Mimic. The arm that grasps the object in your source demonstrations grasps and
+places in the generated ones. The other arm keeps the pose it had in the source demonstrations and is not moved with
+the object (that would push an idle hand into the container). All source demonstrations must use the same arm: if
+you record with both arms, `generate_mimic` stops and asks you to record each arm separately.
+
+This is how to build a dataset for robots whose scripted controller doesn't do the task well, such as OpenArm or Dual
+Scorpion. Set the robot and the scene up (`launch_sim` and `setup_teleoperation` pass), record a handful of
+demonstrations yourself, and let Mimic multiply them. With 5 source demonstrations (recorded by the scripted
+controller as a stand-in for a person) and 20 trials, the idle arm's hand stayed still (0 mm) in every generated
+episode:
+
+| Robot | Working arm | Generated | Recorded with images |
+|---|---|---|---|
+| Two Frankas (`examples/dual_franka`) | left | 15 of 20 | 15 |
+| OpenArm (`examples/openarm`) | left | 20 of 20 | 20 |
+
+Arms are switched with N while you teleoperate (`urdf2vla teleop-keys`).
 
 ## How many demonstrations?
 

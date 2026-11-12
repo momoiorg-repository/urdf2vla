@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 import yaml
 
 from test_analysis_generic import side_by_side_bimanual
@@ -73,11 +74,16 @@ def test_dual_arm_setup_keeps_both_arms_and_grippers(tmp_path, capsys):
     assert modality["state"]["left_arm"]["start"] == len(robot.arms[0].joints)
     assert modality["action"]["left_gripper"]["end"] == vla.action.dimension
 
-    # Mimic は手先 1 つが前提。双腕では黙って間違ったデモを作らず、はっきり断る
-    from urdf2vla.project import Project
-    from urdf2vla.result import SkillResult
-    from urdf2vla.skills.mimic import generate_mimic
+    # Mimic: 手先は腕ごと、グリッパの列は腕ごとの 7 次元の後にグリッパの順（右腕が先に検出されたロボット）
+    from urdf2vla.mimic_layout import eef_names, grasp_signal, gripper_column, pick_working_arm
 
-    res = SkillResult(skill="generate_mimic")
-    generate_mimic(Project(proj), {}, res, None)
-    assert res.status == "error" and "単腕" in res.errors[0], res
+    assert eef_names(robot) == [a.name for a in robot.arms]
+    n = 7 * len(robot.arms)
+    assert [gripper_column(robot, a.name) for a in robot.arms] == [n + robot.grippers.index(robot.gripper_for(a.name)) for a in robot.arms]
+    assert sorted(gripper_column(robot, a.name) for a in robot.arms) == [n, n + 1]
+    assert grasp_signal(robot, "left") == "grasp_left"
+    # 作業する腕: どのデモも同じ 1 本の腕で掴んでいること
+    assert pick_working_arm({"demo_0": ["left"], "demo_1": ["left"]}) == "left"
+    for bad in ({"demo_0": ["left"], "demo_1": ["right"]}, {"demo_0": []}, {"demo_0": ["left", "right"]}):
+        with pytest.raises(ValueError):
+            pick_working_arm(bad)

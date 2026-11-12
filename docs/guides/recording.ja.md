@@ -97,11 +97,16 @@ task:
 ```
 
 ```bash
+# 元のデモを自分で記録する: 別の端末で `urdf2vla teleop-keys` を実行する
+urdf2vla generate_mimic --project projects/myrobot --source-device socket --source-demos 5 --trials 100
+# スクリプトに記録させる（最初に流れを試すとき）
 urdf2vla generate_mimic --project projects/myrobot --source-demos 10 --trials 100
 ```
 
-1. **元のデモ** — スクリプトが `--source-demos` 個の成功したエピソードを、Mimic が使う姿勢と一緒に記録します
-   （`datasets/demos_mimic_src.hdf5`）。
+1. **元のデモ** — `--source-demos` 個の成功したエピソードを、Mimic が使う姿勢と一緒に記録します
+   （`datasets/demos_mimic_src.hdf5`）。既定ではスクリプトが記録し、`--source-device socket`（`urdf2vla teleop-keys` からの
+   キー入力）か `keyboard` では自分で操作して記録します。物体を容器に置いて離したエピソードだけを使います。R でエピソードを
+   やり直し、Esc で終わります。
 2. **生成** — Mimic が、物体を毎回新しい位置に置いて `--trials` 回試し、成功したものを残します
    （`datasets/demos_mimic_gen.hdf5`。行動だけ）。
 3. **記録** — 生成したエピソードを初期状態から再生し、カメラ画像付きでふつうの記録と同じく保存します
@@ -112,6 +117,23 @@ urdf2vla generate_mimic --project projects/myrobot --source-demos 10 --trials 10
 
 Franka の例（`task: {objects: [color_cube], container: klt_bin}`）では、元のデモ 10 個から **100 回中 75 回の生成に成功**し、
 75 個すべてを画像付きで記録できました。キューブは置く範囲の全体（向きは ±27°）に散らばります。RTX 5080 1 枚で約 45 分です（元のデモ 3 分、生成 23 分、記録 18 分）。
+
+### 双腕のロボット
+
+Mimic では腕ごとに手先を扱います。元のデモで物体を掴んだ腕が、生成するデモでも掴んで置きます。もう一方の腕は元のデモの
+姿勢のままで、物体に合わせて動かしません（動かすと止まっている手が容器に当たります）。元のデモはすべて同じ腕で記録して
+ください。両方の腕のデモが混ざると `generate_mimic` は止まり、腕ごとに分けて記録するよう伝えます。
+
+OpenArm や Dual Scorpion のように、スクリプトでうまく作業できないロボットのデータセットは、この方法で作ります。ロボットと
+場面を整え（`launch_sim` と `setup_teleoperation` が通る）、自分でデモをいくつか記録し、Mimic で増やします。元のデモ 5 個
+（人の代わりにスクリプトで記録）と 20 回の試行で、止まっている腕の手はどのエピソードでも動きませんでした（0 mm）。
+
+| ロボット | 作業する腕 | 生成に成功 | 画像付きで記録 |
+|---|---|---|---|
+| Franka 2 本（`examples/dual_franka`） | 左 | 20 回中 15 回 | 15 |
+| OpenArm（`examples/openarm`） | 左 | 20 回中 20 回 | 20 |
+
+操作中は N で腕を切り替えます（`urdf2vla teleop-keys`）。
 
 ## デモはいくつ必要か
 
