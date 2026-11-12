@@ -122,6 +122,10 @@ urdf2vla answer --project P 'robot.gripper_joints=[joint7_R, joint7_L]' 'gripper
   scripted 収集は物体に近い方の腕を使い、もう一方は初期姿勢のままグリッパを開いて保持する（既定の配置では毎回同じ腕）。
   `generate_mimic` と `evaluate_vla --droid` は単腕だけ（双腕ではエラー）。2 本の腕をつなぐ root link に質量がないと
   import_robot が `Expected 1 prims at '/World/Robot', found 2` で止まる → URDF の root link に inertial を書くようユーザに伝える。
+- グリッパが前腕の延長上にあるロボット（例: OpenArm）は手首の曲げが 90° までなので手先が真下を向くのは前腕が水平か下向きのときだけで、自動配置の台では
+  IK の推奨姿勢が上腕を肩より上に回す。その姿勢を採用せず、`overrides.task` で台を下げ、容器・物体を届く範囲に置き、肘を下げた
+  `robot.default_pose` を書く（`examples/openarm/project.yaml` が実例）。回転する指が物体をはじく・落とすときは
+  `robot.effort_limits` で指のトルクを下げる。
 - 双腕のグリッパ関節が自動検出されないときは `robot.gripper_joints` に両手分を書く。連続回転の指なら
   `robot.gripper_open_close` に `[[開, 閉], [開, 閉]]` を書く（例は `examples/dual_scorpion/project.yaml`）。
 - Isaac Lab 2.x 版で記録したデータ（HDF5 の urdf2vla_format 1）は convert_dataset が拒否する。記録し直す。

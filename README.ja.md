@@ -59,5 +59,6 @@ Codex（`codex`）で開いて「自分のロボットで VLA 開発を始めた
 
 2 本指のグリッパの付いた単腕・双腕のロボットと、Pick & Place のタスク 1 つ（物体を箱に入れる）。同梱の Franka Panda で
 replay の評価まで一通り検証済みです。この版での GR00T の実際の学習はまだ検証していません。双腕は Franka を 2 本並べた
-ロボットで同じく replay の評価まで検証済みです（scripted のデモで動かすのは片方の腕）。同梱の DUAL_SCORPION の例は
+ロボットと同梱の OpenArm の例で同じく replay の評価まで検証済みです（scripted のデモで動かすのは片方の腕。OpenArm は
+台と初期姿勢を例の中で手で決めています）。同梱の DUAL_SCORPION の例は
 検査までは通りますが、scripted の収集はまだ成功しません。

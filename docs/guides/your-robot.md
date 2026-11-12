@@ -380,6 +380,26 @@ collection does not succeed yet (0 of 8): the hand stops just short of the point
 and bin moved in front of one arm it gets above the object but stalls on the way down (0 of 4); the cause isn't
 isolated yet.
 
+The bundled OpenArm example (`examples/openarm`, Enactic OpenArm v2.0) runs end to end, but its layout is set by hand.
+OpenArm's gripper sits in line with the forearm and the wrist bends at most 90°, so the hand points straight down only
+when the forearm is level or tilted down. That limits top-down grasps to roughly 0.3 m or more below the shoulders. The
+automatic layout puts the table higher than that, and the only top-down pose that reaches it raises the upper arm above
+the shoulder. The example therefore:
+
+- lowers the table to 0.17 m and uses the low `plastic_tray` instead of the 14.6 cm bin;
+- puts the object and the tray on the left arm's side, because the arm can barely cross the body's centre line
+  (joint 2 turns inward at most 10°);
+- lowers the scripted approach height to 8 cm (`overrides.teleop.approach_height`);
+- sets an elbow-down starting pose in `robot.default_pose` (found with IK on the host);
+- lowers the finger torque to 2 N·m. At the URDF's 7 N·m, the revolute fingers push the cube against one finger, and
+  it slides out once the `launch_sim` grasp check stops holding it in place;
+- raises the physics solver's position iterations to 64 (`overrides.robot.asset.solver_position_iterations`). At the
+  default 32 the left gripper's grasp check fails narrowly (the cube ends 2.2 cm from the TCP, against a 2 cm limit).
+
+With these settings OpenArm passes all checks, scripted collection succeeds 8 times in 10 attempts (always the left
+arm), and replay evaluation succeeds 8 of 8. Both failed attempts had the object at the tray-side edge of its area and
+stopped 6 mm above the grasp height, most likely with an open finger resting on the tray rim.
+
 ## Limitations
 
 - Arms: one or two. More than two arm chains are not supported by the simulation embodiment.
