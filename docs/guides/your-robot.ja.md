@@ -335,7 +335,14 @@ cameras:
 もう一方の腕は初期姿勢のままグリッパを開いて保持します。この配置では毎回同じ腕になるので、scripted のデモで動くのは
 片方の腕だけです（もう一方の腕の関節とグリッパも毎フレーム記録します）。`launch_sim` の把持検査はグリッパごとに実行します。
 
-Franka を 2 本並べたロボットで、取り込み・検査・scripted の収集・変換・replay の評価まで確かめています。2 本の腕が
+Franka を 2 本並べたロボットで、取り込み・検査・scripted の収集・変換・replay の評価まで確かめています。このロボットは
+ダウンロードなしで使える例として同梱しているので、双腕の流れをまず試せます。
+
+```bash
+urdf2vla init projects/dual_franka --from examples/dual_franka/project.yaml
+```
+
+URDF は `examples/dual_franka/make_dual_panda.py` が単腕の Franka から作ります（共通の台座に 0.7 m 離して 2 本）。2 本の腕が
 共通の root link から出ているときは、その link に `<inertial>` を書いてください。質量がないと importer が腕ごとに別の
 articulation にし、`import_robot` が `Expected 1 prims at '/World/Robot', found 2` で止まります。
 

@@ -60,7 +60,8 @@ Design notes, simulator pitfalls and verification status (in Japanese): [DEVELOP
 
 Single- and dual-arm robots with a two-finger gripper, one pick-and-place task (an object into a bin). The bundled
 Franka Panda is verified end to end up to a replay evaluation; a full GR00T training run on this version is not yet
-verified. Dual-arm robots are verified the same way on two Franka arms side by side and on the bundled OpenArm example
-(the scripted expert moves one arm per demonstration; OpenArm's table and starting pose are set by hand in the example).
+verified. Dual-arm robots are verified the same way on two Franka arms side by side (`examples/dual_franka`) and on
+the bundled OpenArm example (the scripted expert moves one arm per demonstration; OpenArm's table and starting pose
+are set by hand in the example).
 The bundled Dual Scorpion example gets through the checks but not yet through scripted collection.
 urdf2vla's command output is currently in Japanese; the documentation explains every key and message in English.

@@ -1,0 +1,23 @@
+# urdf2vla の例: Franka を 2 本並べた双腕（合成ロボット。URDF は examples/franka の panda_arm_hand.urdf から作る, Apache-2.0）
+#   urdf2vla init projects/dual_franka --from examples/dual_franka/project.yaml
+# 双腕の流れ（検査・収集・変換・replay の評価）をダウンロードなしで確かめるための例。URDF は make_dual_panda.py が作る
+# （左右の腕を y = ±0.35 m に置き、link・関節の名前に left_ / right_ を付ける。2 本をつなぐ台座には質量を持たせる）。
+# カメラは書かない: URDF にカメラがないので DROID の配置（腕ごとの手先 2 台 + 左右の外部 2 台）。
+# scripted のデモでは、物体に近い方（既定の配置では毎回左）の腕が動き、もう一方は初期姿勢のまま止まっている。
+name: dual_franka
+
+robot:
+  urdf: ../franka/franka_description/robots/dual_panda.urdf
+  # 両腕とも Franka の手先が真下を向く ready 姿勢（examples/franka と同じ）
+  default_pose: {left_panda_joint1: 0.0, left_panda_joint2: -0.7854, left_panda_joint3: 0.0, left_panda_joint4: -2.3562,
+                 left_panda_joint5: 0.0, left_panda_joint6: 1.5708, left_panda_joint7: 0.7854,
+                 right_panda_joint1: 0.0, right_panda_joint2: -0.7854, right_panda_joint3: 0.0, right_panda_joint4: -2.3562,
+                 right_panda_joint5: 0.0, right_panda_joint6: 1.5708, right_panda_joint7: 0.7854}
+
+task:
+  objects: [color_cube]
+
+overrides:
+  robot: {}
+  task: {}
+  cameras: {}

@@ -298,12 +298,12 @@ pytest            # ホスト側（URDF 解析・設定生成・質問の出方�
 
 単腕のカメラは既定の DROID 配置（手先 + 左右の外部カメラ、各 256×256）。双腕は腕ごとの手先 + 左右の外部の 4 台。
 
-| | Franka | CRX-3iA + Robotiq 2F-85（SimReady に付け替え） | Franka 2 本（双腕、検証用の合成 URDF） | DUAL_SCORPION（双腕） | OpenArm v2.0（双腕、`examples/openarm`） |
+| | Franka | CRX-3iA + Robotiq 2F-85（SimReady に付け替え） | Franka 2 本（双腕、`examples/dual_franka` の合成 URDF） | DUAL_SCORPION（双腕） | OpenArm v2.0（双腕、`examples/openarm`） |
 |---|---|---|---|---|---|
 | Phase 1（質問・導入・検査・起動） | 質問なしで通る。import_robot 9 検査・launch_sim 9 検査 OK | 初期姿勢（IK の提案）だけ質問。Robot Assembler でグリッパを取り付け、import_robot 9 検査・launch_sim 9 検査 OK | 質問なしで通る。import_robot 12 検査・launch_sim 18 検査（グリッパごとの grasp_hold / grasp_opening）・setup_teleoperation 8 検査 OK | 初期姿勢（IK の提案）を質問。import_robot 12 検査 OK。launch_sim は立方体だけ OK（果物は回転する顎 1 N·m で grasp_hold に失敗）。setup_teleoperation は腕 10 N·m だと止まっている腕が下がって action_label に失敗、60 N·m で OK | 質問なしで通る（例に初期姿勢・グリッパの開閉向きを書いてある）。import_robot 12 検査・launch_sim 16 検査（回転する指なので grasp_opening はない）・setup_teleoperation 8 検査 OK。台・トレイ・作業の構え・初期姿勢は手で決めた（下記）。指は 2 N·m（URDF の 7 N·m では右手の grasp_hold に失敗）、solver_position_iterations 64（既定 32 では左手の grasp_hold が 2.2 cm ずれて失敗） |
-| Phase 2（scripted 収集） | 4/4、ラベル再生・最初の画像の検査 OK | 4/4、ラベル再生・最初の画像の検査 OK | 6/8（毎回左腕。失敗 2 回は下降中の時間切れ）、ラベル再生 OK | 0/8（物体の真上の目標に手先が収まらず下降に進まない）。物体と箱を左腕の前に寄せる（main の旧配置）と真上までは行くが下降中に止まる（0/4）。原因は未特定 | 8/10（毎回左腕。失敗 2 回は物体への下降中の時間切れ。どちらも物体がトレイ側の端にあり、手先が把持の高さの 6 mm 上で止まる。開いた指がトレイの縁に当たるとみられる）、ラベル再生 OK。トレイを中心線の近く（y = 0.03）に置くと 4/8（置く点が joint2 の内転の限界にかかる） |
+| Phase 2（scripted 収集） | 4/4、ラベル再生・最初の画像の検査 OK | 4/4、ラベル再生・最初の画像の検査 OK | 8/11（`examples/dual_franka` から作り直したプロジェクト。毎回左腕。失敗 3 回は下降中の時間切れ）、ラベル再生 OK | 0/8（物体の真上の目標に手先が収まらず下降に進まない）。物体と箱を左腕の前に寄せる（main の旧配置）と真上までは行くが下降中に止まる（0/4）。原因は未特定 | 8/10（毎回左腕。失敗 2 回は物体への下降中の時間切れ。どちらも物体がトレイ側の端にあり、手先が把持の高さの 6 mm 上で止まる。開いた指がトレイの縁に当たるとみられる）、ラベル再生 OK。トレイを中心線の近く（y = 0.03）に置くと 4/8（置く点が joint2 の内転の限界にかかる） |
 | Phase 3（変換） | GR00T ローダで読める、3 カメラの動画は元画像と一致 | 同左 | GR00T ローダで読める、4 カメラの動画は元画像と一致 | 未実施 | GR00T ローダで読める、4 カメラの動画は元画像と一致 |
-| Phase 4（replay 評価、`--video`） | 4/4（動画で把持・配置を確認） | 4/4（同左） | 6/6（動画で左腕の把持・配置と右腕の静止を確認） | 未実施 | 8/8（動画で左腕の把持・配置と右腕の静止を確認） |
+| Phase 4（replay 評価、`--video`） | 4/4（動画で把持・配置を確認） | 4/4（同左） | 8/8（動画で左腕の把持・配置と右腕の静止を確認） | 未実施 | 8/8（動画で左腕の把持・配置と右腕の静止を確認） |
 
 Isaac Lab 2.3.2 版（git タグ `isaaclab2-last`）では、CRX は URDF のグリッパで収集 3/4〜6/7・replay 4/6、
 DUAL_SCORPION は scripted 収集 0/8（回転する顎が物体を台に押し付けながら閉じ、腕が押し上げられる。URDF のトルクは仮値）だった。

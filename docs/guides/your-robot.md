@@ -353,7 +353,14 @@ gripper open. In this layout that is the same arm every episode, so scripted dem
 arm's joints and gripper are still recorded in every frame. `launch_sim` runs the grasp checks for each gripper.
 
 Tested end to end (import, checks, scripted collection, conversion and replay evaluation) on two Franka arms side by
-side. If your two arms hang off a common root link, give that link an `<inertial>`: without mass, the importer splits
+side. That robot is bundled as an example that needs no download, so you can try the dual-arm workflow first:
+
+```bash
+urdf2vla init projects/dual_franka --from examples/dual_franka/project.yaml
+```
+
+Its URDF is generated from the single Franka by `examples/dual_franka/make_dual_panda.py` (two arms 0.7 m apart on a
+shared base). If your two arms hang off a common root link, give that link an `<inertial>`: without mass, the importer splits
 the robot into two articulations and `import_robot` stops with `Expected 1 prims at '/World/Robot', found 2`.
 
 For the bundled Dual Scorpion example, set the 8th joint of each arm as the gripper (the first 7 joints are the arm):
