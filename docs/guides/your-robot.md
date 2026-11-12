@@ -40,7 +40,7 @@ attach one, and how to swap it for another. The steps are the same for any URDF.
     - **Joint limits and efforts are real values.** urdf2vla warns when every joint has the same effort or a joint has
       no limits — CAD exporters often write placeholders. You can override efforts without editing the URDF (see below).
     - **There is a gripper** — in the URDF, or one you [attach from NVIDIA's asset library](#simready).
-      Supported today: single-arm robots with a two-finger gripper.
+      Supported today: one- or two-arm robots with a two-finger gripper (see [Dual-arm robots](#dual-arm-robots)).
 
     A xacro file has to be expanded first: `xacro my_robot.urdf.xacro -o my_robot.urdf`.
 
@@ -347,9 +347,14 @@ Two arm chains are detected separately and kept separate through setup, simulati
 hard-coded in a Python file. For each arm, urdf2vla derives its joints, IK body, TCP, approach/finger axes and optional
 wrist camera; the VLA state and action are ordered as both arm joint groups followed by both gripper scalars.
 
-The table is centred between the shoulders. The built-in pick-and-place expert uses the arm nearer to the object and
-keeps the other arm at its initial pose with its gripper open. This is still a one-object task, but both arms are
-observable and controllable by the policy. `launch_sim` runs the grasp checks for each gripper that exists.
+The table is centred between the shoulders, with the objects on its left half and the bin on its right half. The
+built-in scripted expert grasps with the arm nearer to the object and keeps the other arm at its initial pose with its
+gripper open. In this layout that is the same arm every episode, so scripted demonstrations move only one arm; the other
+arm's joints and gripper are still recorded in every frame. `launch_sim` runs the grasp checks for each gripper.
+
+Tested end to end (import, checks, scripted collection, conversion and replay evaluation) on two Franka arms side by
+side. If your two arms hang off a common root link, give that link an `<inertial>`: without mass, the importer splits
+the robot into two articulations and `import_robot` stops with `Expected 1 prims at '/World/Robot', found 2`.
 
 For the bundled Dual Scorpion example, set the 8th joint of each arm as the gripper (the first 7 joints are the arm):
 
@@ -359,16 +364,25 @@ robot:
   front_axis: +y
   gripper_joints: [joint7_R, joint7_L]
   gripper_open_close: [[-0.8, 0.0], [-0.8, 0.0]]  # provisional; confirm the opening direction
+  effort_limits: {"joint[0-6]_[RL]": 60.0}         # provisional, see below
+task:
+  objects: [color_cube]
 ```
 
 The Dual Scorpion URDF gives every joint `effort: 1.0`, which the project README calls provisional. Replace it with
-the real motor values under `robot.effort_limits` before judging grasp behaviour in simulation. Its gripper opening
-width also cannot be derived from a single continuous joint, so object fit is not screened automatically.
+the real motor values under `robot.effort_limits` before judging grasp behaviour in simulation. At 10 N·m the idle arm
+sags and `setup_teleoperation` fails; the example uses 60 N·m for the arms and keeps the URDF value for the grippers.
+The rotating jaw can't hold the fruit, so the example uses the cube only. Its gripper opening width also cannot be
+derived from a single continuous joint, so object fit is not screened automatically.
+
+With these settings the Dual Scorpion passes `import_robot`, `launch_sim` and `setup_teleoperation`, but scripted
+collection does not succeed yet (0 of 8): the hand stops just short of the point above the object.
 
 ## Limitations
 
-- **Dual-arm robots** can be inspected, configured and imported (with all checks), but `launch_sim` and later steps
-  don't support them yet.
+- Arms: one or two. More than two arm chains are not supported by the simulation embodiment.
+- Dual-arm robots: the scripted expert uses one arm per episode (the same arm in the default layout).
+  `generate_mimic` and `evaluate_vla --droid` are single-arm only.
 - One task: pick an object and place it in a container (or on a flat target). Objects come from the catalog in
   `src/urdf2vla/objects.py`.
 - Grippers: two-finger parallel or single-moving-jaw grippers. Suction and multi-finger hands are not supported.

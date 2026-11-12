@@ -72,3 +72,12 @@ def test_dual_arm_setup_keeps_both_arms_and_grippers(tmp_path, capsys):
     modality = modality_json(vla)
     assert modality["state"]["left_arm"]["start"] == len(robot.arms[0].joints)
     assert modality["action"]["left_gripper"]["end"] == vla.action.dimension
+
+    # Mimic は手先 1 つが前提。双腕では黙って間違ったデモを作らず、はっきり断る
+    from urdf2vla.project import Project
+    from urdf2vla.result import SkillResult
+    from urdf2vla.skills.mimic import generate_mimic
+
+    res = SkillResult(skill="generate_mimic")
+    generate_mimic(Project(proj), {}, res, None)
+    assert res.status == "error" and "単腕" in res.errors[0], res

@@ -60,6 +60,6 @@ Design notes, simulator pitfalls and verification status (in Japanese): [DEVELOP
 
 Single- and dual-arm robots with a two-finger gripper, one pick-and-place task (an object into a bin). The bundled
 Franka Panda is verified end to end up to a replay evaluation; a full GR00T training run on this version is not yet
-verified. Dual-arm support covers both arm command groups, per-arm cameras and TCPs, and grasp checks for each gripper;
-the Dual Scorpion setup has been checked on the host (macOS) but not yet run in Isaac Sim. urdf2vla's command output is
-currently in Japanese; the documentation explains every key and message in English.
+verified. Dual-arm robots are verified the same way on two Franka arms side by side (the scripted expert moves one arm
+per demonstration); the bundled Dual Scorpion example gets through the checks but not yet through scripted collection.
+urdf2vla's command output is currently in Japanese; the documentation explains every key and message in English.

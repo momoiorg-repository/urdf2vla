@@ -4,6 +4,9 @@
 # 7 関節の腕が左右に 2 本、8 番目の関節（joint7_R / joint7_L）がグリッパです。
 # joint7 は連続回転関節なので、開閉角は URDF から決まりません。下の値は 2026-10-30 に使った仮値で、
 # 実機のグリッパに合わせてください（view / launch_sim の snapshot で開閉方向を確認）。
+# import_robot が初期姿勢（IK の提案）を質問します: urdf2vla answer --project projects/dual_scorpion robot.default_pose=suggested
+# 2026-11-12 の Isaac Sim での確認: import_robot・launch_sim・setup_teleoperation は通る。scripted 収集は 0/8
+# （物体の真上で手先が目標に収まらず、下降に進まない。2.x 版でも 0/8）。双腕の流れ全体は Franka 2 本の合成ロボットで確認済み。
 name: dual_scorpion
 
 robot:
@@ -11,8 +14,14 @@ robot:
   front_axis: +y  # 肩が x 方向に並び、腕は +y に伸びる
   gripper_joints: [joint7_R, joint7_L]
   gripper_open_close: [[-0.8, 0.0], [-0.8, 0.0]]  # [right, left] の [開, 閉] [rad]
-  # URDF のトルク 1 N·m は仮値（作者の README）。実機の値が分かったら書き換える。下は検証用の仮の値
-  effort_limits: {"joint[0-6]_[RL]": 10.0}
+  # URDF のトルク 1 N·m は仮値（作者の README）。実機の値が分かったら書き換える。下は検証用の仮の値。
+  # 10 N·m では止まっている側の腕が重力で下がり、setup_teleoperation の action_label に失敗する。
+  # グリッパ（joint7）は URDF の 1 N·m のまま（5 N·m にすると閉じたときに物体をはじく）
+  effort_limits: {"joint[0-6]_[RL]": 60.0}
+
+# 回転する顎（1 N·m）では果物を保持できない（launch_sim の grasp_hold に失敗）。立方体だけにする
+task:
+  objects: [color_cube]
 
 cameras:
   - preset: wrist   # 双腕なので腕ごとに付く（right_wrist_cam / left_wrist_cam）

@@ -119,7 +119,9 @@ urdf2vla answer --project P 'robot.gripper_joints=[joint7_R, joint7_L]' 'gripper
   （旧キー `rot_wxyz` は変換されるが警告が出るので、ユーザに書き換えを勧める）。
 - 双腕ロボットでは、VLA の state / action に両腕の関節と両グリッパを含める。`configure_camera` の `wrist` は腕ごとに
   展開されるため、既定のカメラは 4 台（左右の手先 + 左右の外部カメラ）。台は左右の肩の中央に置かれる。
-  scripted 収集は物体に近い方の腕を使い、もう一方は初期姿勢のままグリッパを開いて保持する。
+  scripted 収集は物体に近い方の腕を使い、もう一方は初期姿勢のままグリッパを開いて保持する（既定の配置では毎回同じ腕）。
+  `generate_mimic` と `evaluate_vla --droid` は単腕だけ（双腕ではエラー）。2 本の腕をつなぐ root link に質量がないと
+  import_robot が `Expected 1 prims at '/World/Robot', found 2` で止まる → URDF の root link に inertial を書くようユーザに伝える。
 - 双腕のグリッパ関節が自動検出されないときは `robot.gripper_joints` に両手分を書く。連続回転の指なら
   `robot.gripper_open_close` に `[[開, 閉], [開, 閉]]` を書く（例は `examples/dual_scorpion/project.yaml`）。
 - Isaac Lab 2.x 版で記録したデータ（HDF5 の urdf2vla_format 1）は convert_dataset が拒否する。記録し直す。

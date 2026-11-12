@@ -261,12 +261,17 @@ projects/<name>/
   双腕では手先カメラを腕ごとに付けるので 4 台（左右の手先 + 左右の外部）。
 - 手先カメラは link の下に置き、launch_sim の `camera_mount` 検査で設定どおりの位置・向きかを確かめる
   （2.x 版の DUAL_SCORPION では描画側（Fabric）のローカル変換がずれて手先カメラが手首に埋まったため、環境を作った直後に
-  書き直していた。3.0 版では Franka / CRX でずれないことを確認し、書き直しはやめた。双腕の手先カメラは 3.0 版で未実行）。
+  書き直していた。3.0 版では Franka / CRX と双腕（Franka 2 本・DUAL_SCORPION）でずれないことを確認し、書き直しはやめた）。
 - 正面が +x でないロボット（Fusion から出した URDF など）は、肩の並びと腕の伸びる向きから正面を推定して確認し、+x を向くように回して置く。
 - 台の配置は、肩の高さと腕の長さから「肩から腕の長さの半分・斜め下 45°」に把持点が来るように決める（肩が高く腕が短いロボットは台を高くする）。
 - 双腕の Embodiment は腕ごとに IK / 関節目標の ActionTerm とグリッパの ActionTerm を並べ、Arena の `ArmMode.DUAL_ARM` にする。
-  state / action は腕の順、グリッパの順。台の中心は左右の肩の中央、scripted は物体に近い腕だけを動かし、もう一方は開いたまま保持する。
-  launch_sim の `grasp_hold` / `grasp_opening` はグリッパのある腕ごとに検査する。
+  state / action は腕の順、グリッパの順（sim の関節の並びは左右が交互になるが、collect の `label_replay` 検査で対応を確かめる）。
+  台の中心は左右の肩の中央、scripted は物体に近い腕だけを動かし、もう一方は開いたまま保持する。既定の配置では物体が左半分・
+  箱が右半分にあるので、毎回同じ腕（物体の側）が箱まで運ぶ（もう一方の腕はデモの中で動かない）。
+  launch_sim の `grasp_hold` / `grasp_opening` はグリッパのある腕ごとに検査する。台の届く範囲の IK 検査（ReachChecker）は単腕だけ。
+  Mimic（`generate_mimic`）と DROID の zero-shot 評価は手先 1 つが前提なので、双腕では明示的なエラーにする。
+- 双腕の URDF で、2 本の腕をつなぐ root link に質量（inertial）がないと、importer が腕ごとに別の articulation にする
+  （import_robot が `Expected 1 prims at '/World/Robot', found 2` で止まる）。root link に inertial を書く。
 - 片側だけ動く顎のグリッパは、arm の最後の関節として見えるので質問する。把持点は「固定側の顎と開いた顎の間」。
 - URDF 変換は `merge_fixed_joints=False`（True だと `panda_hand` のような End Effector が剛体でなくなる）、
   USD は `build/usd/` に固定してキャッシュを効かせる（Isaac Lab 3.0 の importer は `build/usd/robot/robot.usda` + payloads の階層 USD を作る）。
@@ -289,16 +294,16 @@ projects/<name>/
 pytest            # ホスト側（URDF 解析・設定生成・質問の出方）。Franka / CRX-3iA / 合成双腕
 ```
 
-## 検証状況（2026-11-06 時点。Isaac Sim の結果は 2026-11-05, RTX 5080, Isaac Lab 3.0.0 / Isaac Sim 6.2.0 / Isaac Lab Arena b9e37c5）
+## 検証状況（単腕は 2026-11-05、双腕は 2026-11-12。RTX 5080, Isaac Lab 3.0.0 / Isaac Sim 6.2.0 / Isaac Lab Arena b9e37c5）
 
 単腕のカメラは既定の DROID 配置（手先 + 左右の外部カメラ、各 256×256）。双腕は腕ごとの手先 + 左右の外部の 4 台。
 
-| | Franka | CRX-3iA + Robotiq 2F-85（SimReady に付け替え） | DUAL_SCORPION（双腕） |
-|---|---|---|---|
-| Phase 1（質問・導入・検査・起動） | 質問なしで通る。import_robot 9 検査・launch_sim 9 検査 OK | 初期姿勢（IK の提案）だけ質問。Robot Assembler でグリッパを取り付け、import_robot 9 検査・launch_sim 9 検査 OK | macOS のホストで実 URDF から 2 腕・2 グリッパ・4 カメラ・16 次元 state / action の生成まで確認。Isaac Sim は未実行 |
-| Phase 2（scripted 収集） | 4/4、ラベル再生・最初の画像の検査 OK | 4/4、ラベル再生・最初の画像の検査 OK | 未実施 |
-| Phase 3（変換） | GR00T ローダで読める、3 カメラの動画は元画像と一致 | 同左 | 未実施 |
-| Phase 4（replay 評価、`--video`） | 4/4（動画で把持・配置を確認） | 4/4（同左） | 未実施 |
+| | Franka | CRX-3iA + Robotiq 2F-85（SimReady に付け替え） | Franka 2 本（双腕、検証用の合成 URDF） | DUAL_SCORPION（双腕） |
+|---|---|---|---|---|
+| Phase 1（質問・導入・検査・起動） | 質問なしで通る。import_robot 9 検査・launch_sim 9 検査 OK | 初期姿勢（IK の提案）だけ質問。Robot Assembler でグリッパを取り付け、import_robot 9 検査・launch_sim 9 検査 OK | 質問なしで通る。import_robot 12 検査・launch_sim 18 検査（グリッパごとの grasp_hold / grasp_opening）・setup_teleoperation 8 検査 OK | 初期姿勢（IK の提案）を質問。import_robot 12 検査 OK。launch_sim は立方体だけ OK（果物は回転する顎 1 N·m で grasp_hold に失敗）。setup_teleoperation は腕 10 N·m だと止まっている腕が下がって action_label に失敗、60 N·m で OK |
+| Phase 2（scripted 収集） | 4/4、ラベル再生・最初の画像の検査 OK | 4/4、ラベル再生・最初の画像の検査 OK | 6/8（毎回左腕。失敗 2 回は下降中の時間切れ）、ラベル再生 OK | 0/8（物体の真上の目標に手先が収まらず下降に進まない） |
+| Phase 3（変換） | GR00T ローダで読める、3 カメラの動画は元画像と一致 | 同左 | GR00T ローダで読める、4 カメラの動画は元画像と一致 | 未実施 |
+| Phase 4（replay 評価、`--video`） | 4/4（動画で把持・配置を確認） | 4/4（同左） | 6/6（動画で左腕の把持・配置と右腕の静止を確認） | 未実施 |
 
 Isaac Lab 2.3.2 版（git タグ `isaaclab2-last`）では、CRX は URDF のグリッパで収集 3/4〜6/7・replay 4/6、
 DUAL_SCORPION は scripted 収集 0/8（回転する顎が物体を台に押し付けながら閉じ、腕が押し上げられる。URDF のトルクは仮値）だった。
@@ -315,5 +320,7 @@ Isaac Lab 3.0 版で試したのは scripted の収集だけで、socket / keybo
 - 場面・タスクを SimReady アセット（NVIDIA の Hugging Face にある物体・台など）から選べるようにする（Arena の Object と
   配置の relations を使う）。いまは台・立方体・置き場所のプリミティブだけ
 - SimReady のグリッパを増やす。Robotiq 2F-140 は閉リンクの残りの関節（inner knuckle は excludeFromArticulation）を受け身にしても指がばらけて何も保持できなかった。Hand-E は 2 つの顎を別々に駆動する（駆動する関節を複数持てるようにする）。SCHUNK は mm 単位のアセットで開きが小さい。xArm はりんごが抜ける
-- 双腕の環境（Arena の Embodiment に 2 本の腕と 2 つのグリッパ）
+- 双腕: 両方の腕を使うデモ（いまの配置では scripted が毎回同じ腕を使う。物体と箱の左右をエピソードごとに入れ替えるなど）、
+  止まっている腕を IK ではなく関節目標で保持する（DUAL_SCORPION の 10 N·m では重力で下がり、IK が追いかけて関節がずれる）、
+  台の届く範囲の IK 検査を双腕にも、Mimic の双腕対応、keyboard（N で腕を切替）の確認、DUAL_SCORPION の scripted 収集
 - URDF のないロボット（USD しかないもの）: USD 入力への対応（schema は双腕・関節の役割・mimic グリッパに対応済み）

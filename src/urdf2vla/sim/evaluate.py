@@ -81,7 +81,7 @@ class DroidObservation:
 
     def __init__(self, view, vla, cameras):
         arm = view.cfg.arms[0]
-        if len(arm.joints) != 7 or not view.cfg.grippers:
+        if len(view.cfg.arms) != 1 or len(arm.joints) != 7 or not view.cfg.grippers:
             raise RuntimeError("GR00T の DROID は 7 関節の腕とグリッパのロボット（Franka）向けです。")
         wrist = next((c.name for c in cameras.cameras if c.mount == "link"), None)
         ext = next((c.name for c in cameras.cameras if c.mount == "world"), None)
