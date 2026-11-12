@@ -44,6 +44,37 @@ def _pose(m: np.ndarray) -> tuple[tuple, tuple]:
     return tuple(float(v) for v in m[:3, 3]), tuple(float(v) for v in quaternion_from_matrix(m))  # wxyz
 
 
+def _tf(m: np.ndarray) -> Transform:
+    """4×4 の同次変換 → Transform（四元数は (x, y, z, w)）。"""
+    from trimesh.transformations import quaternion_from_matrix
+
+    w, x, y, z = (float(v) for v in quaternion_from_matrix(m))
+    return Transform(tuple(float(v) for v in m[:3, 3]), (x, y, z, w))
+
+
+def node_pose(node, t: Transform) -> None:
+    node.position, node.wxyz = tuple(t.pos), _wxyz(t.rot)
+
+
+def _resolve_cameras(project: Project, cfg: dict | None, task: dict | None) -> tuple[list[dict], dict]:
+    """configure_camera と同じ規則で、いまのカメラの指定（view で保存したもの > project.yaml > 既定）からカメラを作る（ファイルは書かない）。"""
+    if not cfg or not task:
+        return [], {"source": None, "error": "configure_task まで進めるとカメラを表示・編集できます。", "found": []}
+    from urdf2vla.result import SkillResult
+    from urdf2vla.schema.robot import RobotConfig
+    from urdf2vla.skills.scene import build_cameras, camera_specs, urdf_cameras
+
+    rc = RobotConfig.model_validate(cfg)
+    found = urdf_cameras(rc)
+    specs, source = camera_specs(project, rc, found)
+    r = SkillResult(skill="view")
+    try:
+        built = build_cameras(project, rc, specs, found, r)
+    except Exception as e:  # noqa: BLE001  表示用。壊れた指定でも画面は開く
+        return [], {"source": source, "error": f"{type(e).__name__}: {e}", "found": found}
+    return [c.model_dump(mode="json") for c in built or []], {"source": source, "error": "; ".join(r.errors) or None, "found": found}
+
+
 def _load_yaml(path: Path) -> dict | None:
     return yaml.safe_load(path.read_text()) if path.exists() else None
 
@@ -105,7 +136,6 @@ def run_viewer(project: Project, host: str = "0.0.0.0", port: int = 8080, block:
     urdf_path, meta, robot_in, dropped = view_urdf(project)
     cfg = _load_yaml(project.generated / "robot_config.yaml")
     task = _load_yaml(project.generated / "task.yaml")
-    cams = _load_yaml(project.generated / "cameras.yaml")
 
     server = viser.ViserServer(host=host, port=port, label=f"urdf2vla: {project.name}")
     server.scene.set_up_direction("+z")
@@ -187,24 +217,77 @@ def run_viewer(project: Project, host: str = "0.0.0.0", port: int = 8080, block:
         sr = get_gripper(cfg["grippers"][0]["simready"])
         gripper_proxy = (server.scene.add_box("/simready_gripper", color=(40, 40, 40), dimensions=(0.03, 0.15, sr.fingertip), opacity=0.45), sr)
 
-    # ---- カメラ（視野の錐と、launch_sim の画像）
-    cam_nodes = []
-    if cams:
+    # ---- カメラ（視野の錐と、launch_sim の画像）。「カメラ」の欄で取り付け先・位置・向き・視野角を変えて保存できる
+    from urdf2vla import camera_edit as CE
+
+    arm_index = {a["ik_body"]: i for i, a in enumerate((cfg or {}).get("arms") or [])}
+    cams: list[dict] = []  # 画面のカメラ: name, mount（link 名 / None = world）, local（取り付け先から見た光学 frame）, hfov, width, height, orig, touched, img, node
+    cam_info = {"source": None, "error": None, "found": []}
+
+    def snapshot(name: str):
         from PIL import Image
 
-        for cam in cams["cameras"]:
-            hfov = 2 * math.atan(cam["horizontal_aperture"] / (2 * cam["focal_length"]))
-            aspect = cam["width"] / cam["height"]
-            vfov = 2 * math.atan(math.tan(hfov / 2) / aspect)
-            img = None
-            for suffix in ("start", "end"):
-                f = project.snapshots / f"{cam['name']}_{suffix}.png"
-                if f.exists():
-                    img = np.asarray(Image.open(f).convert("RGB"))
-                    break
-            node = server.scene.add_camera_frustum(f"/cameras/{cam['name']}", fov=vfov, aspect=aspect, scale=0.08, color=(20, 120, 220), image=img)
-            server.scene.add_label(f"/cameras/{cam['name']}/label", cam["name"], position=(0.0, 0.0, 0.0))
-            cam_nodes.append((cam, node))
+        for suffix in ("start", "end"):
+            f = project.snapshots / f"{name}_{suffix}.png"
+            if f.exists():
+                return np.asarray(Image.open(f).convert("RGB"))
+        return None
+
+    def make_frustum(c: dict) -> None:
+        if c.get("node") is not None:
+            c["node"].remove()
+        c["node"] = server.scene.add_camera_frustum(
+            f"/cameras/{c['name']}", fov=CE.vfov_rad(c["hfov"], c["width"], c["height"]), aspect=c["width"] / c["height"],
+            scale=0.08, color=(230, 120, 20) if c["touched"] else (20, 120, 220), image=c.get("img"),
+        )  # fmt: skip
+        server.scene.add_label(f"/cameras/{c['name']}/label", c["name"], position=(0.0, 0.0, 0.0))
+
+    def load_cameras() -> None:
+        for c in cams:
+            if c.get("node") is not None:
+                c["node"].remove()
+        cams.clear()
+        listed, info = _resolve_cameras(project, cfg, task)
+        cam_info.update(info)
+        for cam in listed:
+            c = {
+                "name": cam["name"], "mount": cam.get("mount_body") if cam["mount"] == "link" else None, "local": CE.optical_local(cam),
+                "hfov": CE.hfov_deg(cam), "width": cam["width"], "height": cam["height"], "clip": list(cam.get("clipping_range") or [0.01, 10.0]),
+                "orig": CE.original_spec(cam, arm_index),
+                "touched": False, "img": snapshot(cam["name"]), "node": None,
+            }  # fmt: skip
+            make_frustum(c)
+            cams.append(c)
+
+    load_cameras()
+
+    def cam_world(c: dict, q: np.ndarray) -> Transform:
+        return c["local"] if c["mount"] is None else _tf(link_world(c["mount"], q)) @ c["local"]
+
+    def meshes_near(point_world, radius: float) -> list:
+        """カメラの手前 radius より近くを通るロボットのメッシュ（viser の描画は手前 1 cm から描くので、プレビューでは隠して
+        シミュレータの clip_near の代わりにする。筐体・手の中にあるカメラ）。"""
+        import trimesh
+
+        handles = {h.name.rsplit("/", 1)[-1]: h for h in getattr(robot, "_meshes", [])}
+        scene = getattr(getattr(robot, "_urdf", None), "scene", None)  # viser の内部。変わっていたら隠さずに描く
+        if scene is None or not handles:
+            return []
+        p = np.linalg.inv(base_m) @ np.array([*point_world, 1.0])
+        out = []
+        for g, mesh in scene.geometry.items():
+            h = handles.get(g)
+            if h is None:
+                continue
+            T = scene.graph.get(g)[0]
+            local = (np.linalg.inv(T) @ p)[:3]
+            lo, hi = mesh.bounds
+            if np.any(local < lo - radius) or np.any(local > hi + radius):
+                continue
+            _, dist, _ = trimesh.proximity.closest_point(mesh, local[None])
+            if float(dist[0]) < radius:
+                out.append(h)
+        return out
 
     def place_dependents(q: np.ndarray) -> None:
         if arm_cfg:
@@ -223,12 +306,9 @@ def run_viewer(project: Project, host: str = "0.0.0.0", port: int = 8080, block:
                 node.position, node.wxyz = tuple(center[:3]), _pose(mount)[1]
         for link, mark in ee_marks.items():
             mark.position, mark.wxyz = _pose(link_world(link, q))
-        for cam, node in cam_nodes:
-            local = _mat(Transform(tuple(cam["pos"]), tuple(cam["rot_xyzw"])))
-            if cam.get("convention") == "opengl":  # OpenGL（-z 前方, +y 上）→ viser（+z 前方, -y 上）
-                local = local @ np.diag([1.0, -1.0, -1.0, 1.0])
-            m = link_world(cam["mount_body"], q) @ local if cam["mount"] == "link" else local
-            node.position, node.wxyz = _pose(m)
+        for c in cams:  # 光学 frame（z 前方・y 下）= viser のカメラの約束
+            node_pose(c["node"], cam_world(c, q))
+        place_gizmo(q)
 
     # ---- GUI: 関節・グリッパ
     default = (cfg or {}).get("default_pose") or {}
@@ -330,6 +410,248 @@ def run_viewer(project: Project, host: str = "0.0.0.0", port: int = 8080, block:
                 status_md.content = check_summary(project)
 
             save.on_click(on_save)
+
+    # ---- GUI: カメラ（取り付け先・位置・向き・視野角を変えて answers.yaml に保存。configure_camera が使う）
+    SOURCE = {"view": "`urdf2vla view` で保存したカメラ（answers.yaml）", "project": "project.yaml の cameras", "preset": "--preset",
+              "urdf": "URDF にあるカメラ（既定）", "droid": "DROID と同じ配置（既定。URDF にカメラがない）"}  # fmt: skip
+    WORLD = "world（固定）"
+    found_links = [l for _, c in cam_info["found"] for l in [c.link, *c.alternatives]]
+    mount_options = [WORLD, *found_links, *sorted(l for l in yurdf.link_map if l not in found_links)]
+    sync = {"busy": False, "views": {}}
+    gizmo = server.scene.add_transform_controls("/camera_gizmo", scale=0.12, visible=False)
+
+    def selected() -> dict | None:
+        return next((c for c in cams if c["name"] == cam_sel.value), None)
+
+    def place_gizmo(q: np.ndarray) -> None:
+        c = selected() if cams else None
+        gizmo.visible = c is not None and edit_on.value
+        if c is not None:
+            sync["busy"] = True
+            node_pose(gizmo, cam_world(c, q))
+            sync["busy"] = False
+
+    with server.gui.add_folder("カメラ", expand_by_default=False):
+        cam_md = server.gui.add_markdown("")
+        cam_sel = server.gui.add_dropdown("カメラ", options=[c["name"] for c in cams] or ["（なし）"])
+        edit_on = server.gui.add_checkbox("動かすハンドルを表示", initial_value=True)
+        name_in = server.gui.add_text("名前", initial_value="")
+        mount_dd = server.gui.add_dropdown("取り付け先", options=mount_options, initial_value=WORLD)
+        fov_sl = server.gui.add_slider("水平の視野角 [°]", min=20, max=150, step=1, initial_value=70)
+        w_in = server.gui.add_number("幅 [px]", initial_value=256, min=16, max=2048, step=1)
+        h_in = server.gui.add_number("高さ [px]", initial_value=256, min=16, max=2048, step=1)
+        b_prev = server.gui.add_button("プレビュー画像を作る")
+        prev_img = server.gui.add_image(np.full((64, 64, 3), 235, dtype=np.uint8), label="プレビュー（ブラウザで描いた形だけの画像。実際の画像は launch_sim）")
+        b_look = server.gui.add_button("このカメラから見る")
+        b_back = server.gui.add_button("元の視点に戻る")
+        b_add = server.gui.add_button("カメラを追加（台を見下ろす）")
+        b_del = server.gui.add_button("このカメラを削除")
+        b_save = server.gui.add_button("カメラを保存")
+        b_clear = server.gui.add_button("保存したカメラを消す（project.yaml / 既定に戻す）")
+        cam_saved = server.gui.add_markdown("")
+
+    def cam_status() -> str:
+        if cam_info["error"]:
+            return cam_info["error"]
+        src = SOURCE.get(cam_info["source"], "")
+        changed = [c["name"] for c in cams if c["touched"]]
+        return (f"いまの指定: {src}。ハンドルで動かし、「カメラを保存」で answers.yaml に書きます（オレンジの錐は未保存の変更）。"
+                + (f"\n\n変更: {', '.join(changed)}" if changed else ""))  # fmt: skip
+
+    def show_selected() -> None:
+        c = selected()
+        sync["busy"] = True
+        if c is not None:
+            name_in.value = c["name"]
+            mount_dd.value = c["mount"] if c["mount"] in mount_options else WORLD
+            fov_sl.value = round(c["hfov"])
+            w_in.value, h_in.value = c["width"], c["height"]
+            prev_img.image = c["img"] if c.get("img") is not None else np.full((64, 64, 3), 235, dtype=np.uint8)
+        sync["busy"] = False
+        cam_md.content = cam_status()
+        place_gizmo(current())
+
+    def refresh_names(select: str | None = None) -> None:
+        sync["busy"] = True
+        names_ = [c["name"] for c in cams] or ["（なし）"]
+        cam_sel.options = names_
+        cam_sel.value = select if select in names_ else names_[0]
+        sync["busy"] = False
+        show_selected()
+
+    def touched(c: dict, redraw: bool = False) -> None:
+        c["touched"] = True
+        c["img"] = None  # launch_sim の画像はもう合わない
+        if redraw:
+            make_frustum(c)
+        else:
+            c["node"].color = (230, 120, 20)
+            c["node"].image = None
+        node_pose(c["node"], cam_world(c, current()))
+        cam_md.content = cam_status()
+
+    cam_sel.on_update(lambda _: None if sync["busy"] else show_selected())
+    edit_on.on_update(lambda _: place_gizmo(current()))
+
+    @gizmo.on_update
+    def _(_):
+        c = selected()
+        if sync["busy"] or c is None:
+            return
+        world = Transform(tuple(float(v) for v in gizmo.position), (float(gizmo.wxyz[1]), float(gizmo.wxyz[2]), float(gizmo.wxyz[3]), float(gizmo.wxyz[0])))
+        c["local"] = CE.relative_to(None if c["mount"] is None else _tf(link_world(c["mount"], current())), world)
+        touched(c)
+
+    @name_in.on_update
+    def _(_):
+        c = selected()
+        new = name_in.value.strip()
+        if sync["busy"] or c is None or new == c["name"]:
+            return
+        if not new or any(o["name"] == new for o in cams):
+            cam_saved.content = f"名前 '{new}' は使えません（空・重複）。"
+            return
+        c["name"] = new
+        touched(c, redraw=True)
+        refresh_names(new)
+
+    @mount_dd.on_update
+    def _(_):
+        c = selected()
+        if sync["busy"] or c is None:
+            return
+        world = cam_world(c, current())  # 見た目の位置は変えずに、取り付け先から見た姿勢を付け替える
+        c["mount"] = None if mount_dd.value == WORLD else mount_dd.value
+        c["local"] = CE.relative_to(None if c["mount"] is None else _tf(link_world(c["mount"], current())), world)
+        touched(c)
+
+    def on_optics(_):
+        c = selected()
+        if sync["busy"] or c is None:
+            return
+        c["hfov"], c["width"], c["height"] = float(fov_sl.value), int(w_in.value), int(h_in.value)
+        touched(c, redraw=True)
+
+    for w_ in (fov_sl, w_in, h_in):
+        w_.on_update(on_optics)
+
+    @b_prev.on_click
+    def _(event):
+        c = selected()
+        if c is None or event.client is None:
+            return
+        # viser の描画（get_render）は手前 1 cm から描くので、筐体や手の中にあるカメラ（clip_near が大きい）では、
+        # カメラの手前 clip_near より近くを通るロボットのメッシュを隠して描く（シミュレータの clip_near の代わり）
+        t = cam_world(c, current())
+        hidden = [c_["node"] for c_ in cams] + [gizmo, *tcp_nodes]
+        if c["clip"][0] > 0.015:
+            hidden += meshes_near(t.pos, c["clip"][0])
+        vis = [n.visible for n in hidden]
+        for n in hidden:
+            n.visible = False
+        try:
+            img = event.client.get_render(height=int(c["height"]), width=int(c["width"]), wxyz=_wxyz(t.rot), position=tuple(t.pos),
+                                          fov=CE.vfov_rad(c["hfov"], c["width"], c["height"]), transport_format="jpeg")  # fmt: skip
+        finally:
+            for n, v in zip(hidden, vis):
+                n.visible = v
+        rgb = np.ascontiguousarray(img[..., :3])  # JPEG は背景つきの RGB（PNG は背景が透明の RGBA で、RGB だけ取ると黒くなる）
+        prev_img.image = rgb
+        c["node"].image = rgb
+        # Agent（ブラウザを見られない）も確かめられるように、ファイルにも書く
+        from PIL import Image
+
+        out = project.build / "view" / f"preview_{c['name']}.png"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        Image.fromarray(rgb).save(out)
+        cam_saved.content = f"プレビューを {project.rel(out)} にも保存しました。"
+
+    @b_look.on_click
+    def _(event):
+        c = selected()
+        if c is None or event.client is None:
+            return
+        cam = event.client.camera
+        sync["views"].setdefault(event.client.client_id, (cam.position.copy(), cam.wxyz.copy(), cam.fov, cam.near))
+        t = cam_world(c, current())
+        c["node"].visible = False  # 自分の錐（画像の板）と動かすハンドルが視界をふさがないように
+        gizmo.visible = False
+        with event.client.atomic():
+            cam.wxyz = _wxyz(t.rot)
+            cam.position = tuple(t.pos)
+            cam.fov = CE.vfov_rad(c["hfov"], c["width"], c["height"])
+        cam.near = c["clip"][0]
+        event.client.flush()
+
+    @b_back.on_click
+    def _(event):
+        if event.client is None or event.client.client_id not in sync["views"]:
+            return
+        pos, wxyz, fov, near = sync["views"].pop(event.client.client_id)
+        with event.client.atomic():
+            event.client.camera.wxyz, event.client.camera.position, event.client.camera.fov = wxyz, pos, fov
+        event.client.camera.near = near
+        event.client.flush()
+        for c in cams:
+            c["node"].visible = True
+        place_gizmo(current())
+
+    @b_add.on_click
+    def _(_):
+        if not task:
+            cam_saved.content = "configure_task まで進めてから追加してください（台の位置を使います）。"
+            return
+        k = 1
+        while any(c["name"] == f"cam_{k}" for c in cams):
+            k += 1
+        span = max(task["table"]["size"][0], 0.6)
+        c = {"name": f"cam_{k}", "mount": None, "local": CE.new_world_camera(tuple(task["table"]["center"][:2]), task["table"]["top_z"], span),
+             "hfov": 70.0, "width": 256, "height": 256, "clip": [0.01, 10.0], "orig": None, "touched": True, "img": None, "node": None}  # fmt: skip
+        make_frustum(c)
+        cams.append(c)
+        node_pose(c["node"], cam_world(c, current()))
+        refresh_names(c["name"])
+
+    @b_del.on_click
+    def _(_):
+        c = selected()
+        if c is None:
+            return
+        c["node"].remove()
+        cams.remove(c)
+        cam_info["source"] = cam_info["source"] or "view"
+        cam_saved.content = f"{c['name']} を削除しました（保存するまで answers.yaml は変わりません）。"
+        refresh_names()
+
+    @b_save.on_click
+    def _(_):
+        if not cams:
+            cam_saved.content = "カメラが 1 台もありません。"
+            return
+        specs = [CE.explicit_spec(c["name"], c["mount"], c["local"], c["hfov"], c["width"], c["height"], clipping_range=c["clip"]) if c["touched"] else c["orig"]
+                 for c in cams]  # fmt: skip
+        project.set_answers({"cameras": specs})
+        for c in cams:
+            c["orig"] = specs[cams.index(c)]
+            c["touched"] = False
+            make_frustum(c)
+            node_pose(c["node"], cam_world(c, current()))
+        cam_info["source"] = "view"
+        body = yaml.safe_dump({"cameras": specs}, allow_unicode=True, sort_keys=False, default_flow_style=None)
+        cam_saved.content = (f"保存しました（answers.yaml の cameras。project.yaml の cameras より優先）。続けて "
+                             f"`urdf2vla configure_camera --project {project.root}` と `launch_sim` で実際の画像を確かめてください。"
+                             f"project.yaml に移すなら:\n\n```yaml\n{body}```")  # fmt: skip
+        status_md.content = check_summary(project)
+        show_selected()
+
+    @b_clear.on_click
+    def _(_):
+        project.clear_answers(["cameras"])
+        load_cameras()
+        cam_saved.content = "answers.yaml の cameras を消しました。project.yaml の cameras（なければ既定）に戻ります。"
+        refresh_names()
+
+    refresh_names()
 
     refresh()
     # viser は指定のポートが使われていると次の空きポートで開くので、実際のポートを表示する

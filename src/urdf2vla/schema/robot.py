@@ -68,6 +68,17 @@ class ArmCandidate(BaseModel):
     ee_candidates: list[EECandidate] = Field(default_factory=list)
 
 
+class CameraCandidate(BaseModel):
+    """URDF に書かれたカメラの frame（urdf2vla.urdf.cameras.find_cameras）。"""
+
+    link: str
+    convention: Literal["ros", "world"]  # optical frame は ros（z 前方）、それ以外は world（x 前方, REP 103）
+    arm: str | None = None  # 取り付いている arm（なければ頭・体）
+    role: Literal["wrist", "arm", "head"] = "head"
+    hfov_deg: float | None = None  # Gazebo の horizontal_fov（あれば）
+    alternatives: list[str] = Field(default_factory=list)  # 同じ機器のほかの frame（ステレオの右目など）
+
+
 class MeshReport(BaseModel):
     total: int = 0
     resolved: dict[str, str] = Field(default_factory=dict)  # URDF 内の記述 -> ホスト上の実パス
@@ -87,6 +98,7 @@ class RobotMetadata(BaseModel):
     grippers: list[GripperCandidate]
     other_joints: list[str] = Field(default_factory=list)  # arm にも gripper にも属さない可動関節
     meshes: MeshReport = Field(default_factory=MeshReport)
+    cameras: list[CameraCandidate] = Field(default_factory=list)  # URDF のカメラの frame
 
 
 # --------------------------------------------------------------------------- configuration

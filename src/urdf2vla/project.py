@@ -112,6 +112,12 @@ class Project:
         body = yaml.safe_dump(merged, allow_unicode=True, sort_keys=True)
         (self.root / "answers.yaml").write_text("# urdf2vla の質問への回答（`urdf2vla answer` で追記、手編集も可）\n" + body)
 
+    def clear_answers(self, keys: list[str]) -> None:
+        """回答を消す（`urdf2vla view` で保存したカメラを消して project.yaml の指定に戻すときなど）。"""
+        kept = {k: v for k, v in self.answers().items() if k not in keys}
+        body = yaml.safe_dump(kept, allow_unicode=True, sort_keys=True) if kept else ""
+        (self.root / "answers.yaml").write_text("# urdf2vla の質問への回答（`urdf2vla answer` で追記、手編集も可）\n" + body)
+
     def overrides(self, section: str) -> dict[str, Any]:
         return (self.config().get("overrides") or {}).get(section) or {}
 

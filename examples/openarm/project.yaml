@@ -35,10 +35,8 @@ task:
   objects: [color_cube]
   container: plastic_tray  # KLT の箱（縁 14.6 cm）では、箱の上の近づく点で手首（joint7）が可動範囲の端になる
 
-cameras:
-  - preset: wrist   # 双腕なので腕ごとに付く（left_wrist_cam / right_wrist_cam）
-  - preset: left
-  - preset: right
+# カメラは書かない: URDF にある両手のカメラ（camera_view_frame）と頭の ZED Mini（左目の光学 frame）を使う
+# （left_wrist_cam / right_wrist_cam / head_cam）。視野角は既定値（手 80°・頭 70°）。`urdf2vla view` で確認・調整できる
 
 overrides:
   robot: {asset: {solver_position_iterations: 64}}  # 既定の 32 では左手の grasp_hold に失敗した（物体が TCP から 2.2 cm ずれる）

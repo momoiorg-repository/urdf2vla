@@ -126,6 +126,8 @@ urdf2vla view --project projects/myrobot         # → http://localhost:8080（�
 - TCP（把持点）の座標軸と、接近方向（青）・指の開く向き（橙）の矢印。End Effector の候補の link（質問の候補を選ぶと強調）
 - 台・物体・置き場所、正面（+x）の矢印、カメラの視野（`launch_sim` の後は、その画像を視野の中に表示）
 - 工程の状態と検査の結果、まだ答えていない質問（選んで「回答を保存」すると `answers.yaml` に記録）
+- カメラの欄: 取り付け先（link / world）・位置と向き（3D のハンドル）・視野角・解像度を変え、「このカメラから見る」で確かめて
+  「カメラを保存」（`answers.yaml` の `cameras`。`project.yaml` の `cameras` より優先し、configure_camera が使う）
 
 ### グリッパを SimReady アセットに付け替える（例: FANUC CRX-3iA + Robotiq 2F-85）
 
@@ -172,7 +174,7 @@ Claude Code をこのリポジトリで起動し、「`/path/to/robot.urdf` で 
 | `inspect_robot` | host | link/joint・root・arm・gripper（mimic 含む）・End Effector 候補・メッシュの解決 |
 | `configure_robot` | host | Robot configuration と正規化 URDF（`package://` 解決、空の `world` link 除去） |
 | `configure_task` | host | 台・物体・置き場所を腕の長さから配置（プリミティブのみ、ネット上のアセット不要） |
-| `configure_camera` | host | 既定は DROID と同じ `wrist` + `left` + `right`。ほかに `front` / `side` プリセット、または取付 link・位置姿勢・内部パラメータの明示指定 |
+| `configure_camera` | host | 既定は URDF のカメラ（なければ DROID と同じ `wrist` + `left` + `right`）。ほかに `front` / `side` / `urdf` プリセット、取付 link・位置姿勢・内部パラメータの明示指定、`urdf2vla view` で保存したカメラ |
 | `import_robot` | sim | URDF→USD 変換、関節名・剛体・発散・初期姿勢追従・関節限界・グリッパ開閉・グリッパの可動範囲（関節トルクで押す）の検査、初期姿勢の IK 提案 |
 | `launch_sim` | sim | Pick & Place 環境（Isaac Lab Arena で組み立てる）の起動、カメラ画像の保存、カメラ更新・取付位置・物体・発散・把持（物体を掴んで保持できるか、指がめり込まないか）の検査 |
 | `configure_vla_interface` | host | VLA の state（arm 関節角 + グリッパのスカラー）・action（関節目標 + グリッパ）・画像の仕様 |
@@ -259,6 +261,19 @@ projects/<name>/
   台の中央を見下ろす外部カメラ。DROID の外部カメラの配置（Franka の base から前 0.05 m・左右 0.57 m・上 0.66 m、焦点距離 2.1）を
   台の大きさで拡大縮小する（腕の大きさが違うロボットでも作業域が写る）。画像は正方形 256×256・画角 約 70°。
   双腕では手先カメラを腕ごとに付けるので 4 台（左右の手先 + 左右の外部）。
+- URDF にカメラの frame があれば、そちらを既定にする（ロボット本来の観測。OpenArm は両手 + 頭の ZED Mini）。見つけ方は
+  `urdf/cameras.py`: 名前（camera / cam / optical。mount・support など取付部品と、depth・infra・imu は除く）、fixed の連鎖の
+  末端、機器ごとに 1 つ（optical > color > left）。向きは REP 103（optical は z 前方 = Isaac Lab の ros、ほかは x 前方 = world）。
+  root までの関節に arm の関節があれば手先（最後の関節より先）・腕、なければ頭。視野角は Gazebo の horizontal_fov、なければ
+  手 80°・頭 70°。足りない分（手のカメラのない腕・頭のカメラ）は DROID のプリセットで補う。project.yaml の雛形には cameras を
+  書かない（書くと既定が効かない）。
+- URDF のカメラの frame はカメラや手のメッシュの中にあることが多い（OpenArm の手のカメラは手のひらの 2 cm 内側で、画像が
+  真っ黒になった）。URDF のカメラは手前 3 cm を描かない（`clip_near`）。
+- launch_sim の `camera_mount` は、設定の向き（convention の約束）を光学 frame（ros）に直してから比べる（以前は ros 以外の
+  明示指定で必ず失敗していた。world の約束の OpenArm の手のカメラで 120° のずれと出た）。
+- `urdf2vla view` のカメラの欄は、すべてのカメラを光学 frame（viser と同じ OpenCV の約束）で扱い、動かしたものだけ取り付け先から
+  見た姿勢の明示指定（ros）で保存する。触っていないものは元の preset のまま（台の配置が変われば追従する）。viser の get_render は
+  手前 1 cm から描くので、筐体の中のカメラのプレビューには筐体が写る（「このカメラから見る」は near を合わせる）。
 - 手先カメラは link の下に置き、launch_sim の `camera_mount` 検査で設定どおりの位置・向きかを確かめる
   （2.x 版の DUAL_SCORPION では描画側（Fabric）のローカル変換がずれて手先カメラが手首に埋まったため、環境を作った直後に
   書き直していた。3.0 版では Franka / CRX と双腕（Franka 2 本・DUAL_SCORPION）でずれないことを確認し、書き直しはやめた）。
@@ -297,12 +312,13 @@ pytest            # ホスト側（URDF 解析・設定生成・質問の出方�
 ## 検証状況（単腕は 2026-11-05、双腕は 2026-11-12。RTX 5080, Isaac Lab 3.0.0 / Isaac Sim 6.2.0 / Isaac Lab Arena b9e37c5）
 
 単腕のカメラは既定の DROID 配置（手先 + 左右の外部カメラ、各 256×256）。双腕は腕ごとの手先 + 左右の外部の 4 台。
+OpenArm は URDF にあるカメラ（両手の camera_view_frame + 頭の ZED Mini）の 3 台（2026-11-12、`feature/urdf-cameras`）。
 
 | | Franka | CRX-3iA + Robotiq 2F-85（SimReady に付け替え） | Franka 2 本（双腕、`examples/dual_franka` の合成 URDF） | DUAL_SCORPION（双腕） | OpenArm v2.0（双腕、`examples/openarm`） |
 |---|---|---|---|---|---|
-| Phase 1（質問・導入・検査・起動） | 質問なしで通る。import_robot 9 検査・launch_sim 9 検査 OK | 初期姿勢（IK の提案）だけ質問。Robot Assembler でグリッパを取り付け、import_robot 9 検査・launch_sim 9 検査 OK | 質問なしで通る。import_robot 12 検査・launch_sim 18 検査（グリッパごとの grasp_hold / grasp_opening）・setup_teleoperation 8 検査 OK | 初期姿勢（IK の提案）を質問。import_robot 12 検査 OK。launch_sim は立方体だけ OK（果物は回転する顎 1 N·m で grasp_hold に失敗）。setup_teleoperation は腕 10 N·m だと止まっている腕が下がって action_label に失敗、60 N·m で OK | 質問なしで通る（例に初期姿勢・グリッパの開閉向きを書いてある）。import_robot 12 検査・launch_sim 16 検査（回転する指なので grasp_opening はない）・setup_teleoperation 8 検査 OK。台・トレイ・作業の構え・初期姿勢は手で決めた（下記）。指は 2 N·m（URDF の 7 N·m では右手の grasp_hold に失敗）、solver_position_iterations 64（既定 32 では左手の grasp_hold が 2.2 cm ずれて失敗） |
+| Phase 1（質問・導入・検査・起動） | 質問なしで通る。import_robot 9 検査・launch_sim 9 検査 OK | 初期姿勢（IK の提案）だけ質問。Robot Assembler でグリッパを取り付け、import_robot 9 検査・launch_sim 9 検査 OK | 質問なしで通る。import_robot 12 検査・launch_sim 18 検査（グリッパごとの grasp_hold / grasp_opening）・setup_teleoperation 8 検査 OK | 初期姿勢（IK の提案）を質問。import_robot 12 検査 OK。launch_sim は立方体だけ OK（果物は回転する顎 1 N·m で grasp_hold に失敗）。setup_teleoperation は腕 10 N·m だと止まっている腕が下がって action_label に失敗、60 N·m で OK | 質問なしで通る（例に初期姿勢・グリッパの開閉向きを書いてある）。import_robot 12 検査・launch_sim 15 検査（カメラ 3 台。回転する指なので grasp_opening はない）・setup_teleoperation 8 検査 OK。台・トレイ・作業の構え・初期姿勢は手で決めた（下記）。指は 2 N·m（URDF の 7 N·m では右手の grasp_hold に失敗）、solver_position_iterations 64（既定 32 では左手の grasp_hold が 2.2 cm ずれて失敗） |
 | Phase 2（scripted 収集） | 4/4、ラベル再生・最初の画像の検査 OK | 4/4、ラベル再生・最初の画像の検査 OK | 8/11（`examples/dual_franka` から作り直したプロジェクト。毎回左腕。失敗 3 回は下降中の時間切れ）、ラベル再生 OK | 0/8（物体の真上の目標に手先が収まらず下降に進まない）。物体と箱を左腕の前に寄せる（main の旧配置）と真上までは行くが下降中に止まる（0/4）。原因は未特定 | 8/10（毎回左腕。失敗 2 回は物体への下降中の時間切れ。どちらも物体がトレイ側の端にあり、手先が把持の高さの 6 mm 上で止まる。開いた指がトレイの縁に当たるとみられる）、ラベル再生 OK。トレイを中心線の近く（y = 0.03）に置くと 4/8（置く点が joint2 の内転の限界にかかる） |
-| Phase 3（変換） | GR00T ローダで読める、3 カメラの動画は元画像と一致 | 同左 | GR00T ローダで読める、4 カメラの動画は元画像と一致 | 未実施 | GR00T ローダで読める、4 カメラの動画は元画像と一致 |
+| Phase 3（変換） | GR00T ローダで読める、3 カメラの動画は元画像と一致 | 同左 | GR00T ローダで読める、4 カメラの動画は元画像と一致 | 未実施 | GR00T ローダで読める、3 カメラ（両手 + 頭）の動画は元画像と一致 |
 | Phase 4（replay 評価、`--video`） | 4/4（動画で把持・配置を確認） | 4/4（同左） | 8/8（動画で左腕の把持・配置と右腕の静止を確認） | 未実施 | 8/8（動画で左腕の把持・配置と右腕の静止を確認） |
 
 Isaac Lab 2.3.2 版（git タグ `isaaclab2-last`）では、CRX は URDF のグリッパで収集 3/4〜6/7・replay 4/6、

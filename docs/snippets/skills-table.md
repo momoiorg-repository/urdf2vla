@@ -5,7 +5,7 @@
 | `inspect_robot` | host | — | `project.yaml: robot.urdf` | `generated/robot_metadata.yaml` | — |
 | `configure_robot` | host | `inspect_robot` | `generated/robot_metadata.yaml`<br>`answers.yaml`<br>`project.yaml: robot.*` | `generated/robot_config.yaml`<br>`build/robot.urdf` | — |
 | `configure_task` | host | `configure_robot` | `generated/robot_config.yaml`<br>`project.yaml: task.*` | `generated/task.yaml` | — |
-| `configure_camera` | host | `configure_task` | `generated/robot_config.yaml`<br>`generated/task.yaml`<br>`project.yaml: cameras` | `generated/cameras.yaml` | `--preset` |
+| `configure_camera` | host | `configure_task` | `generated/robot_config.yaml`<br>`generated/task.yaml`<br>`project.yaml: cameras`<br>`answers.yaml: cameras` | `generated/cameras.yaml` | `--preset` |
 | `import_robot` | sim | `configure_robot` | `generated/robot_config.yaml`<br>`build/robot.urdf` | `build/usd/robot.usd`<br>`build/import_report.yaml` | `--force`<br>`--timeout` |
 | `launch_sim` | sim | `import_robot`<br>`configure_camera` | `generated/robot_config.yaml`<br>`generated/cameras.yaml`<br>`generated/task.yaml`<br>`build/usd/robot.usd` | `snapshots/*.png`<br>`build/launch_report.yaml` | `--steps`<br>`--livestream`<br>`--timeout` |
 | `configure_vla_interface` | host | `launch_sim` | `generated/robot_config.yaml`<br>`generated/cameras.yaml`<br>`generated/task.yaml` | `generated/vla_interface.yaml` | `--vla-type` |

@@ -53,15 +53,17 @@ robot:
 #   objects: [apple, lime, pear, color_cube]   # ほかに rubiks_cube、プリミティブの cube（ダウンロード不要）
 #   container: klt_bin                          # トレイなら plastic_tray、平らな緑の円なら disc
 
-# カメラ。既定は DROID と同じ配置: 手先(wrist) + ロボットの左右の高い位置から台を見下ろす外部カメラ(left / right)。
-# 双腕では wrist が腕ごとに展開され、手先 2 台 + 外部 2 台になる。
-# ほかに正面(front)・横(side)のプリセットと、明示指定ができる。明示指定の例:
+# カメラ。書かなければ、URDF にあるカメラ（名前に camera / cam / optical を含む link。手先・頭など）を使い、足りない分を
+# DROID と同じ配置で補う（手先のカメラのない腕には wrist、頭・体のカメラがなければ左右の外部カメラ left / right）。
+# URDF にカメラがなければ DROID と同じ配置: 手先(wrist) + ロボットの左右の高い位置から台を見下ろす外部カメラ(left / right)。
+# `urdf2vla view` の「カメラ」の欄で、取り付け先・位置・向き・視野角を画面で変えて保存できる（answers.yaml。ここより優先）。
+# 書く場合の例: プリセット（wrist / left / right / front / side）、URDF のカメラ（urdf）、明示指定
+# cameras:
+#   - preset: wrist
+#   - preset: left
+#   - {{preset: urdf, link: head_camera_optical_frame, hfov_deg: 70}}
 #   - {{name: head_cam, mount: link, parent_link: head_link, pos: [0, 0, 0], rot_xyzw: [0, 0, 0, 1],
 #      convention: ros, width: 640, height: 480, intrinsic_matrix: [fx, 0, cx, 0, fy, cy, 0, 0, 1]}}
-cameras:
-  - preset: wrist
-  - preset: left
-  - preset: right
 
 # 自動生成された設定の上書き（generated/ の各ファイルと同じ構造で書く）
 overrides:

@@ -20,6 +20,14 @@ def _save_png(tensor, path) -> None:
     Image.fromarray(img.astype("uint8")).save(path)
 
 
+def _ros_offset(cam) -> list[float]:
+    """カメラの取付の向き（cam.convention の約束）を光学 frame（ros: z 前方・y 下）の向きにしたもの (x, y, z, w)。"""
+    from urdf2vla.camera_edit import TO_OPTICAL
+    from urdf2vla.urdf.kinematics import quat_mul as qmul
+
+    return list(qmul(tuple(cam.rot_xyzw), TO_OPTICAL[cam.convention]))
+
+
 def camera_mount_errors(env, cameras: CamerasConfig) -> dict[str, dict]:
     """link に付けたカメラが設定どおりの位置・向きにあるか（位置の誤差 [m] と向きの誤差 [deg]）。"""
     import torch
@@ -35,7 +43,8 @@ def camera_mount_errors(env, cameras: CamerasConfig) -> dict[str, dict]:
         bi = rob.body_names.index(cam.mount_body)
         bp, bq = T(rob.data.body_pos_w)[0:1, bi], T(rob.data.body_quat_w)[0:1, bi]
         exp_p = bp + quat_apply(bq, torch.tensor([cam.pos], device=env.device))
-        exp_q = quat_mul(bq, torch.tensor([cam.rot_xyzw], device=env.device))
+        # 設定の向きは cam.convention の約束。シミュレータの quat_w_ros と比べるので光学 frame（ros）に直す
+        exp_q = quat_mul(bq, torch.tensor([_ros_offset(cam)], device=env.device))
         d = env.scene[cam.name].data
         out[cam.name] = {
             "position_error_m": round(float(torch.linalg.norm(T(d.pos_w)[0:1] - exp_p)), 4),
@@ -130,7 +139,9 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
                 "detail": {"mean_abs_diff": round(diffs.get(cam.name, 0.0), 3), "frozen_steps": frozen[cam.name], "steps": steps},
             }
         )
-        checks.append({"name": f"camera_not_black:{cam.name}", "ok": mean > 5.0, "detail": {"mean_intensity": round(mean, 2)}})
+        checks.append({"name": f"camera_not_black:{cam.name}", "ok": mean > 5.0, "detail": {"mean_intensity": round(mean, 2)},
+                       "fix": "カメラが手や筐体のメッシュの中にあると真っ黒になります。`urdf2vla view` でカメラを外に出すか、"
+                              "cameras の指定に clip_near（手前の描かない距離 [m]、preset: urdf の既定は 0.03）を書いてください。"})  # fmt: skip
 
     from isaaclab.utils.math import quat_apply
 
@@ -152,7 +163,7 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
             rob = env.scene["robot"]
             bi = rob.body_names.index(cam.mount_body)
             q_body = T(rob.data.body_quat_w)[0:1, bi]
-            q_off = torch.tensor([cam.rot_xyzw], device=env.device)
+            q_off = torch.tensor([_ros_offset(cam)], device=env.device)
             exp_fwd = quat_apply(quat_mul(q_body, q_off), torch.tensor([[0.0, 0.0, 1.0]], device=env.device))[0]
             exp_pos = T(rob.data.body_pos_w)[0, bi] + quat_apply(q_body, torch.tensor([cam.pos], device=env.device))[0] - env_origin(env)
             cam_poses[cam.name]["expected_forward"] = [round(float(c), 3) for c in exp_fwd]

@@ -31,7 +31,7 @@ Open the address in a browser. From another computer on your network, use the se
 | **TCP（把持点）** frame with a blue and an orange arrow | Where the gripper grasps. Blue = approach direction (should point down at the table in the initial pose), orange = the direction the fingers open. |
 | **正面 (+x)** red arrow | The robot's front. The table and cameras are placed in front of it. |
 | Table, labelled boxes, orange patch, green box | The scene: the candidate objects (their bounding boxes, with names), the area where an episode puts its object, and the bin. |
-| Blue pyramids | Camera positions and fields of view. After `launch_sim`, each shows the image that camera captured. |
+| Blue pyramids | Camera positions and fields of view. After `launch_sim`, each shows the image that camera captured. Orange while you have unsaved changes to that camera. |
 | Orange shapes (optional) | Collision shapes — what the physics engine actually uses for contact. |
 
 Move the joints with the sliders and the TCP, the wrist camera and the gripper follow. Use the buttons to jump to the
@@ -55,6 +55,39 @@ Pick an answer and press **回答を保存 (Save answers)**. The answers are wri
   ![The starting-pose question with the suggested pose shown](../assets/view_questions.png){ width="900" }
 </figure>
 
+## Adjusting the cameras {#cameras}
+
+The **カメラ (Cameras)** panel lets you place and aim each camera by eye, then saves the result for `configure_camera`.
+It starts from the cameras the project uses now: what you saved here before, otherwise `cameras:` in `project.yaml`,
+otherwise the default (the URDF's own cameras, or the DROID layout).
+
+<figure markdown="span">
+  ![The camera panel in urdf2vla view with the OpenArm head camera selected and its preview](../assets/view_cameras.png){ width="700" }
+  <figcaption>OpenArm: the cameras come from its URDF (one on each hand and the head camera). The head camera is selected, with its handle and a preview image.</figcaption>
+</figure>
+
+1. Pick a camera. A handle appears on it; drag the arrows to move it and the rings to turn it. The camera's cone turns
+   orange until you save.
+2. Change what it is attached to with **取り付け先 (Mounted on)**. Choose a link to make the camera move with it, for
+   example the hand for a wrist camera, or **world** to fix it in the scene. The camera stays where it is on screen.
+   The URDF's camera frames are listed first.
+3. Set the horizontal field of view and the image size.
+4. Check the view:
+    - **このカメラから見る (Look through this camera)** moves your view to the camera, and **元の視点に戻る (Back)**
+      returns.
+    - **プレビュー画像を作る (Make a preview)** renders a small image from the camera, showing only the shapes the
+      browser draws. For a camera inside a housing or a hand, robot meshes closer than its `clip_near` are hidden, as
+      in the simulator. The image is also saved to `build/view/preview_<camera>.png`, so an agent can look at it.
+5. Press **カメラを保存 (Save cameras)**. The cameras are written to `answers.yaml` under `cameras`, which takes
+   precedence over `project.yaml`. Then run `configure_camera` and `launch_sim` again; `launch_sim` renders the real
+   images, and they appear on the cones here.
+
+Cameras you didn't touch are saved as they were specified (`preset: wrist`, `preset: urdf`, …), so they still follow
+later changes, such as a new table position. Moved cameras are saved as an explicit pose relative to the link they are
+mounted on. The panel also shows the saved YAML so you can copy it into `project.yaml`. **カメラを追加 (Add a camera)**
+adds a camera above the table, and **保存したカメラを消す (Clear saved cameras)** removes your saved cameras and goes
+back to `project.yaml` or the default.
+
 ## The labels
 
 The page is currently in Japanese. The controls are:
@@ -69,6 +102,12 @@ The page is currently in Japanese. The controls are:
 | 確認 | Status: which steps have run and how many checks passed |
 | 質問 / 回答を保存 | Questions / save the answers |
 | 提案の姿勢を見る | Show the suggested pose |
+| カメラ / 取り付け先 / 水平の視野角 / 幅・高さ | Cameras / mounted on / horizontal field of view / width, height |
+| 動かすハンドルを表示 | Show the handle for moving the camera |
+| このカメラから見る / 元の視点に戻る | Look through this camera / back to your view |
+| プレビュー画像を作る | Make a preview image |
+| カメラを追加 / このカメラを削除 | Add a camera / delete this camera |
+| カメラを保存 / 保存したカメラを消す | Save cameras / clear saved cameras |
 
 !!! tip "A SimReady gripper is drawn as a dark box"
     If you replaced the gripper with a SimReady asset, the viewer shows the URDF arm plus a box where the gripper is

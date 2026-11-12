@@ -328,16 +328,38 @@ overrides:
     table: {material: walnut}        # the table surface: oak (default), walnut or plain
 ```
 
-Cameras: the default is the [DROID](https://droid-dataset.github.io/) layout (a wrist camera plus left and right
-cameras looking down at the table, 256×256). A dual-arm robot gets one wrist camera per arm, so the default is four
-images. Other presets are `front` and `side`. If you have a real camera to match, describe it explicitly:
+Cameras: if the URDF has camera frames (links whose names contain `camera`, `cam` or `optical`, such as a head
+camera's optical frame or a camera on the hand), urdf2vla uses them. It adds a preset only where one is missing: a
+wrist camera for an arm without one, and the left and right DROID cameras when there is no head or body camera.
+`inspect_robot` lists the camera frames it found. If the URDF has no cameras, the default is the
+[DROID](https://droid-dataset.github.io/) layout: a wrist camera plus left and right cameras looking down at the
+table, 256×256. A dual-arm robot gets one wrist camera per arm, so that default is four images.
+
+How URDF cameras are read:
+
+- One camera per device. For a stereo camera the left optical frame is used and the right one is offered as an
+  alternative; depth, infrared and IMU frames are skipped.
+- View direction follows ROS conventions (REP 103): a frame with `optical` in its name looks along +z, any other
+  camera frame along +x.
+- Field of view: the `horizontal_fov` of a Gazebo `<sensor type="camera">` if the URDF has one, otherwise 80° for a
+  hand camera and 70° for a head camera.
+- Nothing closer than 3 cm is drawn (`clip_near`). Camera frames often sit inside the camera's or the hand's mesh;
+  OpenArm's hand camera is 2 cm inside the palm, and its image would otherwise be black.
+
+The presets are `wrist`, `left`, `right`, `front`, `side` and `urdf` (URDF cameras). To match a real camera,
+describe it explicitly:
 
 ```yaml
 cameras:
   - preset: wrist
+  - {preset: urdf, link: head_camera_optical_frame, hfov_deg: 87, clip_near: 0.02}
   - {name: head_cam, mount: link, parent_link: head_link, pos: [0, 0, 0], rot_xyzw: [0, 0, 0, 1],
      convention: ros, width: 640, height: 480, intrinsic_matrix: [600, 0, 320, 0, 600, 240, 0, 0, 1]}
 ```
+
+To place or aim cameras by eye, use the camera panel in [`urdf2vla view`](view.md#cameras). What you save there goes to
+`answers.yaml` and takes precedence over `cameras:` in `project.yaml`; run `configure_camera` and `launch_sim` again
+to see the real images.
 
 Quaternions are always `[x, y, z, w]`.
 
@@ -403,7 +425,7 @@ the shoulder. The example therefore:
 - raises the physics solver's position iterations to 64 (`overrides.robot.asset.solver_position_iterations`). At the
   default 32 the left gripper's grasp check fails narrowly (the cube ends 2.2 cm from the TCP, against a 2 cm limit).
 
-With these settings OpenArm passes all checks, scripted collection succeeds 8 times in 10 attempts (always the left
+Its cameras come from the URDF: one on each hand and the head's ZED Mini. With these settings OpenArm passes all checks, scripted collection succeeds 8 times in 10 attempts (always the left
 arm), and replay evaluation succeeds 8 of 8. Both failed attempts had the object at the tray-side edge of its area and
 stopped 6 mm above the grasp height, most likely with an open finger resting on the tray rim.
 

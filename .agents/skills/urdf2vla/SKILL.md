@@ -47,7 +47,7 @@ urdf2vla skills --json              # Skill 一覧（phase・入出力・前提�
    `project.yaml` の `robot:` に `gripper: {simready: robotiq_2f_85}` を書いてグリッパを付けるかをユーザに聞く
 2. `configure_robot` — 未回答の質問が残っていれば同じ質問で `needs_input` になる
 3. `configure_task` — 物体の候補と箱を選び（project.yaml の `task.objects` / `task.container`）、台・物体を置く範囲・箱を自動配置
-4. `configure_camera` — 既定は DROID と同じ配置: 手先（wrist）+ ロボットの左右の外部カメラ（left / right）。双腕では `wrist` が腕ごとに展開され 4 台になる。正面（front）・横（side）も選べる。ユーザが実機カメラの情報（取付 link・位置姿勢・K 行列）を持っていれば `project.yaml` の `cameras:` に明示指定する
+4. `configure_camera` — 既定は URDF にあるカメラ（名前に camera / cam / optical を含む link。手・頭など。`inspect_robot` の `data.cameras` に出る）で、足りない分だけ DROID の配置で補う（手のカメラのない腕に wrist、頭のカメラがなければ左右の外部カメラ）。URDF にカメラがなければ DROID と同じ配置: 手先（wrist）+ ロボットの左右の外部カメラ（left / right）。双腕では `wrist` が腕ごとに展開され 4 台になる。正面（front）・横（side）・URDF のカメラ（urdf）も選べる。ユーザが実機カメラの情報（取付 link・位置姿勢・K 行列）を持っていれば `project.yaml` の `cameras:` に明示指定する。カメラの位置や向きを見ながら決めたいユーザには `urdf2vla view` のカメラの欄を案内する（保存は `answers.yaml` の `cameras` で、`project.yaml` より優先。保存後に configure_camera → launch_sim）。launch_sim で `camera_not_black` に失敗したら、カメラがメッシュの中にある（`clip_near` を大きく、または位置を外へ）
 5. `import_robot` — USD 変換と検査（関節名・剛体・発散・初期姿勢追従・関節限界・グリッパ開閉）。
    初期姿勢で手先が下を向いていなければ IK で推奨姿勢を求め、`robot.default_pose` を質問する
 6. `launch_sim` — 環境を起動し `snapshots/*.png` を保存。**`*_start.png` と `*_end.png` を開いて、ロボット・台・物体・置き場所が写っているか確認し、ユーザにも見せる**
