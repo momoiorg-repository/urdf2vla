@@ -374,6 +374,10 @@ built-in scripted expert grasps with the arm nearer to the object and keeps the 
 gripper open. In this layout that is the same arm every episode, so scripted demonstrations move only one arm; the other
 arm's joints and gripper are still recorded in every frame. `launch_sim` runs the grasp checks for each gripper.
 
+For a two-arm robot the scripted expert is a self-test of the setup, not the way to build a dataset. To get data,
+record a few demonstrations yourself with teleop (N switches the arm) and multiply them with Isaac Lab Mimic: see
+[Two-arm robots](recording.md#two-arm-robots) in the recording guide.
+
 Tested end to end (import, checks, scripted collection, conversion and replay evaluation) on two Franka arms side by
 side. That robot is bundled as an example that needs no download, so you can try the dual-arm workflow first:
 
@@ -432,8 +436,9 @@ stopped 6 mm above the grasp height, most likely with an open finger resting on 
 ## Limitations
 
 - Arms: one or two. More than two arm chains are not supported by the simulation embodiment.
-- Dual-arm robots: the scripted expert uses one arm per episode (the same arm in the default layout).
-  `generate_mimic` and `evaluate_vla --droid` are single-arm only.
+- Dual-arm robots: the scripted expert and `generate_mimic` use one working arm per episode while the other arm
+  stays still (Mimic: the arm that grasped in your source demonstrations). Tasks where both arms work together are
+  not supported yet. `evaluate_vla --droid` is single-arm only.
 - One task: pick an object and place it in a container (or on a flat target). Objects come from the catalog in
   `src/urdf2vla/objects.py`.
 - Grippers: two-finger parallel or single-moving-jaw grippers. Suction and multi-finger hands are not supported.

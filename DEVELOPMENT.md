@@ -284,7 +284,14 @@ projects/<name>/
   台の中心は左右の肩の中央、scripted は物体に近い腕だけを動かし、もう一方は開いたまま保持する。既定の配置では物体が左半分・
   箱が右半分にあるので、毎回同じ腕（物体の側）が箱まで運ぶ（もう一方の腕はデモの中で動かない）。
   launch_sim の `grasp_hold` / `grasp_opening` はグリッパのある腕ごとに検査する。台の届く範囲の IK 検査（ReachChecker）は単腕だけ。
-  Mimic（`generate_mimic`）と DROID の zero-shot 評価は手先 1 つが前提なので、双腕では明示的なエラーにする。
+  DROID の zero-shot 評価は手先 1 つが前提なので、双腕では明示的なエラーにする。
+- 双腕の Mimic（`generate_mimic`）は Arena の ArmMode.LEFT / RIGHT と同じ形: 手先（eef）は腕ごと（arm の名前）、元のデモで物体を
+  掴んだ腕（subtask の信号 `grasp_<arm>`）が grasp → place、もう一方の腕は 1 区間で `object_ref=None`（Mimic は座標を写さず
+  元のデモのまま再生する。物体の座標で写すと、物体の移動分だけ止まっている手も動く）。元のデモの選び方は作業する腕の
+  nearest_neighbor_object で決まり、ほかの腕も同じデモを使う（`generation_select_src_per_arm=False`）。行動は
+  [腕ごとの 7 次元 ..., グリッパごとの ±1 ...]（GR1T2 の Mimic と同じ並び）。成功判定の「離した」はすべてのグリッパが開く指令
+  （以前は行動の最後の列だけを見ていて、双腕では左腕が持ったままでも成功になりえた）。元のデモは scripted か人の操作
+  （`--source-device socket / keyboard`）。
 - 双腕の URDF で、2 本の腕をつなぐ root link に質量（inertial）がないと、importer が腕ごとに別の articulation にする
   （import_robot が `Expected 1 prims at '/World/Robot', found 2` で止まる）。root link に inertial を書く。
 - 片側だけ動く顎のグリッパは、arm の最後の関節として見えるので質問する。把持点は「固定側の顎と開いた顎の間」。
@@ -324,6 +331,9 @@ OpenArm は URDF にあるカメラ（両手の camera_view_frame + 頭の ZED M
 Isaac Lab 2.3.2 版（git タグ `isaaclab2-last`）では、CRX は URDF のグリッパで収集 3/4〜6/7・replay 4/6、
 DUAL_SCORPION は scripted 収集 0/8（回転する顎が物体を台に押し付けながら閉じ、腕が押し上げられる。URDF のトルクは仮値）だった。
 
+双腕の Mimic（2026-11-12、元のデモ 5 個はスクリプトで記録、20 回の試行）: Franka 2 本 15/20（作業する腕は左）、OpenArm 20/20、
+いずれも全数を画像付きで記録でき、止まっている腕の手の移動は 0 mm。単腕の Franka は 13/20（変更前の 75/100 と同程度）。
+
 推論サーバは学習済み N1.7 checkpoint（別のプロジェクトで学習したもの）を読み込んで起動できることまで確認（2.x 版、GPU 6.4GB）。
 
 未検証: GR00T の実際の学習（44GB 以上の GPU が必要。Isaac Lab 3.0 版では `train_vla` のジョブ作成も未実行。データセット側は
@@ -336,9 +346,12 @@ Isaac Lab 3.0 版で試したのは scripted の収集だけで、socket / keybo
 - 場面・タスクを SimReady アセット（NVIDIA の Hugging Face にある物体・台など）から選べるようにする（Arena の Object と
   配置の relations を使う）。いまは台・立方体・置き場所のプリミティブだけ
 - SimReady のグリッパを増やす。Robotiq 2F-140 は閉リンクの残りの関節（inner knuckle は excludeFromArticulation）を受け身にしても指がばらけて何も保持できなかった。Hand-E は 2 つの顎を別々に駆動する（駆動する関節を複数持てるようにする）。SCHUNK は mm 単位のアセットで開きが小さい。xArm はりんごが抜ける
-- 双腕: 両方の腕を使うデモ（いまの配置では scripted が毎回同じ腕を使う。物体と箱の左右をエピソードごとに入れ替えるなど）、
+- 双腕: 左右どちらの腕のデータも作る（Mimic は 1 回の生成で 1 本の作業する腕。腕ごとに元のデモを記録して生成し、まとめる。
+  scripted の自己確認は既定の配置では毎回同じ腕）、
   止まっている腕を IK ではなく関節目標で保持する（DUAL_SCORPION の 10 N·m では重力で下がり、IK が追いかけて関節がずれる）、
-  台の届く範囲の IK 検査を双腕にも、Mimic の双腕対応、keyboard（N で腕を切替）の確認、DUAL_SCORPION の scripted 収集、
+  台の届く範囲の IK 検査を双腕にも、Kit の keyboard（N で腕を切替。socket では確認済み）の確認、
+  両方の腕で一緒に作業するタスク（Mimic の DUAL_ARM と腕どうしの協調の拘束 SubTaskConstraintConfig）、
+  人の操作で記録した元のデモからの Mimic（記録の経路は socket で確認済み、実際の人のデモは未検証）、
   VR（Isaac Lab 3.0 の isaaclab_teleop: CloudXR + 手ごとの Se3 / グリッパの retargeter）で両腕を同時に操作する teleop
 - 手先を真下に向けにくい腕（Enactic OpenArm v2.0: グリッパが前腕の延長上、手首の曲げは最大 90°）の自動配置。真下に向けるには
   前腕を水平か下向きにするので、届く高さは肩（0.70 m）からおよそ 0.3 m 以上下に限られる。いまの configure_task は肩から腕の長さで

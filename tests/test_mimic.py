@@ -23,7 +23,7 @@ def test_generate_mimic_is_an_optional_cli_skill():
     import urdf2vla.cli  # noqa: F401
 
     assert "generate_mimic" in OPTIONAL and SKILLS["generate_mimic"].requires == ["setup_teleoperation"]
-    assert [a.flags[0] for a in SKILLS["generate_mimic"].args][:2] == ["--source-demos", "--trials"]
+    assert [a.flags[0] for a in SKILLS["generate_mimic"].args][:3] == ["--source-demos", "--source-device", "--trials"]
 
 
 def test_generate_mimic_needs_one_object_and_a_container(tmp_path, capsys):

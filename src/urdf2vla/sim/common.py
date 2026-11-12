@@ -30,6 +30,7 @@ class Configs:
     # Mimic の記録（datagen_info を含む Isaac Lab の HDF5）: (出力ディレクトリ, ファイル名)
     mimic_record: tuple[str, str] | None = None
     mimic_trials: int = 100  # 生成の試行回数（generation_num_trials）
+    mimic_working_arm: str | None = None  # 双腕: 元のデモで物体を掴んだ腕（その腕が grasp → place、ほかの腕は止まったまま）
     # 生成の記録: (出力ディレクトリ, ファイル名)。成功の終了条件は env_cfg から取り出してここに置く（Mimic の生成ループが使う）
     mimic_generate: tuple[str, str] | None = None
     mimic_success_term: object = None

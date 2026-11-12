@@ -409,8 +409,9 @@ class MimicReplay(TeleopDevice):
             a = self.actions[self.t : self.t + 1]
             self.t += 1
         cmd.raw = a
-        for g in view.cfg.grippers:
-            cmd.gripper_open[g.name] = bool(float(a[0, -1]) >= 0)
+        n_arm = len(view.cfg.arms)
+        for k, g in enumerate(view.cfg.grippers):  # 行動は [腕ごとの 7 次元 ..., グリッパごとの ±1 ...]
+            cmd.gripper_open[g.name] = bool(float(a[0, 7 * n_arm + k]) >= 0)
         return cmd
 
 
