@@ -353,9 +353,9 @@ uv venv .venv && uv pip install -e '.[view,dev,docs]' xacro && source .venv/bin/
 bash docker/build.sh                          # 1〜2 時間、約 100 GB。ディスクは 200 GB 以上のインスタンスで
 bash docker/run.sh && bash docker/run.sh gr00t
 urdf2vla doctor                               # ドライバ 580 以降（古いと警告）、image・コンテナ・ディスク
-pytest                                        # 51 passed / 4 skipped が期待値（下記）
+pytest                                        # 47 passed / 9 skipped（FANUC の URDF がまだない）
 bash examples/crx3ia/fetch_urdf.sh            # ROS なし。PyPI の xacro で ROS 2 のものと同じ URDF になる
-pytest                                        # FANUC の URDF があると CRX の例の試験も走る
+pytest                                        # 52 passed / 4 skipped（CRX の例の試験も走る。skip は下記）
 ```
 
 FANUC の例（`docs/guides/your-robot.md` の手順。`import_robot` で初期姿勢だけ質問される）:
@@ -391,7 +391,7 @@ urdf2vla evaluate_vla    --project projects/crx3ia --model training/crx3ia_demos
 - GR00T の元のモデル（nvidia/GR00T-N1.7-3B）は初回に Hugging Face から取得する。RTX 5080 のマシンでは途中で止まったことがある。
   止まったら実行し直すと続きから取得する。
 - 2026-11-12 に、このマシンの新しい clone で Brev と同じ条件（ROS なし）を確かめた: PyPI の xacro の FANUC の URDF は
-  ROS 2 Jazzy のものと link・関節・可動範囲・メッシュ・質量が同じ、pytest 51 passed / 4 skipped、`mkdocs build --strict`、
+  ROS 2 Jazzy のものと link・関節・可動範囲・メッシュ・質量が同じ、pytest 47/9 → 取得後 52/4、`mkdocs build --strict`、`doctor`、
   FANUC の例のホスト側の工程（台を 10 cm 手前に寄せる警告も同じ）。Brev のインスタンスそのものではまだ動かしていない。
 
 ## 今後
