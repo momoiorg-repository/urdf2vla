@@ -6,7 +6,8 @@
 # 実機のグリッパに合わせてください（view / launch_sim の snapshot で開閉方向を確認）。
 # import_robot が初期姿勢（IK の提案）を質問します: urdf2vla answer --project projects/dual_scorpion robot.default_pose=suggested
 # 2026-11-12 の Isaac Sim での確認: import_robot・launch_sim・setup_teleoperation は通る。scripted 収集は 0/8
-# （物体の真上で手先が目標に収まらず、下降に進まない。2.x 版でも 0/8）。双腕の流れ全体は Franka 2 本の合成ロボットで確認済み。
+# （物体の真上の目標に手先が収まらず下降に進まない。物体と箱を左腕の前に寄せると真上までは行くが下降中に止まる（0/4）。
+# 原因は未特定。2.x 版でも 0/8）。双腕の流れ全体は Franka 2 本の合成ロボットで確認済み。
 name: dual_scorpion
 
 robot:

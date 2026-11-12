@@ -376,7 +376,9 @@ The rotating jaw can't hold the fruit, so the example uses the cube only. Its gr
 derived from a single continuous joint, so object fit is not screened automatically.
 
 With these settings the Dual Scorpion passes `import_robot`, `launch_sim` and `setup_teleoperation`, but scripted
-collection does not succeed yet (0 of 8): the hand stops just short of the point above the object.
+collection does not succeed yet (0 of 8): the hand stops just short of the point above the object. With the object
+and bin moved in front of one arm it gets above the object but stalls on the way down (0 of 4); the cause isn't
+isolated yet.
 
 ## Limitations
 
