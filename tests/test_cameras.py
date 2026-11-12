@@ -136,8 +136,22 @@ def test_configure_camera_uses_urdf_cameras_and_view_answers(tmp_path, capsys):
     expect = quat_rotate(quat_from_rpy(0.0, 0.5, 0.0), (1.0, 0.0, 0.0))
     assert max(abs(a - b) for a, b in zip(fwd, expect)) < 1e-6
 
-    # `urdf2vla view` で保存したカメラ（answers.yaml の cameras）が project.yaml・既定より優先する
+    # `urdf2vla view` が触っていないカメラを保存するときの指定（origins）からは、同じカメラができる
     from urdf2vla.project import Project
+    from urdf2vla.result import SkillResult
+    from urdf2vla.schema.robot import RobotConfig
+    from urdf2vla.skills.scene import build_cameras, camera_specs, urdf_cameras
+
+    p0 = Project(proj)
+    rc = RobotConfig.model_validate(p0.read_generated("robot_config.yaml"))
+    found = urdf_cameras(rc)
+    specs, _ = camera_specs(p0, rc, found)
+    origins: dict = {}
+    first = build_cameras(p0, rc, specs, found, SkillResult(skill="t"), origins)
+    again = build_cameras(p0, rc, [origins[c.name] for c in first], found, SkillResult(skill="t"))
+    assert [c.model_dump() for c in first] == [c.model_dump() for c in again]
+
+    # `urdf2vla view` で保存したカメラ（answers.yaml の cameras）が project.yaml・既定より優先する
 
     p = Project(proj)
     moved = Transform((0.6, 0.0, 0.9), (0.0, 0.0, 0.0, 1.0))

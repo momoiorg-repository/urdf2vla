@@ -472,8 +472,12 @@ def camera_specs(project: Project, cfg: RobotConfig, found: list, preset_opt: st
     return default_camera_specs(cfg, found), ("urdf" if found else "droid")
 
 
-def build_cameras(project: Project, cfg: RobotConfig, specs: list[dict], found: list, result: SkillResult) -> list[CameraConfig] | None:
-    """カメラの指定（preset・明示指定）から CameraConfig を作る。失敗したら result.fail して None。"""
+def build_cameras(
+    project: Project, cfg: RobotConfig, specs: list[dict], found: list, result: SkillResult, origins: dict[str, dict] | None = None
+) -> list[CameraConfig] | None:
+    """カメラの指定（preset・明示指定）から CameraConfig を作る。失敗したら result.fail して None。
+    origins を渡すと、カメラ名 → そのカメラ 1 台だけを作る指定（`urdf2vla view` が触っていないカメラを元のまま保存するのに使う）。"""
+    origins = {} if origins is None else origins
     cams: list[CameraConfig] = []
     for spec in specs:
         preset = spec.get("preset")
@@ -481,12 +485,16 @@ def build_cameras(project: Project, cfg: RobotConfig, specs: list[dict], found: 
             got = _urdf_camera(cfg, spec, found, result)
             if got is None:
                 return None
+            for c in got:
+                origins[c.name] = {**spec, "link": c.parent_link, "name": c.name}
             cams += got
             continue
         if preset == "wrist" and "arm" not in spec and len(cfg.arms) > 1:
             # 双腕: 腕ごとに手先カメラを付ける（<arm>_wrist_cam）
             for i, arm in enumerate(cfg.arms):
-                cams.append(_wrist_camera(project, cfg, {**spec, "arm": i, "name": f"{arm.name}_wrist_cam"}))
+                one = {**spec, "arm": i, "name": f"{arm.name}_wrist_cam"}
+                cams.append(_wrist_camera(project, cfg, one))
+                origins[one["name"]] = one
             continue
         if preset == "wrist":
             cam = _wrist_camera(project, cfg, spec)
@@ -501,6 +509,7 @@ def build_cameras(project: Project, cfg: RobotConfig, specs: list[dict], found: 
             return None
         if cam is None:
             return None
+        origins[cam.name] = dict(spec)
         cams.append(cam)
     names = [c.name for c in cams]
     if len(set(names)) != len(names):

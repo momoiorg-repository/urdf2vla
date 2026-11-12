@@ -68,11 +68,12 @@ def _resolve_cameras(project: Project, cfg: dict | None, task: dict | None) -> t
     found = urdf_cameras(rc)
     specs, source = camera_specs(project, rc, found)
     r = SkillResult(skill="view")
+    origins: dict[str, dict] = {}
     try:
-        built = build_cameras(project, rc, specs, found, r)
+        built = build_cameras(project, rc, specs, found, r, origins)
     except Exception as e:  # noqa: BLE001  表示用。壊れた指定でも画面は開く
-        return [], {"source": source, "error": f"{type(e).__name__}: {e}", "found": found}
-    return [c.model_dump(mode="json") for c in built or []], {"source": source, "error": "; ".join(r.errors) or None, "found": found}
+        return [], {"source": source, "error": f"{type(e).__name__}: {e}", "found": found, "origins": {}}
+    return [c.model_dump(mode="json") for c in built or []], {"source": source, "error": "; ".join(r.errors) or None, "found": found, "origins": origins}
 
 
 def _load_yaml(path: Path) -> dict | None:
@@ -222,7 +223,7 @@ def run_viewer(project: Project, host: str = "0.0.0.0", port: int = 8080, block:
 
     arm_index = {a["ik_body"]: i for i, a in enumerate((cfg or {}).get("arms") or [])}
     cams: list[dict] = []  # 画面のカメラ: name, mount（link 名 / None = world）, local（取り付け先から見た光学 frame）, hfov, width, height, orig, touched, img, node
-    cam_info = {"source": None, "error": None, "found": []}
+    cam_info = {"source": None, "error": None, "found": [], "origins": {}}
 
     def snapshot(name: str):
         from PIL import Image
@@ -253,7 +254,7 @@ def run_viewer(project: Project, host: str = "0.0.0.0", port: int = 8080, block:
             c = {
                 "name": cam["name"], "mount": cam.get("mount_body") if cam["mount"] == "link" else None, "local": CE.optical_local(cam),
                 "hfov": CE.hfov_deg(cam), "width": cam["width"], "height": cam["height"], "clip": list(cam.get("clipping_range") or [0.01, 10.0]),
-                "orig": CE.original_spec(cam, arm_index),
+                "orig": cam_info["origins"].get(cam["name"]) or CE.original_spec(cam, arm_index),  # 触らなければ元の指定のまま保存
                 "touched": False, "img": snapshot(cam["name"]), "node": None,
             }  # fmt: skip
             make_frustum(c)
@@ -648,6 +649,7 @@ def run_viewer(project: Project, host: str = "0.0.0.0", port: int = 8080, block:
     def _(_):
         project.clear_answers(["cameras"])
         load_cameras()
+        refresh()  # 新しい錐を、いまの関節の姿勢の位置に置く
         cam_saved.content = "answers.yaml の cameras を消しました。project.yaml の cameras（なければ既定）に戻ります。"
         refresh_names()
 
