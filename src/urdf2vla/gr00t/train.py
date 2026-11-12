@@ -20,13 +20,22 @@ from urdf2vla.result import SkillResult
 GR00T_IMAGE = "urdf2vla/gr00t:23ace64"
 REQUIRED_GB = 44.0
 DEFAULT_BASE_MODEL = "nvidia/GR00T-N1.7-3B"
+# 単腕のロボット（Franka・FANUC など）は DROID（単腕 + 外部カメラ + 手先カメラ）で学習したモデルから fine-tune する
+SINGLE_ARM_BASE_MODEL = "nvidia/GR00T-N1.7-DROID"
 
 
-def _args(base: str, dataset: str, modality: str, output: str, a) -> list[str]:
+def default_base_model(layout: dict, arms: int | None) -> str:
+    """変換済みデータの並びと腕の数からベースモデルを決める（DROID の並び・単腕 → DROID、双腕 → 3B）。"""
+    if layout.get("layout") == "droid" or (arms or layout.get("arms")) == 1:
+        return SINGLE_ARM_BASE_MODEL
+    return DEFAULT_BASE_MODEL
+
+
+def _args(base: str, dataset: str, modality: str, output: str, a, tag: str = "new_embodiment") -> list[str]:
     return [
         "--base-model-path", base,
         "--dataset-path", dataset,
-        "--embodiment-tag", "new_embodiment",
+        "--embodiment-tag", tag,
         "--modality-config-path", modality,
         "--output-dir", output,
         "--max-steps", str(a.max_steps),
@@ -38,7 +47,7 @@ def _args(base: str, dataset: str, modality: str, output: str, a) -> list[str]:
     ]  # fmt: skip
 
 
-def _script(job: str, args_tmpl: list[str]) -> str:
+def _script(job: str, args_tmpl: list[str], base: str = DEFAULT_BASE_MODEL) -> str:
     q = [shlex.quote(a) if not a.startswith("$") else f'"{a}"' for a in args_tmpl]
     lines, i = [], 0
     while i < len(q):  # "--flag 値" を 1 行にまとめる
@@ -52,7 +61,7 @@ def _script(job: str, args_tmpl: list[str]) -> str:
     return f"""#!/usr/bin/env bash
 # urdf2vla が生成した GR00T N1.7 fine-tune ジョブ: {job}
 # 必要なもの: GPU メモリ {REQUIRED_GB:.0f}GB 以上（A100 / H100 / L40S / A6000 など）、Isaac-GR00T（N1.7）の環境、
-#             Hugging Face にログイン済み（ベースモデル {DEFAULT_BASE_MODEL} を取得するため）
+#             Hugging Face にログイン済み（ベースモデル {base} を取得するため）
 # 使い方（urdf2vla の GR00T image。学習するマシンで bash docker/build.sh gr00t で作るか、docker save / docker load で持っていく）:
 #   tar -xzf {job}.tar.gz && cd {job}
 #   docker run --rm --gpus all --shm-size=16g -u "$(id -u):$(id -g)" -e USER="$(id -un)" -e HOME=/tmp \\
@@ -68,7 +77,7 @@ GR00T_ROOT="${{GR00T_ROOT:?Isaac-GR00T のパスを GR00T_ROOT に設定して�
 if [[ -z "${{GR00T_PYTHON:-}}" && -x /workspace/.venv/bin/python && "$GR00T_ROOT" == /workspace ]]; then GR00T_PYTHON=/workspace/.venv/bin/python; fi
 DATASET_DIR="${{DATASET_DIR:-$HERE/dataset}}"
 OUTPUT_DIR="${{OUTPUT_DIR:-$HERE/checkpoints}}"
-BASE_MODEL="${{BASE_MODEL:-{DEFAULT_BASE_MODEL}}}"
+BASE_MODEL="${{BASE_MODEL:-{base}}}"
 GR00T_PYTHON="${{GR00T_PYTHON:-python}}"
 "$GR00T_PYTHON" "$GR00T_ROOT/gr00t/experiment/launch_finetune.py" \\
   {quoted}
@@ -84,23 +93,34 @@ def run(project: Project, args, result: SkillResult) -> None:
 
     ds = project.root / "datasets" / f"{args.dataset}_gr00t"
     # 旧名（easyVLA）で変換したデータは easyvla_modality_*.py を持つ
-    mods = sorted([*ds.glob("urdf2vla_modality_*.py"), *ds.glob("easyvla_modality_*.py")]) if ds.exists() else []
+    mods = sorted([*ds.glob("urdf2vla_modality_*.py"), *ds.glob("easyvla_modality_*.py"), *ds.glob("urdf2vla_droid_modality.py")]) if ds.exists() else []
     if not mods:
         result.fail(f"{project.rel(ds)} がありません。convert_dataset --dataset {args.dataset} を先に実行してください。")
         return
-    modality = mods[0]
+    from urdf2vla.gr00t.convert import dataset_layout
+
+    layout = dataset_layout(ds)
+    if layout.get("layout") == "droid":
+        from urdf2vla.gr00t.droid import DROID_TAG
+
+        tag, modality = DROID_TAG, ds / "urdf2vla_droid_modality.py"
+        arms = 1
+    else:
+        tag, modality = "new_embodiment", mods[0]
+        arms = layout.get("arms") or _project_arms(project)
+    base = args.base_model or default_base_model(layout, arms)
     job = args.job or f"{project.name}_{args.dataset}"
     job_dir = project.root / "training" / job
     job_dir.mkdir(parents=True, exist_ok=True)
 
     # ジョブ一式（どのマシンでも動くよう、パスは環境変数で差し替えられる）
-    tmpl = _args("$BASE_MODEL", "$DATASET_DIR", f"$DATASET_DIR/{modality.name}", "$OUTPUT_DIR", args)
+    tmpl = _args("$BASE_MODEL", "$DATASET_DIR", f"$DATASET_DIR/{modality.name}", "$OUTPUT_DIR", args, tag)
     script = job_dir / "train.sh"
-    script.write_text(_script(job, tmpl))
+    script.write_text(_script(job, tmpl, base))
     script.chmod(0o755)
 
     # 引数が GR00T のランチャで正しく解釈されるか（学習は始めない）
-    local_args = _args(args.base_model or DEFAULT_BASE_MODEL, str(ds), str(modality), str(job_dir / "checkpoints"), args)
+    local_args = _args(base, str(ds), str(modality), str(job_dir / "checkpoints"), args, tag)
     tyro.cli(FinetuneConfig, args=local_args)
     checks = [{"name": "finetune_args_valid", "ok": True, "detail": "GR00T の FinetuneConfig として解釈できた"}]
 
@@ -111,6 +131,9 @@ def run(project: Project, args, result: SkillResult) -> None:
         "job": job,
         "dataset": project.rel(ds),
         "script": project.rel(script),
+        "base_model": base,
+        "embodiment_tag": tag,
+        "layout": layout,
         "gpu": {"name": gpu_name, "memory_gb": round(gpu_gb, 1), "required_gb": REQUIRED_GB},
         "hyperparameters": {"max_steps": args.max_steps, "global_batch_size": args.batch_size, "save_steps": args.save_steps,
                             "tune": "projector + diffusion（LLM・画像エンコーダは凍結）"},
@@ -133,7 +156,7 @@ def run(project: Project, args, result: SkillResult) -> None:
     else:
         report["mode"] = "local"
         env = dict(os.environ, DATASET_DIR=str(ds), OUTPUT_DIR=str(job_dir / "checkpoints"),
-                   BASE_MODEL=args.base_model or DEFAULT_BASE_MODEL, GR00T_ROOT=os.environ["URDF2VLA_GR00T_ROOT"],
+                   BASE_MODEL=base, GR00T_ROOT=os.environ["URDF2VLA_GR00T_ROOT"],
                    GR00T_PYTHON=sys_python())  # fmt: skip
         rc = subprocess.call(["bash", str(script)], env=env)
         report["exit_code"] = rc
@@ -143,10 +166,21 @@ def run(project: Project, args, result: SkillResult) -> None:
     (project.build / "train_report.yaml").write_text(dump_yaml(report))
     result.outputs["train_script"] = project.rel(script)
     result.outputs["train_report"] = project.rel(project.build / "train_report.yaml")
-    result.data = {k: report[k] for k in ("job", "mode", "gpu")}
+    result.data = {k: report[k] for k in ("job", "mode", "gpu", "base_model", "embodiment_tag")}
     result.data["checks"] = [f"{c['name']}: {'OK' if c['ok'] else 'FAIL'}" for c in checks]
     if result.status == "ok":
         result.next = ["evaluate_vla"]
+
+
+def _project_arms(project: Project) -> int | None:
+    """古い変換（meta/urdf2vla.json がない）用: プロジェクトの vla_interface の腕の数。"""
+    import yaml
+
+    p = project.root / "generated" / "vla_interface.yaml"
+    if not p.exists():
+        return None
+    groups = (yaml.safe_load(p.read_text()) or {}).get("action", {}).get("groups", [])
+    return sum(1 for g in groups if g.get("kind") == "joint_position") or None
 
 
 def sys_python() -> str:

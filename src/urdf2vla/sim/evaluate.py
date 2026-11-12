@@ -48,22 +48,10 @@ def chunk_to_env_actions(action: dict, vla, n_steps: int) -> list[list[float]]:
     return out
 
 
-# ---- GR00T の DROID の事前学習（embodiment OXE_DROID_RELATIVE_EEF_RELATIVE_JOINT）で zero-shot に動かす
-# Isaac-GR00T の examples/DROID/main_gr00t.py（実機の DROID の client）と同じ観測・行動にする
-DROID_RESOLUTION = (180, 320)  # (高さ, 幅)。正方形の画像は左右を黒で埋める（tf.image.resize_with_pad と同じ）
-DROID_EEF_ROTATION_CORRECT = np.array([[0, 0, -1], [-1, 0, 0], [0, 1, 0]], dtype=np.float64)
-
-
-def _resize_with_pad(img: np.ndarray, height: int, width: int) -> np.ndarray:
-    from PIL import Image
-
-    h, w = img.shape[:2]
-    s = min(height / h, width / w)
-    nh, nw = int(round(h * s)), int(round(w * s))
-    out = np.zeros((height, width, 3), dtype=np.uint8)
-    top, left = (height - nh) // 2, (width - nw) // 2
-    out[top : top + nh, left : left + nw] = np.asarray(Image.fromarray(img).resize((nw, nh), Image.BILINEAR))
-    return out
+# ---- GR00T の DROID の embodiment（OXE_DROID_RELATIVE_EEF_RELATIVE_JOINT）で動かす（zero-shot、または DROID の並びで fine-tune したモデル）
+# Isaac-GR00T の examples/DROID/main_gr00t.py（実機の DROID の client）と同じ観測・行動にする。定数と変換は urdf2vla.gr00t.droid
+from urdf2vla.gr00t.droid import DROID_EEF_ROTATION_CORRECT, DROID_JOINTS, DROID_RESOLUTION, pad_joints  # noqa: E402
+from urdf2vla.gr00t.droid import resize_with_pad as _resize_with_pad  # noqa: E402
 
 
 def droid_eef_9d(view, arm: str) -> np.ndarray:
@@ -79,15 +67,20 @@ def droid_eef_9d(view, arm: str) -> np.ndarray:
 class DroidObservation:
     """DROID の観測（外部カメラ 1 台 + 手先カメラ、各 2 フレーム）を毎 step 積む。"""
 
-    def __init__(self, view, vla, cameras):
+    def __init__(self, view, vla, cameras, exterior: str | None = None):
         arm = view.cfg.arms[0]
-        if len(view.cfg.arms) != 1 or len(arm.joints) != 7 or not view.cfg.grippers:
-            raise RuntimeError("GR00T の DROID は 7 関節の腕とグリッパのロボット（Franka）向けです。")
+        if len(view.cfg.arms) != 1 or len(arm.joints) > DROID_JOINTS or not view.cfg.grippers:
+            raise RuntimeError(f"GR00T の DROID は {DROID_JOINTS} 関節以下の腕 1 本とグリッパのロボット（Franka・FANUC など）向けです。")
         wrist = next((c.name for c in cameras.cameras if c.mount == "link"), None)
-        ext = next((c.name for c in cameras.cameras if c.mount == "world"), None)
+        world = [c.name for c in cameras.cameras if c.mount == "world"]
+        ext = exterior if exterior else (world[0] if world else None)
+        if exterior and exterior not in world:
+            raise RuntimeError(f"外部カメラ {exterior} がありません（外部カメラ: {world}）。")
         if wrist is None or ext is None:
             raise RuntimeError("GR00T の DROID には手先カメラと外部カメラが 1 台ずつ必要です（DROID の配置: wrist + left/right）。")
+        self.n_arm = len(arm.joints)
         self.view, self.vla, self.arm, self.cams = view, vla, arm.name, (ext, wrist)
+        print(f"[urdf2vla] DROID cameras: exterior={ext} wrist={wrist}, arm joints={self.n_arm}", flush=True)
         self.buf: list[dict] = []
         self.video_delta = [0]
 
@@ -124,17 +117,18 @@ class DroidObservation:
             "state": {
                 "eef_9d": droid_eef_9d(self.view, self.arm)[None, None],
                 "gripper_position": np.array([[[1.0 - self.view.gripper_scalar(g, "state")]]], dtype=np.float32),  # DROID は 1 = 閉
-                "joint_position": np.asarray(self.view.vla_vector("state")[:7], dtype=np.float32)[None, None],
+                "joint_position": pad_joints(np.asarray(self.view.vla_vector("state")[: self.n_arm], dtype=np.float32))[None, None],
             },
             "language": {"annotation.language.language_instruction": [[self.view.instruction()]]},
         }
 
 
-def droid_chunk_to_env_actions(action: dict, n_steps: int) -> list[list[float]]:
-    """DROID の行動（関節位置の絶対値 7 + グリッパの位置 1。0.5 より大きければ閉）→ 評価環境の行動ベクトルの列。"""
+def droid_chunk_to_env_actions(action: dict, n_steps: int, n_arm: int = DROID_JOINTS) -> list[list[float]]:
+    """DROID の行動（関節位置の絶対値 7 + グリッパの位置 1。0.5 より大きければ閉）→ 評価環境の行動ベクトルの列。
+    7 関節より少ない腕は先頭の n_arm 関節だけ使う（残りは学習時に 0 で埋めた関節）。"""
     joints = np.asarray(action["joint_position"])[0]
     grip = np.asarray(action["gripper_position"])[0]
-    return [[float(x) for x in joints[t]] + [-1.0 if float(grip[t][0]) > 0.5 else 1.0] for t in range(min(len(joints), n_steps))]
+    return [[float(x) for x in joints[t][:n_arm]] + [-1.0 if float(grip[t][0]) > 0.5 else 1.0] for t in range(min(len(joints), n_steps))]
 
 
 def _check_absolute(first: list[float], view, vla) -> None:
@@ -230,7 +224,7 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
         result.fail(f"GR00T サーバ（127.0.0.1:{args.port}）に接続できません。")
         return
     if getattr(args, "droid", False):
-        droid_obs = DroidObservation(view, vla, c.cameras)
+        droid_obs = DroidObservation(view, vla, c.cameras, getattr(args, "exterior", None))
         droid_obs.configure(client)
     replay = bool(args.replay)
     droid = droid_obs if getattr(args, "droid", False) else None
@@ -287,7 +281,7 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
             if not queue:
                 if droid is not None:
                     action = client.get_action(droid.observation())
-                    queue = droid_chunk_to_env_actions(action, exec_h)
+                    queue = droid_chunk_to_env_actions(action, exec_h, droid.n_arm)
                 else:
                     action = client.get_action(build_observation(view, vla))
                     queue = chunk_to_env_actions(action, vla, exec_h)

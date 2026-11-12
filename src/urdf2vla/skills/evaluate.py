@@ -14,8 +14,7 @@ from urdf2vla.runtime.config import load_runtime
 from urdf2vla.runtime.dispatch import container_running, run_sim_skill, runtime_script, wrap
 
 
-DROID_MODEL = "nvidia/GR00T-N1.7-DROID"
-DROID_TAG = "OXE_DROID_RELATIVE_EEF_RELATIVE_JOINT"
+from urdf2vla.gr00t.droid import DROID_MODEL, DROID_TAG  # noqa: E402
 
 
 def _server_args(project: Project, opts: dict, gr) -> list[str] | str:
@@ -66,7 +65,9 @@ def _server_args(project: Project, opts: dict, gr) -> list[str] | str:
         Arg(("--port",), {"type": int, "default": 5555}),
         Arg(("--seed",), {"type": int, "default": 0}),
         Arg(("--timeout",), {"type": float, "default": 3600.0, "help": "秒"}),
-        Arg(("--droid",), {"action": "store_true", "help": "GR00T の DROID（Franka + 外部カメラ + 手先カメラ）の事前学習で zero-shot に評価する。--model 省略時は nvidia/GR00T-N1.7-DROID"}),
+        Arg(("--droid",), {"action": "store_true", "help": "GR00T の DROID の embodiment（単腕 + 外部カメラ 1 台 + 手先カメラ）で評価する。"
+                                                         "--model 省略時は nvidia/GR00T-N1.7-DROID で zero-shot、convert_dataset --layout droid で学習した checkpoint も --model で渡す"}),
+        Arg(("--exterior",), {"default": None, "help": "--droid: 外部カメラ（既定: 最初の外部カメラ。DROID の配置では left_cam）"}),
         Arg(("--video",), {"action": "store_true", "help": "エピソードごとに VLA が見る画像を横に並べた動画を build/eval_videos/ に保存する"}),
     ],
 )
@@ -110,6 +111,8 @@ def evaluate_vla(project: Project, opts: dict, result: SkillResult, log) -> None
             extra.append("--video")
         if opts.get("droid"):
             extra.append("--droid")
+            if opts.get("exterior"):
+                extra += ["--exterior", str(opts["exterior"])]
         if opts.get("model"):
             extra += ["--model", str(opts["model"])]
         sim_log = project.new_log("evaluate_vla_sim")
