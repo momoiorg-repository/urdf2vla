@@ -53,6 +53,8 @@ def _hint(robot_in: dict, answers: dict, key: str) -> Any:
     """回答（answers.yaml）> project.yaml の robot ヒントの順で値を引く。"""
     if key in answers:
         return answers[key]
+    if key == "robot.front_axis":
+        return robot_in.get("front_axis")
     if key == "arms.0.ee_link" and robot_in.get("end_effector"):
         ee = robot_in["end_effector"]
         return ee[0] if isinstance(ee, list) else ee
@@ -66,8 +68,33 @@ def _hint(robot_in: dict, answers: dict, key: str) -> Any:
         if isinstance(opens, list):
             return opens[idx] if idx < len(opens) else None
         return opens
+    if key.startswith("grippers.") and key.endswith(".open_close"):
+        idx = int(key.split(".")[1])
+        values = robot_in.get("gripper_open_close")
+        if values is None:
+            return None
+        if isinstance(values, list) and len(values) == 2 and all(isinstance(v, (int, float)) for v in values):
+            return values if idx == 0 else None
+        if isinstance(values, list):
+            return values[idx] if idx < len(values) else None
+        if isinstance(values, dict):
+            return values.get(str(idx))
+        return None
     if key.startswith("joints.") and key.endswith(".role"):
         return (robot_in.get("joint_roles") or {}).get(key.split(".")[1])
+    return None
+
+
+def _control_joints(robot_in: dict, arm: str, arm_count: int) -> list[str] | None:
+    """project.yaml の robot.control_joints。単腕ならリスト、双腕なら arm 名をキーにした dict。"""
+    override = robot_in.get("control_joints")
+    if isinstance(override, dict):
+        value = override.get(arm)
+        if isinstance(value, str):
+            value = [value]
+        return list(value) if value else None
+    if isinstance(override, list) and arm_count == 1:
+        return list(override)
     return None
 
 
@@ -620,15 +647,15 @@ def configure_robot(project: Project, opts: dict, result: SkillResult, log) -> N
 
     # ---- arms
     arms: list[ArmConfig] = []
-    control_override = robot_in.get("control_joints")
     for i, cand in enumerate(meta.arms):
         joints = cand.joints
-        if control_override and len(meta.arms) == 1:
+        control_override = _control_joints(robot_in, cand.name, len(meta.arms))
+        if control_override:
             bad = [n for n in control_override if n not in model.joints or not model.joints[n].movable]
             if bad:
                 result.fail(f"robot.control_joints に可動関節でない名前があります: {bad}")
                 return
-            joints = list(control_override)
+            joints = control_override
             prov[f"arms.{i}.joints"] = "user"
         else:
             prov[f"arms.{i}.joints"] = "inferred"

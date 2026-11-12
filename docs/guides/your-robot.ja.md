@@ -40,7 +40,7 @@ URDF を公開していて、多くの産業用ロボットと同じく CRX に�
       あったりすると警告します（CAD から書き出した URDF には仮の値がよく入っています）。トルクは URDF を編集せずに
       上書きできます（下記）。
     - **グリッパがあること。** URDF に入っているか、[NVIDIA のアセットライブラリから取り付ける](#simready) ものです。
-      いま対応しているのは、2 本指のグリッパの付いた単腕のロボットです。
+      いま対応しているのは、2 本指のグリッパの付いた単腕・双腕のロボットです（[双腕ロボット](#双腕ロボット)）。
 
     xacro は先に展開します: `xacro my_robot.urdf.xacro -o my_robot.urdf`
 
@@ -244,9 +244,9 @@ urdf2vla launch_sim      --project projects/crx3ia
 
 | キー | 答えるもの | 質問されるとき |
 |---|---|---|
-| `arms.0.ee_link` | ロボットの手先の link | 手先になりうる link が複数あるとき |
-| `grippers.0.open_position` | `lower` / `upper` | 回転する指の関節で、開く向きが分からないとき |
-| `grippers.0.open_close` | `[開, 閉]` の角度 [rad] | 指の関節に可動範囲がないとき |
+| `arms.<i>.ee_link` | ロボットの手先の link | 手先になりうる link が複数あるとき（双腕は腕ごとに質問） |
+| `grippers.<i>.open_position` | `lower` / `upper` | 回転する指の関節で、開く向きが分からないとき |
+| `grippers.<i>.open_close` | `[開, 閉]` の角度 [rad] | 指の関節に可動範囲がないとき |
 | `robot.gripper_joints` | 指の関節名のリスト | グリッパが自動で見つからないとき |
 | `robot.front_axis` | `+x` / `+y` / `-x` / `-y` | ロボットの正面が +x でないとき（+x を向くように回して置きます） |
 | `joints.<name>.role` | `fixed_at_reset` / `passive` | 腕でもグリッパでもない可動関節があるとき |
@@ -313,7 +313,8 @@ overrides:
 ```
 
 カメラの既定は [DROID](https://droid-dataset.github.io/) の配置（手先カメラと、台を見下ろす左右のカメラ、256×256）です。
-ほかに `front`（正面）と `side`（横）のプリセットがあります。実機のカメラに合わせるなら、明示的に書きます。
+双腕では腕ごとに手先カメラが付くので、既定は 4 台になります。ほかに `front`（正面）と `side`（横）のプリセットがあります。
+実機のカメラに合わせるなら、明示的に書きます。
 
 ```yaml
 cameras:
@@ -324,8 +325,72 @@ cameras:
 
 四元数は常に `[x, y, z, w]` です。
 
+## 双腕ロボット
+
+2 本の arm の連鎖を別々に検出し、設定・シミュレーション・学習まで別々に保ちます。ロボット固有の Python コードは要りません。
+腕ごとに関節・IK の剛体・TCP・接近方向・指の開閉方向と、任意の手先カメラを作ります。VLA の state / action は
+「右腕の関節、左腕の関節、右グリッパ、左グリッパ」の順です（検出順。上の例では right が先）。
+
+台は左右の肩の中央に置き、物体は台の左半分、箱は右半分に置きます。内蔵の scripted 操作は、物体に近い方の腕で把持し、
+もう一方の腕は初期姿勢のままグリッパを開いて保持します。この配置では毎回同じ腕になるので、scripted のデモで動くのは
+片方の腕だけです（もう一方の腕の関節とグリッパも毎フレーム記録します）。`launch_sim` の把持検査はグリッパごとに実行します。
+
+Franka を 2 本並べたロボットで、取り込み・検査・scripted の収集・変換・replay の評価まで確かめています。このロボットは
+ダウンロードなしで使える例として同梱しているので、双腕の流れをまず試せます。
+
+```bash
+urdf2vla init projects/dual_franka --from examples/dual_franka/project.yaml
+```
+
+URDF は `examples/dual_franka/make_dual_panda.py` が単腕の Franka から作ります（共通の台座に 0.7 m 離して 2 本）。2 本の腕が
+共通の root link から出ているときは、その link に `<inertial>` を書いてください。質量がないと importer が腕ごとに別の
+articulation にし、`import_robot` が `Expected 1 prims at '/World/Robot', found 2` で止まります。
+
+同梱の Dual Scorpion の例では、各腕の 8 番目の関節（joint7）をグリッパにし、joint0〜6 を腕にします。
+
+```yaml
+robot:
+  urdf: /path/to/dual_scorpion_Full_urdf/urdf/scorpion.urdf
+  front_axis: +y
+  gripper_joints: [joint7_R, joint7_L]
+  gripper_open_close: [[-0.8, 0.0], [-0.8, 0.0]]  # 仮値。開閉方向は snapshot で確認する
+  effort_limits: {"joint[0-6]_[RL]": 60.0}         # 仮値（下記）
+task:
+  objects: [color_cube]
+```
+
+Dual Scorpion の URDF は全関節が `effort: 1.0` で、元プロジェクトも仮値としています。シミュレーションで把持を判断する前に、
+実機のモータ値で `robot.effort_limits` を上書きしてください。10 N·m では止まっている側の腕が下がり、`setup_teleoperation` に
+失敗します。例では腕を 60 N·m にし、グリッパは URDF の値のままです。回転する顎では果物を保持できないので、例は立方体だけです。
+またグリッパの開き幅は連続回転の 1 関節からは決まらないので、物体が開きに入るかの自動スクリーニングは行われません。
+
+この設定で Dual Scorpion は `import_robot`・`launch_sim`・`setup_teleoperation` を通りますが、scripted の収集はまだ
+成功しません（8 回中 0 回。物体の真上の点の手前で手先が止まります）。物体と箱を片方の腕の前に寄せると真上までは
+行きますが、下降の途中で止まります（4 回中 0 回）。原因はまだ特定できていません。
+
+同梱の OpenArm の例（`examples/openarm`、Enactic OpenArm v2.0）は最後まで通りますが、配置は手で決めています。OpenArm の
+グリッパは前腕の延長上にあり、手首の曲げは最大 90° です。手先が真下を向くのは前腕が水平か下向きのときだけなので、上から
+掴めるのは肩からおよそ 0.3 m 以上下に限られます。自動配置の台はそれより高く、そこに真下向きで届く姿勢は上腕を肩より上に
+上げるものしかありません。そこで例では次のようにしています。
+
+- 台を 0.17 m に下げ、縁 14.6 cm の箱の代わりに低い `plastic_tray` を使う
+- 物体とトレイを左腕の側に置く（腕は体の中心線をほとんど越えられない。joint2 の内側への回転は最大 10°）
+- scripted 操作の近づく高さを 8 cm にする（`overrides.teleop.approach_height`）
+- 肘を下げた初期姿勢を `robot.default_pose` に書く（ホストの IK で求めた）
+- 指のトルクを 2 N·m に下げる。URDF の 7 N·m では、回転する指が立方体を片方の指に押し付け、`launch_sim` の把持検査が
+  立方体を支えるのをやめると滑り落ちる
+- 物理ソルバの位置の反復回数を 64 にする（`overrides.robot.asset.solver_position_iterations`）。既定の 32 では左手の
+  把持検査にわずかに失敗する（立方体が TCP から 2.2 cm ずれる。許容は 2 cm）
+
+この設定で OpenArm はすべての検査を通り、scripted の収集は 10 回中 8 回成功（毎回左腕）、replay の評価は 8 回中 8 回成功です。
+失敗した 2 回はどちらも物体が置く範囲のトレイ側の端にあり、手先が把持の高さの 6 mm 上で止まりました。開いた指がトレイの縁に
+当たっているとみられます。
+
 ## いまの制限
 
-- **双腕のロボット**は、解析・設定・取り込み（すべての検査を含む）まではできますが、`launch_sim` 以降はまだ対応していません。
+- 腕は 1 本か 2 本です。3 本以上の arm 連鎖はシミュレーションの Embodiment では対応していません。
+- 双腕: scripted 操作はエピソードごとに 1 本の腕を使います（既定の配置では毎回同じ腕）。`generate_mimic` と
+  `evaluate_vla --droid` は単腕だけです。
 - タスクは 1 つ: 物体を掴んで容器に入れる（または平らな置き場所に置く）Pick & Place。物体は `src/urdf2vla/objects.py` のカタログから選びます。
 - グリッパ: 2 本指の平行グリッパと、片側の顎だけが動くグリッパ。吸着や多指ハンドには対応していません。
+- SimReady のグリッパへの付け替え（`robot.gripper.simready`）は、いまは単腕のロボットだけです。

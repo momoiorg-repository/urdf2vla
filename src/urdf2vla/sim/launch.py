@@ -217,9 +217,15 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
     jtype = {j.name: j.type for j in c.meta.joints} if c.meta else {}
     grasp_report = {}
     for i, o in enumerate(task.objects):
-        grasp_checks, rep = grasp_hold(env, view, c, base, jtype, index=i)
-        checks += grasp_checks
-        grasp_report[o.key] = rep
+        for arm in robot.arms:
+            if robot.gripper_for(arm.name) is None:
+                continue
+            grasp_checks, rep = grasp_hold(env, view, c, base, jtype, index=i, arm_name=arm.name)
+            checks += grasp_checks
+            if len(robot.arms) > 1:
+                grasp_report[f"{arm.name}:{o.key}"] = {"arm": arm.name, **rep}
+            else:
+                grasp_report[o.key] = rep
 
     report = {
         "env_id": env_id,

@@ -157,7 +157,7 @@ in `warnings`. See [Train and evaluate](guides/training.md).
 ## 6. Check the pipeline with a replay evaluation {#replay}
 
 ```bash
-urdf2vla evaluate_vla --project projects/tutorial_franka --replay --dataset demos --episodes 3 --video
+urdf2vla evaluate_vla --project projects/tutorial_franka --replay --dataset demos --episodes 3
 ```
 
 Before you have a trained model, `--replay` tests everything around it: it starts the GR00T inference server with a
@@ -168,8 +168,10 @@ server–simulator connection all work.
 
 <video controls muted playsinline width="100%" src="../assets/eval_replay.mp4"></video>
 
-`--video` saves one video per episode in `build/eval_videos/`: the three camera images side by side, as the VLA sees
-them. With a trained checkpoint the command is the same, with `--model` instead of `--replay`.
+Success is judged from the simulator state (the object in the bin and the gripper open), so no video is needed. To
+watch an episode, add `--video`: it saves one video per episode in `build/eval_videos/`, with the three camera images
+side by side as the VLA sees them (the video above). With a trained checkpoint the command is the same, with
+`--model` instead of `--replay`.
 
 ## What you have now
 

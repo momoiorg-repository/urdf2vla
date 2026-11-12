@@ -151,7 +151,7 @@ GR00T N1.7 の学習には 44 GB 以上の GPU が必要です。`train_vla` は
 ## 6. replay の評価で工程を確かめる {#replay}
 
 ```bash
-urdf2vla evaluate_vla --project projects/tutorial_franka --replay --dataset demos --episodes 3 --video
+urdf2vla evaluate_vla --project projects/tutorial_franka --replay --dataset demos --episodes 3
 ```
 
 学習済みのモデルがなくても、`--replay` でモデルのまわりをすべて試せます。変換したデータセットの行動を返す代わりの方策で
@@ -160,8 +160,9 @@ GR00T の推論サーバを起動し、Isaac Sim をつないで、本番の評�
 
 <video controls muted playsinline width="100%" src="../../assets/eval_replay.mp4"></video>
 
-`--video` は、エピソードごとに 3 台のカメラの画像を横に並べた動画（VLA が見るもの）を `build/eval_videos/` に保存します。
-学習済みの checkpoint では、`--replay` の代わりに `--model` を付けて同じコマンドを使います。
+成功かどうかはシミュレータの状態（物体が箱の中にあり、グリッパが開いている）で決めるので、動画は要りません。エピソードを
+見たいときは `--video` を付けると、エピソードごとに 3 台のカメラの画像を横に並べた動画（VLA が見るもの。上の動画）を
+`build/eval_videos/` に保存します。学習済みの checkpoint では、`--replay` の代わりに `--model` を付けて同じコマンドを使います。
 
 ## できあがったもの
 

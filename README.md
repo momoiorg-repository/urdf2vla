@@ -13,7 +13,7 @@ question about your robot, or tells you what to change.
 - A pick-and-place task with real objects (apple, lime, pear, colored cube → bin), one per episode and named in the instruction — no scene building in Omniverse
 - Questions instead of guesswork, answerable in a 3D browser view (`urdf2vla view`)
 - Physics checks that catch grippers that can't hold, fingers that sink into objects and frozen cameras before you record
-- DROID-style cameras (wrist + left + right) by default
+- DROID-style cameras by default (one wrist camera per arm, plus left and right)
 - Data conversion and fine-tuning for NVIDIA GR00T N1.7, packaged for a bigger GPU when yours is too small
 - An agent skill for Claude Code: "I want to start VLA development with my robot"
 
@@ -58,7 +58,10 @@ Design notes, simulator pitfalls and verification status (in Japanese): [DEVELOP
 
 ## Status
 
-Single-arm robots with a two-finger gripper, one pick-and-place task (an object into a bin). Verified end to end with the
-bundled Franka Panda up to a replay evaluation; a full GR00T training run on this version is not yet verified.
-Dual-arm robots can be imported and checked but not yet simulated. urdf2vla's command output is currently in Japanese;
-the documentation explains every key and message in English.
+Single- and dual-arm robots with a two-finger gripper, one pick-and-place task (an object into a bin). The bundled
+Franka Panda is verified end to end up to a replay evaluation; a full GR00T training run on this version is not yet
+verified. Dual-arm robots are verified the same way on two Franka arms side by side (`examples/dual_franka`) and on
+the bundled OpenArm example (the scripted expert moves one arm per demonstration; OpenArm's table and starting pose
+are set by hand in the example).
+The bundled Dual Scorpion example gets through the checks but not yet through scripted collection.
+urdf2vla's command output is currently in Japanese; the documentation explains every key and message in English.

@@ -1,0 +1,83 @@
+"""双腕ロボットのホスト側フロー: 左右の腕・グリッパ・作業域・カメラ・VLA の次元。"""
+
+from __future__ import annotations
+
+import yaml
+
+from test_analysis_generic import side_by_side_bimanual
+from test_inspect import make_project, run
+from urdf2vla.gr00t.modality import modality_json
+from urdf2vla.schema.camera import CamerasConfig
+from urdf2vla.schema.robot import RobotConfig
+from urdf2vla.schema.task import TaskConfig
+from urdf2vla.skills.robot import _control_joints, _hint
+from urdf2vla.skills.vla import build_vla_interface
+
+
+def test_dual_arm_hints_can_come_from_project_yaml():
+    robot = {
+        "front_axis": "+y",
+        "gripper_open_close": [[-0.8, 0.0], [-0.7, 0.0]],
+    }
+    assert _hint(robot, {}, "robot.front_axis") == "+y"
+    assert _hint(robot, {}, "grippers.0.open_close") == [-0.8, 0.0]
+    assert _hint(robot, {}, "grippers.1.open_close") == [-0.7, 0.0]
+    joints = {"left": ["l1", "l2"], "right": ["r1", "r2"]}
+    assert _control_joints({"control_joints": joints}, "left", 2) == ["l1", "l2"]
+    assert _control_joints({"control_joints": ["l1", "l2"]}, "left", 1) == ["l1", "l2"]
+
+
+def test_dual_arm_setup_keeps_both_arms_and_grippers(tmp_path, capsys):
+    urdf = side_by_side_bimanual(tmp_path / "bimanual.urdf")
+    proj = make_project(
+        tmp_path,
+        capsys,
+        urdf,
+        {
+            "gripper_joints": ["joint9_R", "joint9_L"],
+            "gripper_open_position": ["lower", "lower"],
+            "front_axis": "+y",
+        },
+    )
+    r = run(capsys, "inspect_robot", "--project", str(proj))
+    assert r["status"] == "ok", r
+    assert {a["name"] for a in r["data"]["arms"]} == {"right", "left"}
+    assert len(r["data"]["grippers"]) == 2
+
+    for skill in ("configure_robot", "configure_task", "configure_camera"):
+        r = run(capsys, skill, "--project", str(proj))
+        assert r["status"] == "ok", (skill, r)
+
+    robot = RobotConfig.model_validate(yaml.safe_load((proj / "generated/robot_config.yaml").read_text()))
+    cameras = CamerasConfig.model_validate(yaml.safe_load((proj / "generated/cameras.yaml").read_text()))
+    task = TaskConfig.model_validate(yaml.safe_load((proj / "generated/task.yaml").read_text()))
+
+    assert [a.name for a in robot.arms] == ["right", "left"]
+    assert [g.arm for g in robot.grippers] == ["right", "left"]
+    assert set(task.home_tcp) == {"right", "left"}
+    # 双腕の作業域は左右の肩の中央。物体・箱・台が片方の腕の側だけに寄らない
+    assert abs(task.table.center[1]) < 1e-6
+    assert abs((sum(task.spawn_y) / 2) - task.table.center[1]) < 0.25 * task.table.size[1]
+    assert task.target.pos[1] < 0.0
+    assert task.table.center[1] - task.table.size[1] / 2 <= task.target.pos[1] - task.target.size[1] / 2
+    assert task.target.pos[1] + task.target.size[1] / 2 <= task.table.center[1] + task.table.size[1] / 2
+
+    assert {c.name for c in cameras.cameras} == {"right_wrist_cam", "left_wrist_cam", "left_cam", "right_cam"}
+
+    vla = build_vla_interface(robot, cameras, task)
+    assert [g.name for g in vla.state.groups] == ["right_arm", "left_arm", "right_gripper", "left_gripper"]
+    assert vla.state.dimension == sum(len(a.joints) for a in robot.arms) + 2
+    assert vla.action.dimension == vla.state.dimension
+    assert [i.key for i in vla.images] == ["right_wrist_cam", "left_wrist_cam", "left_cam", "right_cam"]
+    modality = modality_json(vla)
+    assert modality["state"]["left_arm"]["start"] == len(robot.arms[0].joints)
+    assert modality["action"]["left_gripper"]["end"] == vla.action.dimension
+
+    # Mimic は手先 1 つが前提。双腕では黙って間違ったデモを作らず、はっきり断る
+    from urdf2vla.project import Project
+    from urdf2vla.result import SkillResult
+    from urdf2vla.skills.mimic import generate_mimic
+
+    res = SkillResult(skill="generate_mimic")
+    generate_mimic(Project(proj), {}, res, None)
+    assert res.status == "error" and "単腕" in res.errors[0], res

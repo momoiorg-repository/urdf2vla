@@ -40,7 +40,7 @@ attach one, and how to swap it for another. The steps are the same for any URDF.
     - **Joint limits and efforts are real values.** urdf2vla warns when every joint has the same effort or a joint has
       no limits — CAD exporters often write placeholders. You can override efforts without editing the URDF (see below).
     - **There is a gripper** — in the URDF, or one you [attach from NVIDIA's asset library](#simready).
-      Supported today: single-arm robots with a two-finger gripper.
+      Supported today: one- or two-arm robots with a two-finger gripper (see [Dual-arm robots](#dual-arm-robots)).
 
     A xacro file has to be expanded first: `xacro my_robot.urdf.xacro -o my_robot.urdf`.
 
@@ -256,9 +256,9 @@ your answers to the same file (`answers.yaml`).
 
 | Key | You answer | Asked when |
 |---|---|---|
-| `arms.0.ee_link` | the link that is the robot's hand | more than one link could be the hand |
-| `grippers.0.open_position` | `lower` or `upper` | a revolute finger joint's opening direction isn't clear |
-| `grippers.0.open_close` | `[open, closed]` angles in rad | a finger joint has no limits |
+| `arms.<i>.ee_link` | the link that is the robot's hand | more than one link could be the hand; dual-arm robots get one question per arm |
+| `grippers.<i>.open_position` | `lower` or `upper` | a revolute finger joint's opening direction isn't clear |
+| `grippers.<i>.open_close` | `[open, closed]` angles in rad | a finger joint has no limits |
 | `robot.gripper_joints` | list of finger joint names | no gripper was found automatically |
 | `robot.front_axis` | `+x`, `+y`, `-x` or `-y` | the robot doesn't face +x; it is rotated so it does |
 | `joints.<name>.role` | `fixed_at_reset` or `passive` | a movable joint is neither arm nor gripper |
@@ -329,8 +329,8 @@ overrides:
 ```
 
 Cameras: the default is the [DROID](https://droid-dataset.github.io/) layout (a wrist camera plus left and right
-cameras looking down at the table, 256×256). Other presets are `front` and `side`. If you have a real camera to match,
-describe it explicitly:
+cameras looking down at the table, 256×256). A dual-arm robot gets one wrist camera per arm, so the default is four
+images. Other presets are `front` and `side`. If you have a real camera to match, describe it explicitly:
 
 ```yaml
 cameras:
@@ -341,10 +341,78 @@ cameras:
 
 Quaternions are always `[x, y, z, w]`.
 
+## Dual-arm robots
+
+Two arm chains are detected separately and kept separate through setup, simulation and training. Nothing needs to be
+hard-coded in a Python file. For each arm, urdf2vla derives its joints, IK body, TCP, approach/finger axes and optional
+wrist camera; the VLA state and action are ordered as both arm joint groups followed by both gripper scalars.
+
+The table is centred between the shoulders, with the objects on its left half and the bin on its right half. The
+built-in scripted expert grasps with the arm nearer to the object and keeps the other arm at its initial pose with its
+gripper open. In this layout that is the same arm every episode, so scripted demonstrations move only one arm; the other
+arm's joints and gripper are still recorded in every frame. `launch_sim` runs the grasp checks for each gripper.
+
+Tested end to end (import, checks, scripted collection, conversion and replay evaluation) on two Franka arms side by
+side. That robot is bundled as an example that needs no download, so you can try the dual-arm workflow first:
+
+```bash
+urdf2vla init projects/dual_franka --from examples/dual_franka/project.yaml
+```
+
+Its URDF is generated from the single Franka by `examples/dual_franka/make_dual_panda.py` (two arms 0.7 m apart on a
+shared base). If your two arms hang off a common root link, give that link an `<inertial>`: without mass, the importer splits
+the robot into two articulations and `import_robot` stops with `Expected 1 prims at '/World/Robot', found 2`.
+
+For the bundled Dual Scorpion example, set the 8th joint of each arm as the gripper (the first 7 joints are the arm):
+
+```yaml
+robot:
+  urdf: /path/to/dual_scorpion_Full_urdf/urdf/scorpion.urdf
+  front_axis: +y
+  gripper_joints: [joint7_R, joint7_L]
+  gripper_open_close: [[-0.8, 0.0], [-0.8, 0.0]]  # provisional; confirm the opening direction
+  effort_limits: {"joint[0-6]_[RL]": 60.0}         # provisional, see below
+task:
+  objects: [color_cube]
+```
+
+The Dual Scorpion URDF gives every joint `effort: 1.0`, which the project README calls provisional. Replace it with
+the real motor values under `robot.effort_limits` before judging grasp behaviour in simulation. At 10 N·m the idle arm
+sags and `setup_teleoperation` fails; the example uses 60 N·m for the arms and keeps the URDF value for the grippers.
+The rotating jaw can't hold the fruit, so the example uses the cube only. Its gripper opening width also cannot be
+derived from a single continuous joint, so object fit is not screened automatically.
+
+With these settings the Dual Scorpion passes `import_robot`, `launch_sim` and `setup_teleoperation`, but scripted
+collection does not succeed yet (0 of 8): the hand stops just short of the point above the object. With the object
+and bin moved in front of one arm it gets above the object but stalls on the way down (0 of 4); the cause isn't
+isolated yet.
+
+The bundled OpenArm example (`examples/openarm`, Enactic OpenArm v2.0) runs end to end, but its layout is set by hand.
+OpenArm's gripper sits in line with the forearm and the wrist bends at most 90°, so the hand points straight down only
+when the forearm is level or tilted down. That limits top-down grasps to roughly 0.3 m or more below the shoulders. The
+automatic layout puts the table higher than that, and the only top-down pose that reaches it raises the upper arm above
+the shoulder. The example therefore:
+
+- lowers the table to 0.17 m and uses the low `plastic_tray` instead of the 14.6 cm bin;
+- puts the object and the tray on the left arm's side, because the arm can barely cross the body's centre line
+  (joint 2 turns inward at most 10°);
+- lowers the scripted approach height to 8 cm (`overrides.teleop.approach_height`);
+- sets an elbow-down starting pose in `robot.default_pose` (found with IK on the host);
+- lowers the finger torque to 2 N·m. At the URDF's 7 N·m, the revolute fingers push the cube against one finger, and
+  it slides out once the `launch_sim` grasp check stops holding it in place;
+- raises the physics solver's position iterations to 64 (`overrides.robot.asset.solver_position_iterations`). At the
+  default 32 the left gripper's grasp check fails narrowly (the cube ends 2.2 cm from the TCP, against a 2 cm limit).
+
+With these settings OpenArm passes all checks, scripted collection succeeds 8 times in 10 attempts (always the left
+arm), and replay evaluation succeeds 8 of 8. Both failed attempts had the object at the tray-side edge of its area and
+stopped 6 mm above the grasp height, most likely with an open finger resting on the tray rim.
+
 ## Limitations
 
-- **Dual-arm robots** can be inspected, configured and imported (with all checks), but `launch_sim` and later steps
-  don't support them yet.
+- Arms: one or two. More than two arm chains are not supported by the simulation embodiment.
+- Dual-arm robots: the scripted expert uses one arm per episode (the same arm in the default layout).
+  `generate_mimic` and `evaluate_vla --droid` are single-arm only.
 - One task: pick an object and place it in a container (or on a flat target). Objects come from the catalog in
   `src/urdf2vla/objects.py`.
 - Grippers: two-finger parallel or single-moving-jaw grippers. Suction and multi-finger hands are not supported.
+- The SimReady gripper replacement (`robot.gripper.simready`) is currently limited to single-arm robots.

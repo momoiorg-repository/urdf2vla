@@ -1,0 +1,52 @@
+# urdf2vla の例: Enactic OpenArm v2.0（https://github.com/enactic/openarm_description、Apache-2.0）。双腕 7 軸 + pinch gripper
+#   git clone https://github.com/enactic/openarm_description.git external/openarm_description
+#   （確認したのは cc9d0e5。初期姿勢・配置はこの URDF に合わせてある）
+#   urdf2vla init projects/openarm --from examples/openarm/project.yaml
+# グリッパは前腕の延長上（人の手と同じ）にあり、手首の曲げは最大 90°。手先が真下を向くのは前腕が水平か下向きのときだけなので、
+# 上から掴めるのは肩（z = 0.70 m）からおよそ 0.3 m 以上下（この例の作業の高さは 0.35〜0.5 m 下）。自動配置の台はそれより高いので、
+# 台の高さ・トレイ・作業の構えを手で決めている（overrides.task。ホストの IK で届く範囲を調べた）。
+# 物体とトレイを左腕の側に置き、左腕で拾って置く（腕は体の中心線をほとんど越えられない: joint2 の内転は 10° まで）。
+name: openarm
+
+robot:
+  urdf: ../../external/openarm_description/assets/robot/openarm_v2.0/urdf/example/v2.urdf
+  gripper_open_position: [upper, lower]  # [left, right]。指の関節は左右で開く向きが逆
+  # URDF の指は 7 N·m。回転する指は強く閉じると物体を片方の指に押し付けて、離したときに滑り落ちる（2 N·m で保持できる）
+  effort_limits: {"openarm_(left|right)_finger_joint[12]": 2.0}
+  # 作業の構え（home_tcp）で手先が真下を向く、肘を下げた姿勢（ホストの IK で求めた）。自動配置の台（0.42 m）では、import_robot の
+  # IK の提案が上腕を肩より上に回した姿勢になった
+  default_pose:
+    openarm_left_joint1: -0.1
+    openarm_left_joint2: -0.57
+    openarm_left_joint3: 0.62
+    openarm_left_joint4: 1.32
+    openarm_left_joint5: 0.78
+    openarm_left_joint6: -0.4
+    openarm_left_joint7: -1.08
+    openarm_right_joint1: 0.105
+    openarm_right_joint2: 0.575
+    openarm_right_joint3: -0.624
+    openarm_right_joint4: 1.321
+    openarm_right_joint5: -0.781
+    openarm_right_joint6: 0.4
+    openarm_right_joint7: 1.084
+
+task:
+  objects: [color_cube]
+  container: plastic_tray  # KLT の箱（縁 14.6 cm）では、箱の上の近づく点で手首（joint7）が可動範囲の端になる
+
+cameras:
+  - preset: wrist   # 双腕なので腕ごとに付く（left_wrist_cam / right_wrist_cam）
+  - preset: left
+  - preset: right
+
+overrides:
+  robot: {asset: {solver_position_iterations: 64}}  # 既定の 32 では左手の grasp_hold に失敗した（物体が TCP から 2.2 cm ずれる）
+  task:
+    table: {center: [0.245, 0.0], size: [0.29, 0.7, 0.05], top_z: 0.17}  # 手前の端 x = 0.10（胴の台座は x ≤ 0.095）
+    spawn_x: [0.16, 0.21]
+    spawn_y: [0.24, 0.28]  # トレイ側の端（y ≈ 0.24）では下降が止まることがある（開いた指がトレイの縁に当たるとみられる）
+    target: {pos: [0.24, 0.07]}  # y = 0.03 では置く点が joint2 の内転の限界にかかり、掴んだ向きによって届かない
+    home_tcp: {left: [0.2, 0.2, 0.28], right: [0.2, -0.2, 0.28]}
+  teleop: {approach_height: 0.08}  # 既定の 12 cm では、トレイの上の近づく点で手首（joint7）が可動範囲の端に近い。8 cm で確認
+  cameras: {}

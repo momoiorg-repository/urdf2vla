@@ -47,7 +47,7 @@ When a step returns `needs_input`, the **質問 (Questions)** panel lists the op
 Pick an answer and press **回答を保存 (Save answers)**. The answers are written to `answers.yaml`, exactly as
 `urdf2vla answer` would; then run the step named in `next`.
 
-- Choosing a hand-link candidate (`arms.0.ee_link`) highlights that link in 3D.
+- Choosing a hand-link candidate (`arms.<i>.ee_link`; both arms have their own question) highlights that link in 3D.
 - When urdf2vla proposes joint values — for example a starting pose found by inverse kinematics — the
   **提案の姿勢を見る (Show the suggested pose)** button moves the robot to it, so you can look before you accept.
 

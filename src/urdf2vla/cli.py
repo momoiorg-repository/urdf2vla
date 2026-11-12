@@ -36,9 +36,11 @@ robot:
   urdf: {urdf}
   # 以下は任意。書いておくと質問されません。
   # end_effector: panda_hand            # 双腕なら [left_ee, right_ee]
-  # control_joints: [joint1, ...]       # arm として制御する関節（自動検出を上書き）
+  # control_joints: [joint1, ...]       # arm として制御する関節（双腕なら {{left: [...], right: [...]}}）
   # gripper_joints: [finger1, finger2]  # 指の関節（自動検出を上書き）
   # gripper_open_position: upper        # 指が開くのは関節の lower / upper どちらの限界か
+  # gripper_open_close: [[開, 閉], ...]  # 可動範囲のない連続回転の指だけ。グリッパの順に [rad]
+  # front_axis: +x                      # 正面が +x でないロボット（+y / -x / -y）
   # default_pose: {{joint1: 0.0}}         # 初期姿勢 [rad or m]
   # effort_limits: {{"joint[0-6]_.*": 10.0}}  # トルク上限 [N·m]（関節名の正規表現。URDF の値が仮値のとき）
   # base_pose: {{pos: [0, 0, 0], rot_xyzw: [0, 0, 0, 1]}}   # 四元数は [x, y, z, w]
@@ -52,6 +54,7 @@ robot:
 #   container: klt_bin                          # トレイなら plastic_tray、平らな緑の円なら disc
 
 # カメラ。既定は DROID と同じ配置: 手先(wrist) + ロボットの左右の高い位置から台を見下ろす外部カメラ(left / right)。
+# 双腕では wrist が腕ごとに展開され、手先 2 台 + 外部 2 台になる。
 # ほかに正面(front)・横(side)のプリセットと、明示指定ができる。明示指定の例:
 #   - {{name: head_cam, mount: link, parent_link: head_link, pos: [0, 0, 0], rot_xyzw: [0, 0, 0, 1],
 #      convention: ros, width: 640, height: 480, intrinsic_matrix: [fx, 0, cx, 0, fy, cy, 0, 0, 1]}}

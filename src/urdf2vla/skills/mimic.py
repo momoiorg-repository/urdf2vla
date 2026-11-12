@@ -13,6 +13,7 @@ from urdf2vla.registry import Arg, skill
 from urdf2vla.result import SkillResult
 from urdf2vla.runtime.config import load_runtime
 from urdf2vla.runtime.dispatch import run_sim_skill
+from urdf2vla.schema.robot import RobotConfig
 from urdf2vla.schema.task import TaskConfig
 
 
@@ -33,6 +34,11 @@ from urdf2vla.schema.task import TaskConfig
     ],
 )
 def generate_mimic(project: Project, opts: dict, result: SkillResult, log) -> None:
+    robot = RobotConfig.model_validate(project.read_generated("robot_config.yaml"))
+    if len(robot.arms) != 1:
+        # sim/mimic.py は手先 1 つ（arms[0]、行動の先頭 7 次元と最後のグリッパ）を前提にしている
+        result.fail("Mimic は単腕のロボットだけで使えます（双腕は未対応）。双腕のデモは collect_dataset --device scripted で集めてください。")
+        return
     task = TaskConfig.model_validate(project.read_generated("task.yaml"))
     if len(task.objects) != 1 or not task.target.is_container:
         result.fail("Mimic は物体 1 つと容器のタスクで使います。project.yaml の task.objects を 1 つ（例: [color_cube]）にし、configure_task からやり直してください。")

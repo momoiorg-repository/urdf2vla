@@ -54,20 +54,26 @@ REACH_MIN_FRACTION = 0.2  # 作業域の中心をこれより（腕の長さに�
 
 
 def gripper_opening(project: Project, cfg: RobotConfig) -> float | None:
-    """最初のグリッパの指先の最大の開き [m]。SimReady はカタログの値、直動の指は可動量の和。回転の指は分からない（None）。"""
+    """グリッパの指先の最大の開き [m]。SimReady はカタログの値、直動の指は可動量の和。
+    双腕なら狭い方（すべての物体を両手で扱えるようにするため）、回転の指が 1 つでもあれば分からない（None）。"""
     if not cfg.grippers:
         return None
-    g = cfg.grippers[0]
-    if g.simready:
-        from urdf2vla.grippers import get_gripper
-
-        return get_gripper(g.simready).max_opening or None
     meta = project.read_generated("robot_metadata.yaml")
     types = {j["name"]: j["type"] for j in meta.get("joints", [])}
-    joints = list(g.open)
-    if joints and all(types.get(j) == "prismatic" for j in joints):
-        return round(sum(abs(g.open[j] - g.close[j]) for j in joints), 4)
-    return None
+    openings = []
+    for g in cfg.grippers:
+        if g.simready:
+            from urdf2vla.grippers import get_gripper
+
+            opening = get_gripper(g.simready).max_opening or None
+        elif all(types.get(j) == "prismatic" for j in g.joints):
+            opening = round(sum(abs(g.open[j] - g.close[j]) for j in g.joints), 4)
+        else:
+            return None
+        if opening is None:
+            return None
+        openings.append(opening)
+    return min(openings) if openings else None
 
 
 # --------------------------------------------------------------------------- configure_task
@@ -87,10 +93,12 @@ def configure_task(project: Project, opts: dict, result: SkillResult, log) -> No
     shoulders, lengths = arm_geometry(project, cfg)
     length = min(lengths)
     base = cfg.base_pose.pos
-    # 1 本目の腕の前で Pick & Place する。把持点は肩から腕の長さの半分の距離、なるべく斜め下 45° に置く。
+    # 作業域の前で Pick & Place する。把持点は肩から腕の長さの半分の距離、なるべく斜め下 45° に置く。
     # 肩が高くて下まで届かないロボットは台を高くする（台の上面が base より上になる）
-    lane = shoulders[0]
-    h = lane[2] - base[2]
+    # 双腕では肩の間（左右の中央）が両手の作業域。正面側の肩を基準に台を置き、腕ごとの構えは home_tcp に残す
+    shoulder_z = max(sh[2] for sh in shoulders)
+    shoulder_x = max(sh[0] for sh in shoulders)
+    h = shoulder_z - base[2]
     r = 0.5 * length
     if h - GRASP_CLEAR <= r * SQRT_HALF:
         top_z = base[2]
@@ -98,13 +106,13 @@ def configure_task(project: Project, opts: dict, result: SkillResult, log) -> No
         d = math.sqrt(max(r * r - drop * drop, (0.3 * length) ** 2))
     else:
         drop = r * SQRT_HALF
-        top_z = lane[2] - drop - GRASP_CLEAR
+        top_z = shoulder_z - drop - GRASP_CLEAR
         d = drop
     s = min(max(length / 1.09, 0.4), 1.5)  # Franka を 1 とした大きさの比
-    wy = lane[1] if len(shoulders) > 1 else sum(sh[1] for sh in shoulders) / len(shoulders)
     # 台はロボットの正面中央に。手前の端がロボットの base にかからないようにする
     cy = sum(sh[1] for sh in shoulders) / len(shoulders)
     spread = max(sh[1] for sh in shoulders) - min(sh[1] for sh in shoulders)
+    wy = cy
 
     # 物体と置き場所: project.yaml の task.objects（カタログの key のリスト）と task.container（key、"disc" は円）
     spec = project.config().get("task") or {}
@@ -147,7 +155,7 @@ def configure_task(project: Project, opts: dict, result: SkillResult, log) -> No
         size_y = max(1.04 * length, spread + 0.3)
         home = {}
         for arm, sh in zip(cfg.arms, shoulders):
-            home[arm.name] = [round(wx, 3), round(sh[1] if len(shoulders) > 1 else wy, 3), round(top_z + GRASP_CLEAR + 0.6 * drop, 3)]
+            home[arm.name] = [round(wx, 3), round(sh[1], 3), round(top_z + GRASP_CLEAR + 0.6 * drop, 3)]
         spawn_x = [round(wx - 0.06 * s, 3), round(wx + 0.06 * s, 3)]
         spawn_y = [round(wy + 0.06 * s, 3), round(wy + 0.16 * s, 3)]
         if box is None:
@@ -188,7 +196,7 @@ def configure_task(project: Project, opts: dict, result: SkillResult, log) -> No
 
     # 腕の長さから決めた位置で、手先を真下に向けて作業域に届くかを IK で確かめ、届かなければ台を手前に寄せる
     # （腕が短くグリッパが長いロボットでは、真下に向けた手首が高くなり、奥や上に届かない）
-    wx = lane[0] + d
+    wx = shoulder_x + d
     checker = None
     if len(cfg.arms) == 1:
         from urdf2vla.urdf.parser import parse_urdf
@@ -201,7 +209,7 @@ def configure_task(project: Project, opts: dict, result: SkillResult, log) -> No
         if checker is None:
             break
         unreachable = [p for p in reach_points(home, spawn_x, spawn_y, target) if not checker.reachable(p)]
-        if not unreachable or wx - REACH_STEP < lane[0] + REACH_MIN_FRACTION * length:
+        if not unreachable or wx - REACH_STEP < shoulder_x + REACH_MIN_FRACTION * length:
             break
         wx -= REACH_STEP
     if wx < moved_from:
@@ -229,6 +237,7 @@ def configure_task(project: Project, opts: dict, result: SkillResult, log) -> No
     result.outputs["task"] = project.rel(path)
     result.data = {
         "arm_length_estimate": length,
+        "arms": [arm.name for arm in cfg.arms],
         "workspace_center": [round(wx, 3), round(wy, 3), round(top_z, 3)],
         "control_hz": task.control_hz,
         "objects": [o.key for o in task.objects],
