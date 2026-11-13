@@ -95,9 +95,10 @@ GPU のメモリ、Docker と NVIDIA Container Toolkit、2 つの image とコ�
 
 ここまでの手順は、クラウドの GPU のマシン（たとえば NVIDIA Brev のインスタンス）でも同じです。**L40S（48 GB）** なら
 シミュレーションが動き、GR00T の学習にも足りるので、`train_vla` がそのマシンで学習します。
+詳しい手順と実測値（ドライバ、Docker から GPU を使う設定、ディスク、Hugging Face）は [NVIDIA Brev で動かす](guides/brev.md) にあります。
 
-- **インスタンス:** Ubuntu 22.04 か 24.04、Docker と NVIDIA Container Toolkit、ディスクは **200 GB** 以上
-  （2 つの image で約 100 GB、ほかにデータセットと GR00T の元のモデル）。
+- **インスタンス:** Ubuntu 22.04 か 24.04、Docker と NVIDIA Container Toolkit、ディスクは **300 GB** 以上
+  （image で約 64 GB とビルドのキャッシュ、GR00T のモデル、データセット、学習の checkpoint が 1 つ 24 GB）。
 - **ドライバ:** urdf2vla はドライバ 580 以降で確かめています。インスタンスのドライバが古ければ `urdf2vla doctor` が警告します。
   新しいドライバのイメージを選ぶか、更新して再起動してください。
 - **画面は要りません:** どの工程も画面なしで動きます。

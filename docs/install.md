@@ -94,11 +94,12 @@ very first start of Isaac Sim can take several minutes).
 
 ## On a cloud GPU (NVIDIA Brev) {#cloud}
 
-Everything above works the same on a cloud GPU machine, for example an NVIDIA Brev instance. An **L40S (48 GB)** runs
+Everything above works the same on a cloud GPU machine, for example an NVIDIA Brev instance. For the full,
+measured walk-through (driver, Docker GPU access, disk, Hugging Face), see [Run on NVIDIA Brev](guides/brev.md). An **L40S (48 GB)** runs
 the simulation and is also big enough for GR00T training, so `train_vla` trains on the machine itself.
 
-- **Instance:** Ubuntu 22.04 or 24.04 with Docker and the NVIDIA Container Toolkit, and at least **200 GB** of disk:
-  about 100 GB for the two images, plus datasets and the GR00T base model.
+- **Instance:** Ubuntu 22.04 or 24.04 with Docker and the NVIDIA Container Toolkit, and at least **300 GB** of disk:
+  about 64 GB of images plus build cache, the GR00T models, datasets, and 24 GB per training checkpoint.
 - **Driver:** urdf2vla is tested with driver 580 or newer. `urdf2vla doctor` warns if the instance's driver is older.
   Pick an image with a newer driver, or upgrade it and reboot.
 - **No display needed:** every step runs headless.
