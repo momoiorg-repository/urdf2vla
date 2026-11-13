@@ -19,6 +19,8 @@ from urdf2vla.result import SkillResult
 # 学習に使う image（docker/build.sh が Isaac-GR00T 23ace64 から作るもの。train.sh の使い方に書く）
 GR00T_IMAGE = "urdf2vla/gr00t:23ace64"
 REQUIRED_GB = 44.0
+# checkpoint 1 つ = 重み約 11 GB + optimizer の状態約 13 GB（L40S での実測）。save_total_limit 個まで残る
+CHECKPOINT_GB = 24.0
 DEFAULT_BASE_MODEL = "nvidia/GR00T-N1.7-3B"
 # 単腕のロボット（Franka・FANUC など）は DROID（単腕 + 外部カメラ + 手先カメラ）で学習したモデルから fine-tune する
 SINGLE_ARM_BASE_MODEL = "nvidia/GR00T-N1.7-DROID"
@@ -41,7 +43,7 @@ def _args(base: str, dataset: str, modality: str, output: str, a, tag: str = "ne
         "--max-steps", str(a.max_steps),
         "--global-batch-size", str(a.batch_size),
         "--save-steps", str(a.save_steps),
-        "--save-total-limit", "5",
+        "--save-total-limit", str(getattr(a, "save_total_limit", 2)),
         "--dataloader-num-workers", "2",
         "--no-tune-llm", "--no-tune-visual", "--tune-projector", "--tune-diffusion-model",
     ]  # fmt: skip
@@ -155,6 +157,18 @@ def run(project: Project, args, result: SkillResult) -> None:
         )
     else:
         report["mode"] = "local"
+        import shutil
+
+        free_gb = shutil.disk_usage(job_dir).free / 1e9
+        need_gb = CHECKPOINT_GB * (getattr(args, "save_total_limit", 2) + 1)  # 保存の途中は 1 つ多い
+        report["disk"] = {"free_gb": round(free_gb, 1), "needed_gb": need_gb}
+        if free_gb < need_gb:
+            result.fail(
+                f"{project.rel(job_dir)} のディスクの空きが {free_gb:.0f} GB です。checkpoint は 1 つ約 {CHECKPOINT_GB:.0f} GB で、"
+                f"--save-total-limit {getattr(args, 'save_total_limit', 2)} では約 {need_gb:.0f} GB 要ります（空きを作るか limit を下げる）。"
+            )
+            (project.build / "train_report.yaml").write_text(dump_yaml(report))
+            return
         env = dict(os.environ, DATASET_DIR=str(ds), OUTPUT_DIR=str(job_dir / "checkpoints"),
                    BASE_MODEL=base, GR00T_ROOT=os.environ["URDF2VLA_GR00T_ROOT"],
                    GR00T_PYTHON=sys_python())  # fmt: skip
