@@ -111,6 +111,17 @@ def run(project: Project, args, result: SkillResult) -> None:
         tag, modality = "new_embodiment", mods[0]
         arms = layout.get("arms") or _project_arms(project)
     base = args.base_model or default_base_model(layout, arms)
+    if getattr(args, "check_only", None):
+        ck = Path(args.check_only).expanduser()
+        ck = ck if ck.is_absolute() else project.root / ck
+        if not ck.exists():
+            result.fail(f"checkpoint が見つかりません: {ck}")
+            return
+        c = _release_check(project, ds, layout, tag, modality, ck)
+        result.data = {"checks": [f"{c['name']}: {'OK' if c['ok'] else 'FAIL'}"], "release_check": c["detail"]}
+        if not c["ok"]:
+            result.warnings.append(_release_warning(c))
+        return
     job = args.job or f"{project.name}_{args.dataset}"
     job_dir = project.root / "training" / job
     job_dir.mkdir(parents=True, exist_ok=True)
@@ -177,6 +188,12 @@ def run(project: Project, args, result: SkillResult) -> None:
         if rc != 0:
             result.fail(f"学習が失敗しました（exit {rc}）。ログを確認してください。")
         result.outputs["checkpoints"] = project.rel(job_dir / "checkpoints")
+        last = _latest_checkpoint(job_dir / "checkpoints") if rc == 0 else None
+        if last is not None:  # 学習が終わって GPU が空いたので、グリッパを開くかをすぐ確かめる（シミュレーションなし）
+            c = _release_check(project, ds, layout, tag, modality, last)
+            checks.append(c)
+            if not c["ok"]:
+                result.warnings.append(_release_warning(c))
     (project.build / "train_report.yaml").write_text(dump_yaml(report))
     result.outputs["train_script"] = project.rel(script)
     result.outputs["train_report"] = project.rel(project.build / "train_report.yaml")
@@ -184,6 +201,52 @@ def run(project: Project, args, result: SkillResult) -> None:
     result.data["checks"] = [f"{c['name']}: {'OK' if c['ok'] else 'FAIL'}" for c in checks]
     if result.status == "ok":
         result.next = ["evaluate_vla"]
+
+
+def _latest_checkpoint(d: Path) -> Path | None:
+    cks = [p for p in d.glob("checkpoint-*") if p.name.split("-")[-1].isdigit() and (p / "config.json").exists()]
+    return max(cks, key=lambda p: int(p.name.split("-")[-1])) if cks else None
+
+
+def _release_check(project: Project, ds: Path, layout: dict, tag: str, modality: Path, checkpoint: Path) -> dict:
+    """urdf2vla.gr00t.release_check を実行して検査の形にする（失敗しても学習の結果は残す）。"""
+    import sys
+    import traceback
+
+    from urdf2vla.gr00t import release_check
+
+    try:
+        if layout.get("layout") == "droid":
+            key, open_is_high = "gripper_position", False  # DROID は 1 = 閉
+        else:
+            sys.path.insert(0, str(ds))
+            __import__(modality.stem)  # NEW_EMBODIMENT の modality config を登録する
+            key = _project_gripper_group(project)
+            open_is_high = True  # urdf2vla の並びは 1 = 開
+            if key is None:
+                return {"name": "release_check", "ok": True, "detail": "グリッパのないロボットなので確かめません"}
+        d = release_check.run(checkpoint, ds, tag, key, open_is_high)
+        return {"name": "release_check", "ok": d.pop("ok"), "detail": d}
+    except Exception as e:  # noqa: BLE001
+        traceback.print_exc()
+        return {"name": "release_check", "ok": True, "detail": f"確かめられませんでした（{type(e).__name__}: {e}）"}
+
+
+def _release_warning(c: dict) -> str:
+    d = c["detail"]
+    return (
+        f"release_check: デモがグリッパを開く場面で、モデルが開いたのは {d.get('release_rate', 0):.0%}（{d.get('queries', 0)} 回の問い合わせ）です。"
+        "評価すると「掴んで運ぶが離さない」になる見込みです。convert_dataset の gripper_timing の検査を確かめ、"
+        "--force で変換し直してから学習し直してください。"
+    )
+
+
+def _project_gripper_group(project: Project) -> str | None:
+    import yaml
+
+    p = project.root / "generated" / "vla_interface.yaml"
+    groups = (yaml.safe_load(p.read_text()) or {}).get("action", {}).get("groups", []) if p.exists() else []
+    return next((g["name"] for g in groups if g.get("kind") != "joint_position"), None)
 
 
 def _project_arms(project: Project) -> int | None:

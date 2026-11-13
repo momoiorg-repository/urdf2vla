@@ -37,6 +37,7 @@ declare_sim_skill(
         Arg(("--save-steps",), {"type": int, "default": 1000}),
         Arg(("--save-total-limit",), {"type": int, "default": 2, "help": "残す checkpoint の数（1 つ約 24 GB: 重み 11 GB + optimizer 13 GB）"}),
         Arg(("--base-model",), {"default": None, "help": "ベースモデル（既定: 単腕・DROID の並びは nvidia/GR00T-N1.7-DROID、双腕は nvidia/GR00T-N1.7-3B）"}),
+        Arg(("--check-only",), {"default": None, "help": "学習せず、この checkpoint がグリッパを開く場面で開くかだけ確かめる（シミュレーションなし、1〜2 分）"}),
         Arg(("--force-local",), {"action": "store_true", "help": "GPU メモリが足りなくてもこのマシンで学習を試す"}),
         Arg(("--timeout",), {"type": float, "default": 7 * 24 * 3600.0, "help": "秒"}),
     ],

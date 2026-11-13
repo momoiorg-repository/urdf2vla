@@ -30,6 +30,16 @@ def test_episode_without_gripper_change_is_reported():
     assert t["ok"] and t["episodes_without_gripper_change"] == [0]
 
 
+def test_release_step_for_both_gripper_conventions():
+    from urdf2vla.gr00t.release_check import release_step
+
+    native = _grip(166, 41, 153)  # 1 = 開
+    assert release_step(native, open_is_high=True) == 153
+    droid = (1.0 - native)[:, None]  # DROID は 1 = 閉
+    assert release_step(droid, open_is_high=False) == 153
+    assert release_step(np.zeros(20), open_is_high=True) is None
+
+
 def test_hold_tail_lengths():
     idx = hold_tail(100, 16)
     assert len(idx) == 115 and idx[-1] == 99 and list(idx[:100]) == list(range(100))
