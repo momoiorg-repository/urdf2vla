@@ -14,6 +14,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from urdf2vla.failures import failure_reason, summarize
 from urdf2vla.project import Project, dump_yaml
 from urdf2vla.result import SkillResult
 
@@ -327,7 +328,9 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
             "object_lift_m": round(max_lift, 4),
             "object_moved_before_grasp_m": None if moved_before_grasp is None else round(moved_before_grasp, 4),
             "frozen_frames": frozen,
+            "gripper_open_at_end": gripper_open,
         }
+        ep_info["failure"] = failure_reason(outcome, moved_before_grasp is not None, gripper_open, max_lift)
         if writer:
             ep_info["video"] = project.rel(writer.path)
         episodes.append(ep_info)
@@ -346,6 +349,7 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
         "model": getattr(args, "model", None),
         "episodes": episodes,
         "success_rate": round(n_success / max(len(episodes), 1), 3),
+        "failures": summarize([e["failure"] for e in episodes]),
         "execution_horizon": exec_h,
         "checks": checks,
     }
@@ -353,7 +357,10 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
     result.outputs["eval_report"] = project.rel(project.build / "eval_report.yaml")
     if args.video:
         result.outputs["eval_videos"] = project.rel(video_dir)  # エピソードごとのファイル名は eval_report の video
-    result.data = {"mode": report["mode"], "success_rate": report["success_rate"], "successes": n_success, "episodes": len(episodes)}
+    result.data = {"mode": report["mode"], "success_rate": report["success_rate"], "successes": n_success, "episodes": len(episodes),
+                   "failures": report["failures"]}  # fmt: skip
+    if report["failures"].get("hint") and not replay:
+        result.warnings.append(f"失敗でいちばん多いのは {report['failures']['most_common']}: {report['failures']['hint']}")
     result.data["checks"] = [f"{x['name']}: {'OK' if x['ok'] else 'FAIL'}" for x in checks]
     for x in checks:
         if not x["ok"]:

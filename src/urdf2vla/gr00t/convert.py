@@ -17,6 +17,7 @@ import shutil
 import sys
 from pathlib import Path
 
+from urdf2vla.gr00t.episodes import hold_tail
 from urdf2vla.project import Project, dump_yaml
 from urdf2vla.result import SkillResult
 
@@ -153,6 +154,24 @@ def _scalar_features(features: dict, state_names: list[str], action_names: list[
     features["next.done"] = {"dtype": "bool", "shape": [1]}
 
 
+def _first_gripper_column(vla) -> int | None:
+    """行動ベクトルでの最初のグリッパの列（なければ None）。"""
+    k = 0
+    for g in vla.action.groups:
+        if g.kind != "joint_position":
+            return k
+        k += g.dim
+    return None
+
+
+def _timing_check(grippers: list, horizon: int) -> dict:
+    """グリッパの最後の開閉が学習の標本の先頭になれるか（urdf2vla.gr00t.episodes.gripper_timing）。"""
+    from urdf2vla.gr00t.episodes import gripper_timing
+
+    t = gripper_timing(grippers, horizon, padded=True)
+    return {"name": "gripper_timing", "ok": t.pop("ok"), "detail": t}
+
+
 def run(project: Project, args, result: SkillResult) -> None:
     if getattr(args, "layout", "native") == "droid":
         return run_droid(project, args, result)
@@ -184,6 +203,8 @@ def run(project: Project, args, result: SkillResult) -> None:
         episodes, total = [], 0
         features: dict = {}
         tasks: dict[str, int] = {}  # 指示文 → task_index（エピソードごとに物体が違えば指示文も違う）
+        grippers: list = []  # エピソードごとの最初のグリッパの行動（開閉のタイミングの検査）
+        grip_col = _first_gripper_column(vla)
         for ep, name in enumerate(demos):
             g = data[name]
             ep_instruction = str(g.attrs.get("language_instruction", instruction))
@@ -194,6 +215,10 @@ def run(project: Project, args, result: SkillResult) -> None:
             if state.shape != (T, vla.state.dimension) or action.shape != (T, vla.action.dimension):
                 result.fail(f"{name}: state {state.shape} / action {action.shape} が vla_interface と合いません")
                 return
+            if grip_col is not None:
+                grippers.append(action[:, grip_col].copy())
+            idx = hold_tail(T, vla.action_horizon)  # 最後の姿勢で止まるフレームを足す（グリッパを開く step も標本にする）
+            state, action, T = state[idx], action[idx], len(idx)
             chunk = ep // CHUNK
             df = _frame_table(state, action, fps, task_index, ep, total, "annotation.human.task_description")
             pq = out / f"data/chunk-{chunk:03d}/episode_{ep:06d}.parquet"
@@ -201,11 +226,11 @@ def run(project: Project, args, result: SkillResult) -> None:
             df.to_parquet(pq)
             for img in vla.images:
                 frames = g[f"obs/images/{img.camera}"][:]
-                if frames.shape[0] != T:
-                    result.fail(f"{name}: 画像 {img.camera} のフレーム数 {frames.shape[0]} が step 数 {T} と合いません")
+                if frames.shape[0] != len(g["actions"]):
+                    result.fail(f"{name}: 画像 {img.camera} のフレーム数 {frames.shape[0]} が step 数 {len(g['actions'])} と合いません")
                     return
                 vid = out / f"videos/chunk-{chunk:03d}/observation.images.{img.key}/episode_{ep:06d}.mp4"
-                features[f"observation.images.{img.key}"] = _encode_video(frames, vid, fps)
+                features[f"observation.images.{img.key}"] = _encode_video(frames[idx], vid, fps)
             episodes.append({"episode_index": ep, "tasks": [ep_instruction], "length": int(T)})
             total += T
             print(f"[urdf2vla] converted {name} -> episode {ep} ({T} steps)", flush=True)
@@ -213,7 +238,8 @@ def run(project: Project, args, result: SkillResult) -> None:
     _scalar_features(features, vla.state.names, vla.action.names, "annotation.human.task_description")
     n = len(episodes)
     arms = sum(1 for g in vla.action.groups if g.kind == "joint_position")
-    _write_meta(out, robot_name, fps, episodes, tasks, features, len(vla.images), modality_json(vla), {"layout": "native", "arms": arms})
+    _write_meta(out, robot_name, fps, episodes, tasks, features, len(vla.images), modality_json(vla),
+                {"layout": "native", "arms": arms, "hold_tail_frames": vla.action_horizon - 1})  # fmt: skip
     module = f"urdf2vla_modality_{re.sub(r'[^a-zA-Z0-9]', '_', project.name)}"
     cfg_path = out / f"{module}.py"
     cfg_path.write_text(modality_config_py(vla))
@@ -229,6 +255,8 @@ def run(project: Project, args, result: SkillResult) -> None:
 
     # 検証: GR00T のローダで読めるか、動画の 1 フレーム目が元画像と一致するか
     checks = _validate(out, src, demos[0], vla)
+    if grip_col is not None:
+        checks.append(_timing_check(grippers, vla.action_horizon))
     report = {
         "dataset": project.rel(out),
         "episodes": n,
@@ -316,6 +344,7 @@ def run_droid(project: Project, args, result: SkillResult) -> None:
         features: dict = {}
         tasks: dict[str, int] = {}
         sources = []  # エピソード → (デモ, 外部カメラ)
+        grippers: list = []
         for name in demos:
             g = data[name]
             if "obs/tcp_pos" not in g or "obs/tcp_quat" not in g:
@@ -325,6 +354,7 @@ def run_droid(project: Project, args, result: SkillResult) -> None:
             task_index = tasks.setdefault(ep_instruction, len(tasks))
             state, action = g["obs/state"][:], g["actions"][:]
             T = len(action)
+            grippers.append(np.asarray(action)[:, n_arm].copy())
             s, a = droid.episode_vectors(g["obs/tcp_pos"][:, :3], g["obs/tcp_quat"][:, :4], state, action, n_arm)
             idx = droid.hold_tail(len(action))  # 最後の姿勢で止まるフレームを足す（行動の列の先頭で開くように）
             s, a = s[idx], a[idx]
@@ -365,6 +395,7 @@ def run_droid(project: Project, args, result: SkillResult) -> None:
     generate_rel_stats(out, EmbodimentTag.OXE_DROID_RELATIVE_EEF_RELATIVE_JOINT)
 
     checks = _validate_droid(out, src, sources[0], wrist)
+    checks.append(_timing_check(grippers, droid.DROID_ACTION_HORIZON))
     n = len(episodes)
     report = {"dataset": project.rel(out), "layout": layout, "episodes": n, "demos": len(demos), "frames": total, "fps": fps,
               "modality_config": project.rel(cfg_path), "checks": checks}  # fmt: skip

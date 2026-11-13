@@ -143,12 +143,10 @@ _droid["video"] = ModalityConfig(delta_indices=[0], modality_keys=[{EXTERIOR_KEY
 
 
 def hold_tail(n: int, horizon: int = DROID_ACTION_HORIZON) -> np.ndarray:
-    """エピソードの末尾に最後のフレームを horizon - 1 回足す添字（0..n-1 の後に n-1 を繰り返す）。
+    """エピソードの末尾に最後のフレームを horizon - 1 回足す添字（urdf2vla.gr00t.episodes.hold_tail。理由もそこに書いてある）。"""
+    from urdf2vla.gr00t.episodes import hold_tail as _hold
 
-    Isaac-GR00T の学習は、行動の長さ（40）が収まる step（0..T-40）からしか標本を取らない。デモがグリッパを開いて
-    すぐ終わる（スクリプトのデモは開いてから約 13 step）と、「開く」は行動の列の後ろ（27 番目以降）にしか現れず、
-    評価で実行する先頭の step では開かないモデルになる。最後の姿勢（開いたまま止まる）を足して、開く step まで標本にする。"""
-    return np.concatenate([np.arange(n), np.full(max(horizon - 1, 0), n - 1)]).astype(np.int64)
+    return _hold(n, horizon)
 
 
 def modality_json() -> dict:
