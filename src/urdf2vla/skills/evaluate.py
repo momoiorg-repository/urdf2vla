@@ -17,6 +17,20 @@ from urdf2vla.runtime.dispatch import container_running, run_sim_skill, runtime_
 from urdf2vla.gr00t.droid import DROID_MODEL, DROID_TAG  # noqa: E402
 
 
+def free_port(port: int, tries: int = 50) -> int:
+    """port から順に、127.0.0.1 で使われていないポート（コンテナは host network なのでホストで確かめる）。"""
+    import socket
+
+    for p in range(port, port + tries):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("127.0.0.1", p))
+            except OSError:
+                continue
+            return p
+    return port
+
+
 def _server_args(project: Project, opts: dict, gr) -> list[str] | str:
     if opts.get("droid"):
         # GR00T の DROID の事前学習の embodiment で zero-shot に動かす（modality config は GR00T に内蔵）。
@@ -81,7 +95,9 @@ def evaluate_vla(project: Project, opts: dict, result: SkillResult, log) -> None
     if isinstance(sargs, str):
         result.fail(sargs)
         return
-    port = int(opts["port"])
+    port = free_port(int(opts["port"]))
+    if port != int(opts["port"]):
+        result.warnings.append(f"ポート {opts['port']} は使われています（NVIDIA Brev では DCGM の nv-hostengine が 5555 を使う）。{port} を使います。")
     sargs += ["--embodiment-tag", DROID_TAG if opts.get("droid") else "new_embodiment", "--port", str(port), "--host", "127.0.0.1"]
     server_log = project.new_log("gr00t_server")
     cmd = wrap(gr, runtime_script(gr, f"cd /tmp && PYTHONUNBUFFERED=1 {gr.python} -m urdf2vla.gr00t.server " + " ".join(shlex.quote(a) for a in sargs)))

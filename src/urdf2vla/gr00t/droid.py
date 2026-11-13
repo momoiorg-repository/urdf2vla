@@ -12,6 +12,7 @@ urdf2vla の対応:
 - 外部カメラが 2 台（DROID の配置の left / right）なら、各デモを両方のカメラで 1 エピソードずつ書く（視点の水増し。評価は 1 台）
 - 7 関節より少ない腕（FANUC の 6 関節など）は joint_position の残りを 0 で埋め、モデルの出力の残りは使わない
 - 行動の eef_9d は次の step の TCP の姿勢（記録に指令の TCP 姿勢はない。関節の指令に追従した結果）
+- 各エピソードの末尾に最後のフレームを 39 回足す（hold_tail。グリッパを開く step も学習の標本にするため）
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ DROID_TAG = "OXE_DROID_RELATIVE_EEF_RELATIVE_JOINT"
 DROID_TAG_VALUE = "oxe_droid_relative_eef_relative_joint"
 DROID_MODEL = "nvidia/GR00T-N1.7-DROID"
 DROID_JOINTS = 7
+DROID_ACTION_HORIZON = 40  # DROID の embodiment の行動の長さ（delta_indices range(40)）
 DROID_RESOLUTION = (180, 320)  # (高さ, 幅)。正方形の画像は左右を黒で埋める（tf.image.resize_with_pad と同じ）
 # DROID の TCP の回転は panda_hand と同じ向き。Isaac Lab の TCP の回転行列にこれを掛ける（Isaac-GR00T の
 # scripts/verify_droid_rotation_correction.py と同じ補正）
@@ -138,6 +140,15 @@ from gr00t.data.types import ModalityConfig
 _droid = MODALITY_CONFIGS[{DROID_TAG_VALUE!r}]
 _droid["video"] = ModalityConfig(delta_indices=[0], modality_keys=[{EXTERIOR_KEY!r}, {WRIST_KEY!r}])
 '''
+
+
+def hold_tail(n: int, horizon: int = DROID_ACTION_HORIZON) -> np.ndarray:
+    """エピソードの末尾に最後のフレームを horizon - 1 回足す添字（0..n-1 の後に n-1 を繰り返す）。
+
+    Isaac-GR00T の学習は、行動の長さ（40）が収まる step（0..T-40）からしか標本を取らない。デモがグリッパを開いて
+    すぐ終わる（スクリプトのデモは開いてから約 13 step）と、「開く」は行動の列の後ろ（27 番目以降）にしか現れず、
+    評価で実行する先頭の step では開かないモデルになる。最後の姿勢（開いたまま止まる）を足して、開く step まで標本にする。"""
+    return np.concatenate([np.arange(n), np.full(max(horizon - 1, 0), n - 1)]).astype(np.int64)
 
 
 def modality_json() -> dict:

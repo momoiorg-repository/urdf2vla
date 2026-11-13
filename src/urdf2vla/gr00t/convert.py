@@ -326,14 +326,18 @@ def run_droid(project: Project, args, result: SkillResult) -> None:
             state, action = g["obs/state"][:], g["actions"][:]
             T = len(action)
             s, a = droid.episode_vectors(g["obs/tcp_pos"][:, :3], g["obs/tcp_quat"][:, :4], state, action, n_arm)
-            wrist_frames = np.stack([droid.resize_with_pad(f) for f in g[f"obs/images/{wrist}"][:]])
+            idx = droid.hold_tail(len(action))  # 最後の姿勢で止まるフレームを足す（行動の列の先頭で開くように）
+            s, a = s[idx], a[idx]
+            a[len(action) :, :9] = s[len(action) :, :9]  # 足したフレームの eef の行動 = 今の姿勢（止まる）
+            T = len(idx)
+            wrist_frames = np.stack([droid.resize_with_pad(f) for f in g[f"obs/images/{wrist}"][:]])[idx]
             for ext in exteriors:
                 chunk = ep // CHUNK
                 df = _frame_table(s, a, fps, task_index, ep, total, "annotation.language.language_instruction")
                 pq = out / f"data/chunk-{chunk:03d}/episode_{ep:06d}.parquet"
                 pq.parent.mkdir(parents=True, exist_ok=True)
                 df.to_parquet(pq)
-                ext_frames = np.stack([droid.resize_with_pad(f) for f in g[f"obs/images/{ext}"][:]])
+                ext_frames = np.stack([droid.resize_with_pad(f) for f in g[f"obs/images/{ext}"][:]])[idx]
                 for key, frames in ((droid.EXTERIOR_KEY, ext_frames), (droid.WRIST_KEY, wrist_frames)):
                     vid = out / f"videos/chunk-{chunk:03d}/observation.images.{key}/episode_{ep:06d}.mp4"
                     features[f"observation.images.{key}"] = _encode_video(frames, vid, fps)
@@ -346,7 +350,7 @@ def run_droid(project: Project, args, result: SkillResult) -> None:
     names = [f"eef_9d_{i}" for i in range(9)] + ["gripper_position"] + [f"joint_position_{i}" for i in range(droid.DROID_JOINTS)]
     _scalar_features(features, names, names, "annotation.language.language_instruction")
     layout = {"layout": "droid", "embodiment_tag": droid.DROID_TAG, "arm_joints": n_arm, "wrist_camera": wrist,
-              "exterior_cameras": exteriors, "video_delta_indices": [0]}  # fmt: skip
+              "exterior_cameras": exteriors, "video_delta_indices": [0], "hold_tail_frames": droid.DROID_ACTION_HORIZON - 1}  # fmt: skip
     _write_meta(out, robot_name, fps, episodes, tasks, features, 2, droid.modality_json(), layout)
     cfg_path = out / "urdf2vla_droid_modality.py"
     cfg_path.write_text(droid.modality_config_py())

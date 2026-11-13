@@ -55,3 +55,10 @@ def test_resize_with_pad_keeps_aspect():
     out = droid.resize_with_pad(img)
     assert out.shape == (180, 320, 3)
     assert out[:, :60].max() == 0 and out[:, 70:250].min() == 255  # 左右は黒
+
+
+def test_hold_tail_lets_every_step_start_a_full_action_chunk():
+    idx = droid.hold_tail(166)
+    assert len(idx) == 166 + 39 and list(idx[:166]) == list(range(166)) and set(idx[166:]) == {165}
+    # GR00T の標本は 0..len-40。足した後は元の最後の step（開いた直後）まで標本になる
+    assert len(idx) - droid.DROID_ACTION_HORIZON + 1 == 166
