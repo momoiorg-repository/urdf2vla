@@ -2,8 +2,9 @@
 
 Skill が失敗してから原因を探すより先に、よくある環境の問題を見つけて直し方を示す:
 GPU ドライバ（カーネルの更新でドライバのモジュールが合わなくなった、を含む）、GPU のメモリ、Docker と
-NVIDIA Container Toolkit、image とコンテナ（コンテナから GPU とリポジトリが見えるか）、ディスクの空き、
-NVIDIA のアセットサーバに届くか。どれも読み取るだけで、何も変更しない。
+NVIDIA Container Toolkit（CDI の GPU の定義を含む）、image とコンテナ（コンテナから GPU とリポジトリが見えるか）、
+ディスクの空き（その場で学習するなら checkpoint の分も）、NVIDIA のアセットサーバに届くか、Hugging Face で GR00T の
+VLM を取得できるか、推論サーバのポート。どれも読み取るだけで、何も変更しない。直し方には詳しい手順へのリンクを付ける。
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ import platform
 import re
 import shutil
 import subprocess
+import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,7 +27,15 @@ GPU_MEMORY_TRAIN_GB = 44  # train_vla がその場で学習する GPU メモリ
 DRIVER_TESTED = 580  # Isaac Sim 6.2 を確かめた NVIDIA ドライバの版（クラウドの古いイメージで 535 / 550 / 570 のことがある）
 DISK_WARN_GB = 50  # データセット（75 エピソードで約 4.5 GB）・USD・ログ
 DISK_ERROR_GB = 10
-IMAGE_DISK_GB = 40  # docker/build.sh の 2 つの image の大きさの目安
+IMAGE_DISK_GB = 90  # docker/build.sh の image（Arena 38 GB + GR00T 26 GB + その base 26 GB。L40S での実測）
+TRAIN_DISK_GB = 100  # その場で学習するとき: checkpoint 1 つ約 24 GB × (残す 2 + 保存中 1) + データ・ベースモデル
+GR00T_BACKBONE = "nvidia/Cosmos-Reason2-2B"  # GR00T N1.7 の VLM。Hugging Face で利用規約への同意が要る（gated）
+GR00T_SERVER_PORT = 5555
+DOCS = "https://momoiorg-repository.github.io/urdf2vla/ja/guides/brev/"  # 各 fix の詳しい手順（英語は /urdf2vla/guides/brev/）
+
+
+def docs(anchor: str) -> str:
+    return f"（詳しく: {DOCS}#{anchor}）"
 
 
 @dataclass
@@ -100,7 +110,8 @@ def check_gpu(run=_run, modules_root: Path = Path("/lib/modules")) -> list[Check
             "driver_version", "warning",
             f"NVIDIA ドライバが {', '.join(old)} です。urdf2vla（Isaac Sim 6.2）は {DRIVER_TESTED} 以降で確かめています。古いドライバでは Isaac Sim が起動しない・描画が崩れることがあります。",
             f"ドライバを {DRIVER_TESTED} 以降に上げて再起動します（Ubuntu: sudo apt install nvidia-driver-{DRIVER_TESTED}-open && sudo reboot）。"
-            f"クラウドの GPU（NVIDIA Brev など）では、{DRIVER_TESTED} 以降のドライバの入ったイメージを選ぶと早いです。",
+            f"クラウドの GPU（NVIDIA Brev など）では、{DRIVER_TESTED} 以降のドライバの入ったイメージを選ぶと早いです。"
+            "apt が held packages で止まる・CUDA のリポジトリから別の版が混ざるときの手順はドキュメントにあります" + docs("driver"),
         ))  # fmt: skip
     mem = max(m for _, _, m in gpus)
     if mem < GPU_MEMORY_MIN_GB:
@@ -169,6 +180,93 @@ def check_docker(runtimes, run=_run) -> list[Check]:
     return checks
 
 
+def _cdi_mode(config: Path) -> bool:
+    try:
+        return bool(re.search(r'^\s*mode\s*=\s*"cdi"', config.read_text(), re.M))
+    except OSError:
+        return False
+
+
+def check_cdi(run=_run, config: Path = Path("/etc/nvidia-container-runtime/config.toml"),
+              spec_dirs: tuple[Path, ...] = (Path("/etc/cdi"), Path("/var/run/cdi"))) -> list[Check]:  # fmt: skip
+    """NVIDIA Container Toolkit が CDI モードのとき、GPU の CDI の定義があり、今のドライバの版を指しているか。
+    定義がない・古いと docker run --gpus all が「unresolvable CDI devices nvidia.com/gpu=all」で止まる。
+    （Brev の L40S で: 起動時の nvidia-cdi-refresh がドライバ 565 で落ちて定義がなく、ドライバを上げた後も古い版のまま）"""
+    if not _cdi_mode(config):
+        return []
+    rc, out, _ = run(["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"])
+    driver = out.strip().splitlines()[0].strip() if rc == 0 and out.strip() else None
+    major = _driver_major(driver) if driver else None
+    cmd = "sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml"
+    if major is not None and major < DRIVER_TESTED:
+        cmd += " --feature-flag=disable-nvsandboxutils"  # 古いドライバの libnvidia-sandboxutils で nvidia-ctk が落ちる
+    specs = []
+    for d in spec_dirs:
+        try:
+            specs += [p for p in d.iterdir() if p.suffix in (".yaml", ".yml", ".json")]
+        except OSError:
+            continue
+    texts = []
+    for p in specs:
+        try:
+            texts.append(p.read_text(errors="replace"))
+        except OSError:
+            continue
+    gpu = [t for t in texts if "nvidia.com/gpu" in t or "kind: nvidia.com/gpu" in t]
+    if not gpu:
+        return [Check("cdi_spec", "error", "NVIDIA Container Toolkit が CDI モードですが、GPU の CDI の定義がありません（コンテナから GPU を使えません）。",
+                      cmd + docs("cdi"))]  # fmt: skip
+    if driver and not any(f".so.{driver}" in t for t in gpu):
+        return [Check("cdi_spec", "error", f"GPU の CDI の定義が今のドライバ（{driver}）を指していません（ドライバを更新した後に作り直していない）。",
+                      cmd + docs("cdi"))]  # fmt: skip
+    return [Check("cdi_spec", "ok", f"GPU の CDI の定義があります（ドライバ {driver}）" if driver else "GPU の CDI の定義があります")]
+
+
+def hf_token() -> str | None:
+    """Hugging Face のトークン（HF_TOKEN、なければ HF_HOME / ~/.cache/huggingface の token）。"""
+    if os.environ.get("HF_TOKEN"):
+        return os.environ["HF_TOKEN"].strip()
+    home = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface"))
+    try:
+        return (home / "token").read_text().strip() or None
+    except OSError:
+        return None
+
+
+def check_huggingface(token: str | None = None, opener=urllib.request.urlopen, timeout: float = 10.0) -> list[Check]:
+    """GR00T N1.7 の学習・推論は VLM（Cosmos-Reason2-2B、gated）を Hugging Face から取得する。トークンと利用規約への同意を確かめる。
+    コンテナは ~/.cache をマウントするので、ホストの ~/.cache/huggingface/token がそのまま使われる。"""
+    page = f"https://huggingface.co/{GR00T_BACKBONE}"
+    login = "コンテナの中でログインします: docker exec -it -u $(id -un) -e HOME=$HOME urdf2vla-gr00t /workspace/.venv/bin/hf auth login"
+    if token is None:
+        return [Check("huggingface", "warning", f"Hugging Face にログインしていません。GR00T の学習・評価は {GR00T_BACKBONE}（利用規約への同意が要る）を取得します。",
+                      f"{page} で利用規約に同意し、{login}" + docs("huggingface"))]  # fmt: skip
+    req = urllib.request.Request(f"{page}/resolve/main/config.json", method="HEAD", headers={"Authorization": f"Bearer {token}"})
+    try:
+        with opener(req, timeout=timeout) as r:
+            status = r.status
+    except urllib.error.HTTPError as e:
+        status = e.code
+    except OSError:
+        return [Check("huggingface", "info", "Hugging Face に届かないため、モデルへのアクセスを確かめられませんでした。")]
+    if status in (401, 403):
+        return [Check("huggingface", "warning", f"Hugging Face のトークンで {GR00T_BACKBONE} を取得できません（利用規約に同意していないか、トークンが無効）。",
+                      f"{page} を開いて利用規約に同意してください（トークンは read 権限で足ります）" + docs("huggingface"))]  # fmt: skip
+    return [Check("huggingface", "ok", f"{GR00T_BACKBONE} を取得できます")]
+
+
+def check_port(port: int = GR00T_SERVER_PORT) -> list[Check]:
+    """GR00T の推論サーバの既定のポート。NVIDIA Brev では DCGM の nv-hostengine が 127.0.0.1:5555 を使っている。"""
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(("127.0.0.1", port))
+        except OSError:
+            return [Check("gr00t_port", "info", f"ポート {port} は他のプログラムが使っています（Brev では DCGM の nv-hostengine）。evaluate_vla は空いているポートを自動で使います。")]
+    return [Check("gr00t_port", "ok", f"ポート {port} は空いています")]
+
+
 def _free_gb(path: Path) -> float | None:
     for p in (path, *path.parents):  # 読めない場所（/var/lib/docker）は親で測る
         try:
@@ -178,7 +276,7 @@ def _free_gb(path: Path) -> float | None:
     return None
 
 
-def check_disk(repo: Path) -> list[Check]:
+def check_disk(repo: Path, train_local: bool = False) -> list[Check]:
     free = _free_gb(repo)
     if free is None:
         return []
@@ -186,6 +284,9 @@ def check_disk(repo: Path) -> list[Check]:
         return [Check("disk", "error", f"リポジトリのディスクの空きが {free:.0f} GB です。", "データセットやログ（projects/*/datasets、logs）を消して空きを作ってください。")]
     if free < DISK_WARN_GB:
         return [Check("disk", "warning", f"リポジトリのディスクの空きが {free:.0f} GB です（データセットは 75 エピソードで約 4.5 GB）。", "")]
+    if train_local and free < TRAIN_DISK_GB:
+        return [Check("disk", "warning", f"リポジトリのディスクの空きが {free:.0f} GB です。この GPU では train_vla がその場で学習し、checkpoint は 1 つ約 24 GB です（既定で 2 つ残す）。",
+                      f"{TRAIN_DISK_GB} GB 以上の空きを作るか、train_vla --save-total-limit 1 にします" + docs("disk"))]  # fmt: skip
     return [Check("disk", "ok", f"空き {free:.0f} GB")]
 
 
@@ -217,7 +318,13 @@ def check_python() -> list[Check]:
 
 def run_doctor(repo: Path, runtimes, run=_run, assets: bool = True) -> SkillResult:
     result = SkillResult(skill="doctor")
-    checks = [*check_gpu(run), *check_docker(runtimes, run), *check_disk(repo), *(check_assets() if assets else []), *check_python()]
+    gpu = check_gpu(run)
+    train_local = not any(c.name == "gpu_training" for c in gpu) and any(c.name == "gpu_memory" for c in gpu)
+    docker = check_docker(runtimes, run)
+    if any(c.name == "nvidia_container_toolkit" and c.level == "ok" for c in docker):
+        docker += check_cdi(run)
+    net = [*check_assets(), *check_huggingface(hf_token())] if assets else []
+    checks = [*gpu, *docker, *check_disk(repo, train_local), *net, *check_port(), *check_python()]
     for c in checks:
         if c.level == "error":
             result.fail(f"{c.name}: {c.detail}" + (f" → {c.fix}" if c.fix else ""))

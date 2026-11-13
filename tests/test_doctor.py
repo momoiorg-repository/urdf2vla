@@ -87,3 +87,96 @@ def test_doctor_result_is_an_error_when_the_driver_is_gone(tmp_path):
                 "docker info --format": (0, "{}", "")})  # fmt: skip
     r = run_doctor(tmp_path, [SIM], run=run, assets=False)
     assert r.status == "error" and any(e.startswith("nvidia_driver:") for e in r.errors)
+
+
+def _cdi_setup(tmp_path: Path, spec: str | None):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text('[nvidia-container-runtime]\nmode = "cdi"\n')
+    d = tmp_path / "cdi"
+    d.mkdir()
+    if spec is not None:
+        (d / "nvidia.yaml").write_text(spec)
+    return cfg, (d,)
+
+
+def test_cdi_spec_missing_gives_generate_command_with_old_driver_flag(tmp_path):
+    from urdf2vla.doctor import check_cdi
+
+    cfg, dirs = _cdi_setup(tmp_path, None)
+    (c,) = check_cdi(fake({"nvidia-smi": (0, "565.57.01\n", "")}), cfg, dirs)
+    assert c.level == "error" and "nvidia-ctk cdi generate" in c.fix and "disable-nvsandboxutils" in c.fix
+    assert "guides/brev/#cdi" in c.fix
+
+
+def test_cdi_spec_for_an_older_driver_is_stale(tmp_path):
+    from urdf2vla.doctor import check_cdi
+
+    cfg, dirs = _cdi_setup(tmp_path, "kind: nvidia.com/gpu\n  - /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.565.57.01\n")
+    (c,) = check_cdi(fake({"nvidia-smi": (0, "580.196.07\n", "")}), cfg, dirs)
+    assert c.level == "error" and "580.196.07" in c.detail and "disable-nvsandboxutils" not in c.fix
+    (tmp_path / "cdi" / "nvidia.yaml").write_text("kind: nvidia.com/gpu\n  - libnvidia-ml.so.580.196.07\n")
+    (c,) = check_cdi(fake({"nvidia-smi": (0, "580.196.07\n", "")}), cfg, dirs)
+    assert c.level == "ok"
+
+
+def test_cdi_not_checked_in_legacy_mode(tmp_path):
+    from urdf2vla.doctor import check_cdi
+
+    cfg = tmp_path / "config.toml"
+    cfg.write_text('mode = "auto"\n')
+    assert check_cdi(fake({}), cfg, (tmp_path,)) == []
+
+
+class _Resp:
+    def __init__(self, status):
+        self.status = status
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def test_huggingface_without_token_points_to_license_and_login():
+    from urdf2vla.doctor import check_huggingface
+
+    (c,) = check_huggingface(None)
+    assert c.level == "warning" and "Cosmos-Reason2-2B" in c.fix and "hf auth login" in c.fix
+
+
+def test_huggingface_gated_401_asks_to_accept_license():
+    import urllib.error
+
+    from urdf2vla.doctor import check_huggingface
+
+    def opener(req, timeout):
+        assert req.headers["Authorization"] == "Bearer hf_x"
+        raise urllib.error.HTTPError(req.full_url, 401, "Unauthorized", {}, None)
+
+    (c,) = check_huggingface("hf_x", opener)
+    assert c.level == "warning" and "利用規約" in c.fix
+    (c,) = check_huggingface("hf_x", lambda req, timeout: _Resp(200))
+    assert c.level == "ok"
+
+
+def test_disk_warns_when_training_locally_without_room_for_checkpoints(tmp_path, monkeypatch):
+    import urdf2vla.doctor as d
+
+    monkeypatch.setattr(d, "_free_gb", lambda p: 70.0)
+    (c,) = d.check_disk(tmp_path, train_local=True)
+    assert c.level == "warning" and "save-total-limit" in c.fix
+    (c,) = d.check_disk(tmp_path, train_local=False)
+    assert c.level == "ok"
+
+
+def test_port_in_use_is_info():
+    import socket
+
+    from urdf2vla.doctor import check_port
+
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        s.listen()
+        (c,) = check_port(s.getsockname()[1])
+    assert c.level == "info"
