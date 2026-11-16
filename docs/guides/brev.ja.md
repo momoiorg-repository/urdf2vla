@@ -129,8 +129,9 @@ GR00T N1.7 は画像と言語のモデル `nvidia/Cosmos-Reason2-2B` を使い�
 | `collect_dataset --device scripted --num-demos 50` | 59 回中 50 回成功（84.7 %） | 33 分 | 5.5 GB |
 | `convert_dataset` | 5/5 | 68 秒 | – |
 | `convert_dataset --layout droid` | 6/6（100 エピソード: 各デモを左と右のカメラで） | 3 分 | – |
-| `train_vla`（DROID の並び、10,000 step、batch 32） | | 2 時間 10 分（1.3〜1.4 step/秒） | 40.9 GB |
-| `train_vla`（urdf2vla の並び、カメラ 3 台） | | 1.07〜1.10 step/秒 | 41.6 GB |
+| `train_vla`（urdf2vla の並び、カメラ 3 台、10,000 step、batch 32） | release_check 10/10 | 約 2 時間 40 分（1.07 step/秒） | 41.9 GB |
+| `train_vla`（`--layout droid`、カメラ 2 台） | release_check 10/10 | 2 時間 8 分（1.38 step/秒） | 40.9 GB |
+| `evaluate_vla --episodes 20 --video` | [結果](#results)を参照 | 10〜11 分 | 12.4 GB |
 
 学習と評価は同時に GPU に載りません（41 GB + Isaac Sim + 推論サーバ）。学習中に別の checkpoint を評価するには、
 checkpoint を保存した直後に学習を止めて評価し、同じ `train_vla` を実行し直します。最後の checkpoint から再開します。
@@ -140,6 +141,27 @@ checkpoint を保存した直後に学習を止めて評価し、同じ `train_v
 ```bash
 urdf2vla train_vla --project projects/crx3ia --dataset demos_droid --check-only training/crx3ia_demos_droid/checkpoints/checkpoint-10000
 ```
+
+## 結果 {#results}
+
+どちらのモデルも `nvidia/GR00T-N1.7-DROID`（単腕のロボットの既定）から、同じスクリプトのデモ 50 個で fine-tune し、
+同じ 20 エピソード（同じ乱数の種: 毎回ランダムな物体と位置）で評価しました。
+
+| | urdf2vla の並び（既定） | `--layout droid` |
+|---|---|---|
+| モデルが見るカメラ | 手先 + 左 + 右 | 手先 + 外部カメラ 1 台（学習はエピソードごとに左か右、評価は左） |
+| 腕の状態と行動 | 関節目標 6 | DROID の手先の姿勢 + 関節 7（7 つ目は 0 で埋める） |
+| **成功** | **20/20** | 19/20（洋梨を 1 回離さなかった） |
+| りんご / 立方体 / ライム / 洋梨 | 5/5、7/7、3/3、5/5 | 5/5、7/7、3/3、4/5 |
+| エピソードの長さ（中央値） | 174 step（8.7 秒） | 173 step |
+| 置いた位置と目標の距離（中央値） | 15 mm | 12 mm |
+
+**既定の urdf2vla の並び**（全カメラ、`convert_dataset` に `--layout` を付けない）を使ってください。同等以上の結果で、
+毎フレーム 3 方向の画像をモデルが見ます。DROID の並びは学習が約 30 % 速いので、試験用に残しています。
+
+最初の DROID の並びのモデルは、グリッパを開いてから 13 step で終わるエピソードで学習し、0/3 でした。どの物体も掴んで
+箱まで運び、離しませんでした。今の `convert_dataset` は最後のフレームを足して開く動作を学べるようにし、それを検査し
+（`gripper_timing`）、`train_vla` は評価の前に学習したモデルを検査します（`release_check`: そのモデルは 0/10、上の 2 つは 10/10）。
 
 ## GR00T のサーバのポート {#port}
 

@@ -1,6 +1,7 @@
 # 学習と評価
 
-urdf2vla はデモで **NVIDIA Isaac GR00T N1.7**（`nvidia/GR00T-N1.7-3B`）を fine-tune します。変換・学習・モデルの推論サーバは
+urdf2vla はデモで **NVIDIA Isaac GR00T N1.7** を fine-tune します。腕 1 本のロボットは `nvidia/GR00T-N1.7-DROID`
+（単腕の DROID のデータで fine-tune した GR00T）から、腕 2 本は `nvidia/GR00T-N1.7-3B` から始めます。変換・学習・モデルの推論サーバは
 すべて GR00T のコンテナ（`bash docker/run.sh gr00t`）で動きます。
 
 ```mermaid
@@ -24,6 +25,11 @@ urdf2vla convert_dataset --project projects/myrobot --dataset demos
 動画の全フレームを元の画像と比べます。変換の誤りを、何時間も学習した後ではなくここで見つけるためです。`--force` で
 作り直します。
 
+各エピソードの末尾には最後のフレーム（グリッパは開いたまま、腕は止まったまま）を繰り返して足します。GR00T は
+行動の列がまるごと収まる step からしか学習の標本を取らないので、こうしないとグリッパを開く瞬間を学べません。
+`gripper_timing` の検査で、どの開閉も評価で実行される行動の列の範囲に入ることを確かめます。これがないと、
+学習の損失は十分に下がっていても、掴んで箱まで運び、離さないモデルになることがあります。
+
 各エピソードは自分の指示文を持ちます。`meta/tasks.jsonl` に異なる指示文（*"put the apple in the bin"*、
 *"put the lime in the bin"* など）を並べ、各フレームがそのエピソードの指示文を指すので、モデルは指示文が名指しする
 ものに従って動くことを学びます。
@@ -45,9 +51,23 @@ urdf2vla train_vla --project projects/myrobot --dataset demos
 |---|---|---|
 | 学習ステップ数 | 10,000 | `--max-steps` |
 | global batch size | 32 | `--batch-size` |
-| checkpoint の保存 | 1,000 ステップごと（最新 5 つを残す） | `--save-steps` |
+| checkpoint の保存 | 1,000 ステップごと | `--save-steps` |
+| 残す checkpoint | 2 つ（1 つ約 24 GB: 重み 11 GB + optimizer の状態 13 GB） | `--save-total-limit` |
 | 学習するもの | projector と拡散モデルの行動ヘッド（LLM と画像エンコーダは凍結） | — |
-| ベースモデル | Hugging Face の `nvidia/GR00T-N1.7-3B` | `--base-model` |
+| ベースモデル | 腕 1 本は `nvidia/GR00T-N1.7-DROID`、2 本は `nvidia/GR00T-N1.7-3B` | `--base-model` |
+
+どちらのベースモデルも、利用規約への同意が要る `nvidia/Cosmos-Reason2-2B` を使います。先に Hugging Face で同意して
+ログインしてください（`urdf2vla doctor` が確かめます。[NVIDIA Brev で動かす](brev.md#huggingface)）。
+
+その場での学習が終わると、`train_vla` は最後の checkpoint で **release_check** を実行します（シミュレーションなし、
+1 分ほど）: デモがグリッパを開く直前に、モデルも開くか。割合が低ければ `warnings` で伝えます。
+`--check-only <checkpoint>` で、どの checkpoint にも実行できます。
+
+!!! note "`convert_dataset --layout droid`"
+    7 関節以下の腕 1 本なら、GR00T の DROID の並び（`datasets/<名前>_droid_gr00t`: 手先カメラと外部カメラ 1 台、
+    手先の姿勢と関節 7）にも変換できます。`train_vla --dataset <名前>_droid` で学習し、`evaluate_vla --droid` で
+    評価します。各デモを外部カメラごとに 1 回ずつ書きます。FANUC の例では学習が約 30 % 速かったものの、既定の並びを
+    上回らなかった（19/20 と 20/20、[結果](brev.md#results)）ので、既定の並びをすすめます。
 
 ### 別のマシンで学習する {#another-machine}
 
@@ -99,6 +119,9 @@ urdf2vla evaluate_vla --project projects/myrobot \
 | `--execution-horizon` | 予測した行動のうち、次にモデルに聞くまでに実行する数（既定 16） |
 | `--replay` | モデルの代わりに変換済みのデータセットを再生します。モデル以外のすべてを試せます（[チュートリアル](../tutorial.md#replay)） |
 
-!!! warning "検証した範囲"
-    この版（Isaac Lab 3.0）では、変換・ジョブの作成・引数の検査・replay の評価を一通り試しています。実際の学習と、
-    その checkpoint での評価は、44 GB の GPU が必要なためまだ実行していません。
+失敗したエピソードには、報告書で名前が付きます: `never_closed`、`missed_grasp`、`never_released`、
+`released_off_target`。いちばん多いものは、見るところと一緒に `warnings` で伝えます。
+
+!!! success "NVIDIA L40S での実測"
+    FANUC CRX-3iA、スクリプトのデモ 50 個、`nvidia/GR00T-N1.7-DROID` から 10,000 ステップ fine-tune（約 2 時間 40 分、
+    41.9 GB）: 評価で **20/20**、20 エピソードで約 10 分。詳しくは [NVIDIA Brev で動かす](brev.md#results)。

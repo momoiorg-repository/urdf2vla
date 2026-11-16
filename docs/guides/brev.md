@@ -132,8 +132,9 @@ The steps are the same as in [Bring your own robot](your-robot.md). Measured on 
 | `collect_dataset --device scripted --num-demos 50` | 50 of 59 attempts (84.7 %) | 33 min | 5.5 GB |
 | `convert_dataset` | 5/5 | 68 s | – |
 | `convert_dataset --layout droid` | 6/6 (100 episodes: each demo with the left and the right camera) | 3 min | – |
-| `train_vla` (DROID layout, 10,000 steps, batch 32) | | 2 h 10 min (1.3–1.4 steps/s) | 40.9 GB |
-| `train_vla` (urdf2vla layout, 3 cameras) | | 1.07–1.10 steps/s | 41.6 GB |
+| `train_vla` (urdf2vla layout, 3 cameras, 10,000 steps, batch 32) | release check 10/10 | about 2 h 40 min (1.07 steps/s) | 41.9 GB |
+| `train_vla` (`--layout droid`, 2 cameras) | release check 10/10 | 2 h 8 min (1.38 steps/s) | 40.9 GB |
+| `evaluate_vla --episodes 20 --video` | see [Results](#results) | 10–11 min | 12.4 GB |
 
 Training and evaluation don't fit on the GPU at the same time (41 GB + Isaac Sim + the inference server). To
 evaluate a checkpoint while another training runs, stop the training right after it saves a checkpoint, evaluate,
@@ -144,6 +145,28 @@ Before a 30-minute evaluation, check that the model releases the gripper (about 
 ```bash
 urdf2vla train_vla --project projects/crx3ia --dataset demos_droid --check-only training/crx3ia_demos_droid/checkpoints/checkpoint-10000
 ```
+
+## Results {#results}
+
+Both models were fine-tuned from `nvidia/GR00T-N1.7-DROID` (the default for single-arm robots) on the same 50 scripted
+demos, and evaluated on the same 20 episodes (same seed: random object and position each episode).
+
+| | urdf2vla layout (default) | `--layout droid` |
+|---|---|---|
+| Cameras the model sees | wrist + left + right | wrist + one exterior (training: left or right per episode; evaluation: left) |
+| Arm state and actions | 6 joint targets | DROID's end-effector pose + 7 joints (the 7th padded) |
+| **Success** | **20/20** | 19/20 (one pear never released) |
+| Apple / cube / lime / pear | 5/5, 7/7, 3/3, 5/5 | 5/5, 7/7, 3/3, 4/5 |
+| Median episode | 174 steps (8.7 s) | 173 steps |
+| Median distance from the target | 15 mm | 12 mm |
+
+**Use the default urdf2vla layout** (all cameras, `convert_dataset` without `--layout`). It was as good or better,
+and every frame shows the model all three views. The DROID layout trains about 30 % faster; keep it for experiments.
+
+A first DROID-layout model trained on episodes that ended 13 steps after the gripper opened scored 0/3: it grasped
+and carried every object to the bin but never let go. `convert_dataset` now holds the final frame so the release
+is learned, checks it (`gripper_timing`), and `train_vla` checks the trained model before you evaluate it
+(`release_check`: 0/10 for that model, 10/10 for both models above).
 
 ## The GR00T server port {#port}
 

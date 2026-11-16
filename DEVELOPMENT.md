@@ -336,14 +336,52 @@ DUAL_SCORPION は scripted 収集 0/8（回転する顎が物体を台に押し�
 
 推論サーバは学習済み N1.7 checkpoint（別のプロジェクトで学習したもの）を読み込んで起動できることまで確認（2.x 版、GPU 6.4GB）。
 
-未検証: GR00T の実際の学習（44GB 以上の GPU が必要。Isaac Lab 3.0 版では `train_vla` のジョブ作成も未実行。データセット側は
-`convert_dataset` の GR00T ローダ検査で確認済み）と、学習済みモデルでの評価（`evaluate_vla --model`）。
+GR00T の実際の学習と学習済みモデルでの評価は、NVIDIA Brev の L40S で FANUC CRX-3iA について確かめた（下の節）。
 Isaac Lab 3.0 版で試したのは scripted の収集だけで、socket / keyboard の teleop と `--livestream` は未検証（2.x 版では socket は検証済み）。
 
-## 次の作業: NVIDIA Brev（L40S）で FANUC の例を最後まで
+## 検証状況: NVIDIA Brev L40S で FANUC の例を最後まで（2026-11-12〜16）
 
-ここまでの検証は RTX 5080（16 GB）で、GR00T の学習（44 GB 以上）と学習済みモデルでの評価はまだしていない。Brev の L40S（48 GB）
-では、FANUC CRX-3iA の例でこの残りを確かめ、結果をドキュメントに書く。
+L40S（46 GB）、CPU 8、Ubuntu 22.04、ドライバ 580.196.07（Brev の 565.57.01 から更新）。手順と実測の全体は
+[NVIDIA Brev で動かす](docs/guides/brev.ja.md)（英語は `docs/guides/brev.md`）。
+
+| 工程 | 結果 | 時間 | GPU メモリ |
+|---|---|---|---|
+| import_robot（初期姿勢は IK の提案） | 10/10 | 初回 447 秒（シェーダのキャッシュ）、2 回目 37 秒 | 4.9 GB |
+| launch_sim | 22/22、描画は RTX 5080 と同じ見た目 | 204 秒 | 5.5 GB |
+| setup_teleoperation | 4/4 | 64 秒 | 5.5 GB |
+| collect_dataset（scripted、50 個） | 59 回中 50 回成功（84.7 %） | 33 分 | 5.5 GB |
+| train_vla（`nvidia/GR00T-N1.7-DROID` から、urdf2vla の並び、カメラ 3 台、10,000 step） | release_check 10/10 | 約 2 時間 40 分 | 41.9 GB |
+| evaluate_vla（20 エピソード） | **20/20** | 10 分 | 12.4 GB |
+| 比較: `--layout droid`（手先 + 外部 1 台、学習は左右のカメラを交互） | 19/20（洋梨を 1 回離さない） | 学習 2 時間 8 分 | 40.9 GB |
+
+途中で見つけて直したこと:
+
+- ドライバ 565 では Isaac Sim が起動しない（image の PyTorch は CUDA 13）。Brev は apt で hold していて、nvidia-modprobe /
+  nvidia-settings / nvidia-prime も hold、CUDA のリポジトリから 620 が混ざる（nvidia-driver-pinning-580 で防ぐ）。
+- NVIDIA Container Toolkit 1.20 が CDI モードで、GPU の CDI の定義がなかった（ドライバ 565 では `nvidia-ctk cdi generate` が
+  nvSandboxUtilsShutdown で落ちる。ドライバ更新後も作り直されない）→ `doctor` の `cdi_spec`。
+- GR00T N1.7 の VLM `nvidia/Cosmos-Reason2-2B` は gated → `doctor` の `huggingface`。
+- checkpoint は 1 つ 24 GB。5 つ残す設定で 295 GB のディスクが埋まり、学習が保存中に止まった → 既定で 2 つ、学習前に空きを検査。
+- DCGM の nv-hostengine が 127.0.0.1:5555 を使う → `evaluate_vla` は空いているポートを使う。
+- `docker/build.sh` の `submodule update --filter` は Ubuntu 22.04 の版管理ツール（2.34）にない（2.36 から）→ あるときだけ付ける。
+- **グリッパを離さないモデル。** 最初の DROID の並びのモデルは 0/3（掴んで箱まで運び、離さない。学習の損失は 0.006 まで
+  下がっていた）。Isaac-GR00T は行動の列（DROID は 40 step）が収まる step からしか標本を取らず、スクリプトのデモは開いてから
+  13 step で終わるので、「開く」は列の 27 番目以降にしか現れず、評価で実行する先頭 16 step に入らなかった。
+  → 変換で最後のフレームを horizon - 1 回足す（両方の並び）、`gripper_timing` の検査、学習後の `release_check`
+  （そのモデルは 0/10、直した後は 10/10）、評価の失敗の名前（`never_released` など）。
+- DROID の並びの動画の delta [-15, 0] は、Isaac-GR00T の既定（allow_padding=False）でエピソードの先頭 15 step の過去の
+  フレームが末尾に回り込む → DROID の並びは delta [0]（`nvidia/GR00T-N1.7-DROID` と同じ）。
+
+## 次の作業
+
+Brev（L40S）での FANUC の例の作業（下の 1〜3）は終わった。残り:
+
+- **FANUC での Mimic**（`generate_mimic`。単腕では Franka で 75/100）と、Mimic のデータで学習した場合との比較（下の 4）。
+- 人の操作で記録した元のデモからの Mimic（下の 5）。
+- 実機に近い条件での評価: 照明・物体の位置のばらつき、物体が複数ある場面。カメラ 2 台（DROID の並び）と 3 台の差は、
+  この簡単な場面では小さかった（19/20 と 20/20）。
+
+以下は Brev での作業の元の手順（記録として残す）。
 
 準備（インストールの「クラウドの GPU」の節と同じ）:
 
@@ -353,9 +391,9 @@ uv venv .venv && uv pip install -e '.[view,dev,docs]' xacro && source .venv/bin/
 bash docker/build.sh                          # 1〜2 時間、約 100 GB。ディスクは 200 GB 以上のインスタンスで
 bash docker/run.sh && bash docker/run.sh gr00t
 urdf2vla doctor                               # ドライバ 580 以降（古いと警告）、image・コンテナ・ディスク
-pytest                                        # 47 passed / 9 skipped（FANUC の URDF がまだない）
+pytest                                        # 68 passed / 9 skipped（FANUC の URDF がまだない）
 bash examples/crx3ia/fetch_urdf.sh            # ROS なし。PyPI の xacro で ROS 2 のものと同じ URDF になる
-pytest                                        # 52 passed / 4 skipped（CRX の例の試験も走る。skip は下記）
+pytest                                        # 73 passed / 4 skipped（CRX の例の試験も走る。skip は下記）
 ```
 
 FANUC の例（`docs/guides/your-robot.md` の手順。`import_robot` で初期姿勢だけ質問される）:
@@ -373,12 +411,11 @@ urdf2vla evaluate_vla    --project projects/crx3ia --model training/crx3ia_demos
 
 確かめて書くこと:
 
-1. L40S での動作（RTX 5080 以外の GPU は初めて）: 各工程の検査、描画、時間、GPU メモリ。「検証状況」の表に L40S の列を足す。
-2. GR00T の実際の学習（`train_vla`）: 学習時間、checkpoint、GPU メモリ。`docs/guides/training.md` に実測値を書く。
-3. 学習済みモデルでの評価（`evaluate_vla --model`）: 成功率と動画。FANUC で学習した VLA はまだどこにもない
-   （以前の FANUC 向けと思われたモデルは Franka のものだった）。
-4. FANUC での Mimic（`generate_mimic`。単腕では Franka で 75/100）と、Mimic のデータで学習した場合との比較。
-5. 人の操作（`--device socket` / `generate_mimic --source-device socket`）で記録した元のデモからの Mimic（経路はスクリプトで
+1. （済）L40S での動作（RTX 5080 以外の GPU は初めて）: 各工程の検査、描画、時間、GPU メモリ。
+2. （済）GR00T の実際の学習（`train_vla`）: 学習時間、checkpoint、GPU メモリ。`docs/guides/training.md` に実測値を書いた。
+3. （済）学習済みモデルでの評価（`evaluate_vla --model`）: 20/20。
+4. （未）FANUC での Mimic（`generate_mimic`。単腕では Franka で 75/100）と、Mimic のデータで学習した場合との比較。
+5. （未）人の操作（`--device socket` / `generate_mimic --source-device socket`）で記録した元のデモからの Mimic（経路はスクリプトで
    キーを送って確かめただけ）。
 
 注意:
@@ -392,11 +429,10 @@ urdf2vla evaluate_vla    --project projects/crx3ia --model training/crx3ia_demos
   止まったら実行し直すと続きから取得する。
 - 2026-11-12 に、このマシンの新しい clone で Brev と同じ条件（ROS なし）を確かめた: PyPI の xacro の FANUC の URDF は
   ROS 2 Jazzy のものと link・関節・可動範囲・メッシュ・質量が同じ、pytest 47/9 → 取得後 52/4、`mkdocs build --strict`、`doctor`、
-  FANUC の例のホスト側の工程（台を 10 cm 手前に寄せる警告も同じ）。Brev のインスタンスそのものではまだ動かしていない。
+  FANUC の例のホスト側の工程（台を 10 cm 手前に寄せる警告も同じ）。
 
 ## 今後
 
-- 学習済み checkpoint での評価（大きな GPU で train.sh を実行した後）
 - 場面・タスクを SimReady アセット（NVIDIA の Hugging Face にある物体・台など）から選べるようにする（Arena の Object と
   配置の relations を使う）。いまは台・立方体・置き場所のプリミティブだけ
 - SimReady のグリッパを増やす。Robotiq 2F-140 は閉リンクの残りの関節（inner knuckle は excludeFromArticulation）を受け身にしても指がばらけて何も保持できなかった。Hand-E は 2 つの顎を別々に駆動する（駆動する関節を複数持てるようにする）。SCHUNK は mm 単位のアセットで開きが小さい。xArm はりんごが抜ける
