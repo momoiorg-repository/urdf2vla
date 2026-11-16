@@ -34,10 +34,10 @@ flowchart LR
 
 ## Results
 
-| Robot | Model | Success in simulation |
-|---|---|---|
-| FANUC CRX-3iA + Robotiq 2F-85 | [`umegan/urdf2vla-crx3ia-gr00t-n1.7`](https://huggingface.co/umegan/urdf2vla-crx3ia-gr00t-n1.7) | **20/20** |
-| Franka Panda | [`umegan/urdf2vla-franka-gr00t-n1.7`](https://huggingface.co/umegan/urdf2vla-franka-gr00t-n1.7) | **19/20** |
+| Robot | Model | Training data | Success in simulation |
+|---|---|---|---|
+| FANUC CRX-3iA + Robotiq 2F-85 | [`umegan/urdf2vla-crx3ia-gr00t-n1.7`](https://huggingface.co/umegan/urdf2vla-crx3ia-gr00t-n1.7) | [dataset](https://huggingface.co/datasets/umegan/urdf2vla-crx3ia-pickplace) | **20/20** |
+| Franka Panda | [`umegan/urdf2vla-franka-gr00t-n1.7`](https://huggingface.co/umegan/urdf2vla-franka-gr00t-n1.7) | [dataset](https://huggingface.co/datasets/umegan/urdf2vla-franka-pickplace) | **19/20** |
 
 Each was trained from 50 scripted demonstrations in about 2 h 40 min on one NVIDIA L40S. Videos and details:
 [Trained models](models.md).

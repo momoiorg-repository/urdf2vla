@@ -66,7 +66,8 @@ urdf2vla collect_dataset         --project projects/tutorial_franka --device scr
 
 VLA は 3 枚の画像、7 つの関節角、グリッパを受け取り、関節の目標とグリッパの指令を出します。
 `collect_dataset --device scripted` はスクリプトの制御で毎回ランダムな物体・位置の作業を行い、成功したエピソードだけを
-残します: 63 回中 50 回、30 分。自分で操作するには [デモを記録する](guides/recording.md) を見てください。
+残します: 63 回中 50 回、30 分。自分で操作するには [デモを記録する](guides/recording.md) を見てください。この実行の 50 個のデモは Hugging Face の
+[`umegan/urdf2vla-franka-pickplace`](https://huggingface.co/datasets/umegan/urdf2vla-franka-pickplace) にあります。
 
 ## 5. 変換する {#convert}
 
