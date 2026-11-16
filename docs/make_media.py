@@ -405,11 +405,11 @@ def model_media(name: str, project: Path) -> None:
     run([ffmpeg(), "-y", "-loglevel", "error", "-i", str(videos[0]), "-vf",
          "fps=10,scale=768:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96[p];[b][p]paletteuse=dither=bayer:bayer_scale=4",
          str(gif)])  # fmt: skip
-    # 1 エピソードの 4 場面（始め・掴んだ・箱の上・置いた）を縦に並べる
+    # 1 エピソードの 4 場面（始め・持ち上げ・箱の上・置いた）を縦に並べる
     frames = _decode(videos[0])
     n = len(frames)
-    at = [0, int(n * 0.30), int(n * 0.65), n - 1]
-    labels = ["start", "grasped", "over the bin", "placed"]
+    at = [0, int(n * 0.40), int(n * 0.65), n - 1]
+    labels = ["start", "picking up", "over the bin", "placed"]
     h, w = frames[0].shape[:2]
     pad, text_w = 8, 150
     out = Image.new("RGB", (w + text_w + 2 * pad, len(at) * (h + pad) + pad), "white")

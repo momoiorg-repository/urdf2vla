@@ -33,7 +33,7 @@ Claude Code か Codex で開いて「自分のロボットで VLA 開発を始�
 ## いまの状態
 
 2 本指のグリッパの付いた単腕・双腕のロボット、タスクは 1 つ（物体を箱に入れる）、シミュレーションのみ。
-URDF から評価済みの GR00T N1.7 のモデルまで、FANUC CRX-3iA（20/20）で NVIDIA L40S 上で一通り検証済みです。
+URDF から評価済みの GR00T N1.7 のモデルまで、FANUC CRX-3iA（20/20）と Franka Panda（19/20）で NVIDIA L40S 上で一通り検証済みです。
 [学習済みモデル](https://momoiorg-repository.github.io/urdf2vla/ja/models/)を参照してください。コマンドの出力は日本語です。
 
 設計の考え方と検証の詳細: [DEVELOPMENT.md](DEVELOPMENT.md)

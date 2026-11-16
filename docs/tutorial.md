@@ -1,31 +1,30 @@
 # Tutorial: Franka end to end
 
-This tutorial runs the whole pipeline once with the Franka Panda that ships with urdf2vla: from its URDF to a recorded
-dataset, a GR00T training job and a replay evaluation. Nothing in it asks you questions, so it's the best way to check
-your installation and to see what each step produces.
+This tutorial runs the whole pipeline with the Franka Panda that ships with urdf2vla: from its URDF to 50 recorded
+demonstrations, a fine-tuned GR00T N1.7 model and its evaluation in simulation. Nothing asks you questions, so it is
+also the way to check your installation.
 
-You need the [installation](install.md) finished and both containers running (`bash docker/run.sh` and
-`bash docker/run.sh gr00t`). The times below were measured on an RTX 5080 after Isaac Sim had started once; the very
-first start of Isaac Sim compiles shaders and can take several minutes.
+You need the [installation](install.md) finished, both containers running, and Hugging Face set up
+([step 5](install.md#huggingface)). The times below were measured on an NVIDIA L40S; steps 1–5 and 7 also run on a
+16 GB RTX GPU.
 
 | Step | Commands | Time |
 |---|---|---|
 | [1. Create the project](#create) | `init` | instant |
 | [2. Configure](#configure) | `inspect_robot` → `configure_camera` | ~1 s |
-| [3. Import into Isaac Sim](#import) | `import_robot`, `launch_sim` | ~2 min (more the first time: the objects and bin are downloaded) |
-| [4. Record](#record) | `configure_vla_interface`, `setup_teleoperation`, `collect_dataset` | ~4 min for 10 demos |
-| [5. Convert and package training](#convert) | `convert_dataset`, `train_vla` | ~15 s |
-| [6. Evaluate](#replay) | `evaluate_vla --replay` | ~1 min |
+| [3. Import into Isaac Sim](#import) | `import_robot`, `launch_sim` | ~2.5 min (more the first time) |
+| [4. Record](#record) | `configure_vla_interface`, `setup_teleoperation`, `collect_dataset` | ~31 min for 50 demos |
+| [5. Convert](#convert) | `convert_dataset` | ~1 min |
+| [6. Train](#train) | `train_vla` | 2 h 42 min (needs 44 GB) |
+| [7. Evaluate](#evaluate) | `evaluate_vla` | ~8 min for 20 episodes |
 
 ## 1. Create the project {#create}
 
 ```bash
-source .venv/bin/activate
 urdf2vla init projects/tutorial_franka --from examples/franka/project.yaml
 ```
 
-A project is a folder. `project.yaml` is the only file in it that you edit; the Franka example already contains the
-starting pose and the DROID camera layout.
+A project is a folder. `project.yaml` is the only file in it you edit.
 
 ## 2. Configure robot, table and cameras {#configure}
 
@@ -36,25 +35,12 @@ urdf2vla configure_task   --project projects/tutorial_franka
 urdf2vla configure_camera --project projects/tutorial_franka
 ```
 
-These run on your machine, not in a container. `inspect_robot` reads the URDF and finds the arm, the gripper and the
-hand link; `configure_robot` turns that into a robot configuration; `configure_task` places a table and a bin within
-reach and chooses the objects — an apple, a lime, a pear and a colored cube, all of which fit the Franka's 8 cm
-fingers; `configure_camera` places a wrist camera and two external cameras like the
-[DROID](https://droid-dataset.github.io/) dataset.
+`inspect_robot` finds the arm, the gripper and the hand in the URDF; `configure_task` places the table and bin within
+reach and picks the objects (an apple, a lime, a pear and a colored cube); `configure_camera` places a wrist camera and
+two external cameras like the [DROID](https://droid-dataset.github.io/) dataset.
 
-Every command prints its result as JSON. The part to read is `status` and `next`:
-
-```json
-{
-  "skill": "inspect_robot",
-  "status": "ok",
-  "next": ["configure_robot"]
-}
-```
-
-!!! tip "Look at it"
-    At this point you can already see the robot, the table and the cameras in your browser:
-    `urdf2vla view --project projects/tutorial_franka` — see [Check your robot in the browser](guides/view.md).
+Every command prints a JSON result; `status` and `next` tell you whether it worked and what to run next. To see the
+setup now, run [`urdf2vla view`](guides/view.md).
 
 ## 3. Import the robot into Isaac Sim {#import}
 
@@ -63,128 +49,69 @@ urdf2vla import_robot --project projects/tutorial_franka
 urdf2vla launch_sim   --project projects/tutorial_franka
 ```
 
-`import_robot` converts the URDF to USD (the format Isaac Sim uses) and runs ten physics checks on the robot alone —
-for example that every joint follows its target, stays within its limits, and that the gripper opens, closes and stops
-at its limits when pushed:
-
-```json
-{
-  "skill": "import_robot",
-  "status": "ok",
-  "data": {
-    "checks": [
-      "articulation_root: OK",
-      "all_joints_driven: OK",
-      "mimic_constraints_off: OK",
-      "joint_name_match: OK",
-      "bodies_exist: OK",
-      "no_nan: OK",
-      "default_pose_tracking: OK",
-      "within_limits: OK",
-      "gripper_motion:main_gripper: OK",
-      "joint_limits_hold:main_gripper: OK"
-    ]
-  },
-  "next": ["launch_sim"]
-}
-```
-
-`launch_sim` builds the pick-and-place environment with Isaac Lab Arena, runs it for a moment and checks the cameras,
-the scene and, for every object, that it rests on the table, has the size the catalog expects, and stays in the hand
-when gripped. Round objects are left on the table for a moment to see how they come to rest (an apple tips onto its
-side), and episodes then place them that way. It saves what each
-camera sees in `snapshots/`:
+`import_robot` converts the URDF to USD and runs 10 physics checks on the robot (joints follow their targets and stay
+in their limits, the gripper opens, closes and holds its limits). `launch_sim` builds the pick-and-place environment
+and checks the cameras, the objects and that each object stays in the hand when gripped. It saves what each camera
+sees in `snapshots/`:
 
 <figure markdown="span">
   ![The wrist, left and right camera images](assets/tutorial_cameras.png)
-  <figcaption>The wrist camera (between the open fingers), and the left and right cameras looking down at the table —
-  256×256 each, as the VLA will see them.</figcaption>
+  <figcaption>The wrist camera and the left and right cameras, 256×256 each, as the VLA sees them.</figcaption>
 </figure>
 
 ## 4. Record demonstrations {#record}
 
 ```bash
 urdf2vla configure_vla_interface --project projects/tutorial_franka
-urdf2vla setup_teleoperation --project projects/tutorial_franka
-urdf2vla collect_dataset --project projects/tutorial_franka --device scripted --num-demos 10
+urdf2vla setup_teleoperation     --project projects/tutorial_franka
+urdf2vla collect_dataset         --project projects/tutorial_franka --device scripted --num-demos 50
 ```
 
-`configure_vla_interface` defines what the VLA receives (three images, seven arm joint angles and a gripper value) and
-what it outputs (joint targets and a gripper command). `setup_teleoperation` checks that commanding the hand to move
-+x, −y or +z really moves it that way.
+The VLA sees the three images, the 7 joint angles and the gripper, and outputs joint targets and a gripper command.
+`collect_dataset --device scripted` lets a scripted controller do the task with a random object at a random position
+each time, and keeps only the successful episodes: 50 of 63 attempts, in 30 minutes. To drive the robot yourself, see
+[Record demonstrations](guides/recording.md).
 
-`collect_dataset --device scripted` lets a scripted controller do the task — a random object at a random position each
-time, with an instruction that names it (*"put the pear in the bin"*) —
-and keeps only the episodes that succeed:
-
-```json
-{
-  "skill": "collect_dataset",
-  "status": "ok",
-  "data": {
-    "dataset": "datasets/demos.hdf5",
-    "saved": 10,
-    "attempts": 10,
-    "success_rate": 1.0,
-    "checks": [
-      "camera_frames_updated: OK",
-      "first_frame_fresh: OK",
-      "label_replay: OK"
-    ]
-  },
-  "next": ["convert_dataset"]
-}
-```
-
-Ten demonstrations are enough to test the pipeline, not to train a useful policy — use 50 or more for training.
-To drive the robot yourself instead, see [Record demonstrations](guides/recording.md).
-
-## 5. Convert the data and package training {#convert}
+## 5. Convert {#convert}
 
 ```bash
-urdf2vla convert_dataset --project projects/tutorial_franka --dataset demos
-urdf2vla train_vla       --project projects/tutorial_franka --dataset demos
+urdf2vla convert_dataset --project projects/tutorial_franka
 ```
 
-These run in the GR00T container. `convert_dataset` writes the dataset in the LeRobot v2.1 format with the extra files
-GR00T N1.7 needs (`modality.json`, statistics and a modality config), then loads it back with GR00T's own data loader
-and compares every video frame with the recording.
+This writes the dataset in the format GR00T N1.7 reads, then loads it back with GR00T's own loader and checks that
+every video matches the recording and that the model can learn when the gripper opens (`gripper_timing`).
 
-GR00T N1.7 training needs a GPU with 44 GB or more. `train_vla` checks yours: if it is big enough it starts training;
-otherwise it packages everything into `training/franka_demos.tar.gz` to run on a larger machine, and says so
-in `warnings`. See [Train and evaluate](guides/training.md).
-
-## 6. Check the pipeline with a replay evaluation {#replay}
+## 6. Train {#train}
 
 ```bash
-urdf2vla evaluate_vla --project projects/tutorial_franka --replay --dataset demos --episodes 3
+urdf2vla train_vla --project projects/tutorial_franka --dataset demos
 ```
 
-Before you have a trained model, `--replay` tests everything around it: it starts the GR00T inference server with a
-stand-in policy that plays back the converted dataset, connects Isaac Sim to it, and runs episodes exactly as a real
-evaluation would — with the same object as in the recording. If the object lands in the bin here, the data format,
-the action conversion and the
-server–simulator connection all work.
+On a GPU with 44 GB or more, this fine-tunes GR00T N1.7 from `nvidia/GR00T-N1.7-DROID` for 10,000 steps (2 h 42 min,
+41.6 GB on the L40S) and then checks that the trained model opens the gripper where the demonstrations do
+(`release_check`: 10/10). On a smaller GPU it packages the job for another machine instead — see
+[Train and evaluate](guides/training.md#another-machine).
 
-<video controls muted playsinline width="100%" src="../assets/eval_replay.mp4"></video>
+## 7. Evaluate {#evaluate}
 
-Success is judged from the simulator state (the object in the bin and the gripper open), so no video is needed. To
-watch an episode, add `--video`: it saves one video per episode in `build/eval_videos/`, with the three camera images
-side by side as the VLA sees them (the video above). With a trained checkpoint the command is the same, with
-`--model` instead of `--replay`.
-
-## What you have now
-
-```text
-projects/tutorial_franka/
-  project.yaml            your settings
-  generated/              robot, task, camera, VLA interface and teleop configuration
-  build/                  USD, reports of every step (import_report.yaml, launch_report.yaml, …), eval videos
-  snapshots/              camera images from each step
-  datasets/demos.hdf5     the recording
-  datasets/demos_gr00t/   the same data for GR00T (LeRobot v2.1)
-  training/               the training job (train.sh) and its package
-  logs/                   the log and JSON result of every command
+```bash
+urdf2vla evaluate_vla --project projects/tutorial_franka \
+  --model training/tutorial_franka_demos/checkpoints/checkpoint-10000 --episodes 20 --video
 ```
+
+This starts the model in the GR00T container and lets it drive the robot in Isaac Sim, with a random object at a random
+position in every episode. The result: **19 of 20 succeeded** (the one failure closed on a pear without lifting it).
+With `--video`, every episode is saved in `build/eval_videos/` as the model sees it:
+
+<video controls muted playsinline width="100%" src="../assets/franka_model.mp4"></video>
+
+`build/eval_report.yaml` has every episode, with a name for each failure (`never_closed`, `missed_grasp`,
+`never_released`, `released_off_target`). The model is on Hugging Face as
+[`umegan/urdf2vla-franka-gr00t-n1.7`](https://huggingface.co/umegan/urdf2vla-franka-gr00t-n1.7).
+
+!!! tip "Without a trained model"
+    `evaluate_vla --replay --dataset demos --episodes 3` plays the converted dataset back through the same server and
+    simulator instead of a model. If the object lands in the bin, the data format, the actions and the connection all
+    work — a quick check before you spend hours on training.
 
 Next: [bring your own robot](guides/your-robot.md).

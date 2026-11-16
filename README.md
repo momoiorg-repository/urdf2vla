@@ -33,7 +33,7 @@ Claude Code or Codex and say "I want to start VLA development with my robot".
 ## Status
 
 Single- and dual-arm robots with a two-finger gripper, one task (an object into a container), simulation only.
-Verified end to end, from the URDF to an evaluated GR00T N1.7 model, on the FANUC CRX-3iA (20/20) on an NVIDIA L40S;
+Verified end to end, from the URDF to an evaluated GR00T N1.7 model, on the FANUC CRX-3iA (20/20) and the Franka Panda (19/20) on an NVIDIA L40S;
 see [Trained models](https://momoiorg-repository.github.io/urdf2vla/models/). Command output is in Japanese; the
 documentation explains every key in English.
 

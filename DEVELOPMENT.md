@@ -381,6 +381,7 @@ L40S（46 GB）、CPU 8、Ubuntu 22.04、ドライバ 580.196.07（Brev の 565.
 | train_vla（`nvidia/GR00T-N1.7-DROID` から、urdf2vla の並び、カメラ 3 台、10,000 step） | release_check 10/10 | 約 2 時間 40 分 | 41.9 GB |
 | evaluate_vla（20 エピソード） | **20/20**（モデル: [umegan/urdf2vla-crx3ia-gr00t-n1.7](https://huggingface.co/umegan/urdf2vla-crx3ia-gr00t-n1.7)） | 10 分 | 12.4 GB |
 | 比較: `--layout droid`（手先 + 外部 1 台、学習は左右のカメラを交互） | 19/20（洋梨を 1 回離さない） | 学習 2 時間 8 分 | 40.9 GB |
+| Franka（同梱の例、同じ手順: scripted 50 個 → 学習 → 評価 20） | 19/20（洋梨を 1 回持ち上げられない `missed_grasp`）、release_check 10/10。収集 63 回中 50 回・30 分、学習 2 時間 42 分（モデル: [umegan/urdf2vla-franka-gr00t-n1.7](https://huggingface.co/umegan/urdf2vla-franka-gr00t-n1.7)） | 評価 8 分 | 41.6 GB |
 
 途中で見つけて直したこと:
 
