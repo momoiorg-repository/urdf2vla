@@ -70,7 +70,8 @@ urdf2vla collect_dataset         --project projects/tutorial_franka --device scr
 The VLA sees the three images, the 7 joint angles and the gripper, and outputs joint targets and a gripper command.
 `collect_dataset --device scripted` lets a scripted controller do the task with a random object at a random position
 each time, and keeps only the successful episodes: 50 of 63 attempts, in 30 minutes. To drive the robot yourself, see
-[Record demonstrations](guides/recording.md).
+[Record demonstrations](guides/recording.md). The 50 demonstrations from this run are on Hugging Face as
+[`umegan/urdf2vla-franka-pickplace`](https://huggingface.co/datasets/umegan/urdf2vla-franka-pickplace).
 
 ## 5. Convert {#convert}
 
