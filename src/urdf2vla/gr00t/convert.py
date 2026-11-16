@@ -168,7 +168,8 @@ def _timing_check(grippers: list, horizon: int) -> dict:
     """グリッパの最後の開閉が学習の標本の先頭になれるか（urdf2vla.gr00t.episodes.gripper_timing）。"""
     from urdf2vla.gr00t.episodes import gripper_timing
 
-    t = gripper_timing(grippers, horizon, padded=True)
+    t = gripper_timing(grippers, horizon, padded=False)  # grippers は末尾を足した後の、書いたとおりの列
+    t["padded_frames"] = horizon - 1  # 変換で足したフレーム数（min_steps_after_last_change はそれを含む）
     return {"name": "gripper_timing", "ok": t.pop("ok"), "detail": t}
 
 
@@ -215,10 +216,10 @@ def run(project: Project, args, result: SkillResult) -> None:
             if state.shape != (T, vla.state.dimension) or action.shape != (T, vla.action.dimension):
                 result.fail(f"{name}: state {state.shape} / action {action.shape} が vla_interface と合いません")
                 return
-            if grip_col is not None:
-                grippers.append(action[:, grip_col].copy())
             idx = hold_tail(T, vla.action_horizon)  # 最後の姿勢で止まるフレームを足す（グリッパを開く step も標本にする）
             state, action, T = state[idx], action[idx], len(idx)
+            if grip_col is not None:  # 書いたとおりのグリッパの列で検査する
+                grippers.append(action[:, grip_col].copy())
             chunk = ep // CHUNK
             df = _frame_table(state, action, fps, task_index, ep, total, "annotation.human.task_description")
             pq = out / f"data/chunk-{chunk:03d}/episode_{ep:06d}.parquet"
@@ -354,12 +355,12 @@ def run_droid(project: Project, args, result: SkillResult) -> None:
             task_index = tasks.setdefault(ep_instruction, len(tasks))
             state, action = g["obs/state"][:], g["actions"][:]
             T = len(action)
-            grippers.append(np.asarray(action)[:, n_arm].copy())
             s, a = droid.episode_vectors(g["obs/tcp_pos"][:, :3], g["obs/tcp_quat"][:, :4], state, action, n_arm)
-            idx = droid.hold_tail(len(action))  # 最後の姿勢で止まるフレームを足す（行動の列の先頭で開くように）
+            idx = hold_tail(len(action), droid.DROID_ACTION_HORIZON)  # 最後の姿勢で止まるフレームを足す（行動の列の先頭で開くように）
             s, a = s[idx], a[idx]
             a[len(action) :, :9] = s[len(action) :, :9]  # 足したフレームの eef の行動 = 今の姿勢（止まる）
             T = len(idx)
+            grippers.append(a[:, 9].copy())  # 書いたとおりの gripper_position（1 = 閉）で検査する
             wrist_frames = np.stack([droid.resize_with_pad(f) for f in g[f"obs/images/{wrist}"][:]])[idx]
             for ext in exteriors:
                 chunk = ep // CHUNK

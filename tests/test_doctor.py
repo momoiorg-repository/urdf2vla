@@ -119,6 +119,17 @@ def test_cdi_spec_for_an_older_driver_is_stale(tmp_path):
     assert c.level == "ok"
 
 
+def test_cdi_stale_duplicate_spec_is_reported(tmp_path):
+    from urdf2vla.doctor import check_cdi
+
+    cfg, dirs = _cdi_setup(tmp_path, "kind: nvidia.com/gpu\n  - libnvidia-ml.so.580.196.07\n")
+    run_dir = tmp_path / "run_cdi"
+    run_dir.mkdir()
+    (run_dir / "nvidia.yaml").write_text("kind: nvidia.com/gpu\n  - libnvidia-ml.so.565.57.01\n")
+    (c,) = check_cdi(fake({"nvidia-smi": (0, "580.196.07\n", "")}), cfg, (*dirs, run_dir))
+    assert c.level == "error" and "run_cdi" in c.detail
+
+
 def test_cdi_not_checked_in_legacy_mode(tmp_path):
     from urdf2vla.doctor import check_cdi
 
@@ -158,6 +169,12 @@ def test_huggingface_gated_401_asks_to_accept_license():
     assert c.level == "warning" and "利用規約" in c.fix
     (c,) = check_huggingface("hf_x", lambda req, timeout: _Resp(200))
     assert c.level == "ok"
+
+    def not_found(req, timeout):
+        raise urllib.error.HTTPError(req.full_url, 404, "Not Found", {}, None)
+
+    (c,) = check_huggingface("hf_x", not_found)
+    assert c.level == "info" and "404" in c.detail
 
 
 def test_disk_warns_when_training_locally_without_room_for_checkpoints(tmp_path, monkeypatch):

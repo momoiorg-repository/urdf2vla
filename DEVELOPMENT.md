@@ -391,9 +391,9 @@ uv venv .venv && uv pip install -e '.[view,dev,docs]' xacro && source .venv/bin/
 bash docker/build.sh                          # 1〜2 時間、約 100 GB。ディスクは 200 GB 以上のインスタンスで
 bash docker/run.sh && bash docker/run.sh gr00t
 urdf2vla doctor                               # ドライバ 580 以降（古いと警告）、image・コンテナ・ディスク
-pytest                                        # 68 passed / 9 skipped（FANUC の URDF がまだない）
+pytest                                        # 70 passed / 9 skipped（FANUC の URDF がまだない）
 bash examples/crx3ia/fetch_urdf.sh            # ROS なし。PyPI の xacro で ROS 2 のものと同じ URDF になる
-pytest                                        # 73 passed / 4 skipped（CRX の例の試験も走る。skip は下記）
+pytest                                        # 75 passed / 4 skipped（CRX の例の試験も走る。skip は下記）
 ```
 
 FANUC の例（`docs/guides/your-robot.md` の手順。`import_robot` で初期姿勢だけ質問される）:

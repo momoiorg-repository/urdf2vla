@@ -212,13 +212,14 @@ def check_cdi(run=_run, config: Path = Path("/etc/nvidia-container-runtime/confi
             texts.append(p.read_text(errors="replace"))
         except OSError:
             continue
-    gpu = [t for t in texts if "nvidia.com/gpu" in t or "kind: nvidia.com/gpu" in t]
+    gpu = [(p, t) for p, t in zip(specs, texts) if "nvidia.com/gpu" in t]
     if not gpu:
         return [Check("cdi_spec", "error", "NVIDIA Container Toolkit が CDI モードですが、GPU の CDI の定義がありません（コンテナから GPU を使えません）。",
                       cmd + docs("cdi"))]  # fmt: skip
-    if driver and not any(f".so.{driver}" in t for t in gpu):
-        return [Check("cdi_spec", "error", f"GPU の CDI の定義が今のドライバ（{driver}）を指していません（ドライバを更新した後に作り直していない）。",
-                      cmd + docs("cdi"))]  # fmt: skip
+    stale = [str(p) for p, t in gpu if driver and f".so.{driver}" not in t]
+    if stale:  # 1 つでも古いと、nvidia.com/gpu=all の定義が重なる・古い版を指す
+        return [Check("cdi_spec", "error", f"GPU の CDI の定義 {', '.join(stale)} が今のドライバ（{driver}）を指していません（ドライバを更新した後に作り直していない）。",
+                      cmd + "（古い定義のファイルは消すか、同じコマンドの --output で上書きします）" + docs("cdi"))]  # fmt: skip
     return [Check("cdi_spec", "ok", f"GPU の CDI の定義があります（ドライバ {driver}）" if driver else "GPU の CDI の定義があります")]
 
 
@@ -249,6 +250,8 @@ def check_huggingface(token: str | None = None, opener=urllib.request.urlopen, t
         status = e.code
     except OSError:
         return [Check("huggingface", "info", "Hugging Face に届かないため、モデルへのアクセスを確かめられませんでした。")]
+    if status not in (200, 401, 403):
+        return [Check("huggingface", "info", f"Hugging Face が {status} を返したため、{GR00T_BACKBONE} へのアクセスを確かめられませんでした。")]
     if status in (401, 403):
         return [Check("huggingface", "warning", f"Hugging Face のトークンで {GR00T_BACKBONE} を取得できません（利用規約に同意していないか、トークンが無効）。",
                       f"{page} を開いて利用規約に同意してください（トークンは read 権限で足ります）" + docs("huggingface"))]  # fmt: skip
@@ -257,13 +260,10 @@ def check_huggingface(token: str | None = None, opener=urllib.request.urlopen, t
 
 def check_port(port: int = GR00T_SERVER_PORT) -> list[Check]:
     """GR00T の推論サーバの既定のポート。NVIDIA Brev では DCGM の nv-hostengine が 127.0.0.1:5555 を使っている。"""
-    import socket
+    from urdf2vla.ports import port_free
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        try:
-            s.bind(("127.0.0.1", port))
-        except OSError:
-            return [Check("gr00t_port", "info", f"ポート {port} は他のプログラムが使っています（Brev では DCGM の nv-hostengine）。evaluate_vla は空いているポートを自動で使います。")]
+    if not port_free(port):
+        return [Check("gr00t_port", "info", f"ポート {port} は他のプログラムが使っています（Brev では DCGM の nv-hostengine）。evaluate_vla は空いているポートを自動で使います。")]
     return [Check("gr00t_port", "ok", f"ポート {port} は空いています")]
 
 

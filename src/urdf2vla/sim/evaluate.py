@@ -68,11 +68,14 @@ def droid_eef_9d(view, arm: str) -> np.ndarray:
 class DroidObservation:
     """DROID の観測（外部カメラ 1 台 + 手先カメラ、各 2 フレーム）を毎 step 積む。"""
 
-    def __init__(self, view, vla, cameras, exterior: str | None = None):
+    def __init__(self, view, vla, cameras, exterior: str | None = None, wrist: str | None = None):
         arm = view.cfg.arms[0]
         if len(view.cfg.arms) != 1 or len(arm.joints) > DROID_JOINTS or not view.cfg.grippers:
             raise RuntimeError(f"GR00T の DROID は {DROID_JOINTS} 関節以下の腕 1 本とグリッパのロボット（Franka・FANUC など）向けです。")
-        wrist = next((c.name for c in cameras.cameras if c.mount == "link"), None)
+        links = [c.name for c in cameras.cameras if c.mount == "link"]
+        if wrist and wrist not in links:
+            raise RuntimeError(f"手先カメラ {wrist}（学習データの meta/urdf2vla.json）がありません（手先のカメラ: {links}）。")
+        wrist = wrist or (links[0] if links else None)
         world = [c.name for c in cameras.cameras if c.mount == "world"]
         ext = exterior if exterior else (world[0] if world else None)
         if exterior and exterior not in world:
@@ -210,6 +213,12 @@ def _initial_states(project: Project, dataset: str) -> list[dict]:
     return out
 
 
+def _droid_layout(project: Project, dataset: str) -> dict:
+    """convert_dataset --layout droid が書いた meta/urdf2vla.json（なければ空。zero-shot の評価など）。"""
+    p = project.root / "datasets" / f"{dataset}_droid_gr00t" / "meta" / "urdf2vla.json"
+    return json.loads(p.read_text()) if p.exists() else {}
+
+
 def run(project: Project, args, result: SkillResult, app=None) -> None:
     from urdf2vla.gr00t.client import Gr00tClient
     from urdf2vla.sim.common import load_configs, make_env
@@ -225,7 +234,10 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
         result.fail(f"GR00T サーバ（127.0.0.1:{args.port}）に接続できません。")
         return
     if getattr(args, "droid", False):
-        droid_obs = DroidObservation(view, vla, c.cameras, getattr(args, "exterior", None))
+        # DROID の並びで学習したモデルなら、変換で使ったカメラ（meta/urdf2vla.json）に合わせる
+        trained = _droid_layout(project, args.dataset)
+        exterior = getattr(args, "exterior", None) or (trained.get("exterior_cameras") or [None])[0]
+        droid_obs = DroidObservation(view, vla, c.cameras, exterior, trained.get("wrist_camera"))
         droid_obs.configure(client)
     replay = bool(args.replay)
     droid = droid_obs if getattr(args, "droid", False) else None

@@ -227,13 +227,15 @@ def _release_check(project: Project, ds: Path, layout: dict, tag: str, modality:
                 return {"name": "release_check", "ok": True, "detail": "グリッパのないロボットなので確かめません"}
         d = release_check.run(checkpoint, ds, tag, key, open_is_high)
         return {"name": "release_check", "ok": d.pop("ok"), "detail": d}
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001  学習の結果は残すが、「確かめた」とは言わない
         traceback.print_exc()
-        return {"name": "release_check", "ok": True, "detail": f"確かめられませんでした（{type(e).__name__}: {e}）"}
+        return {"name": "release_check", "ok": False, "detail": {"error": f"{type(e).__name__}: {e}"}}
 
 
 def _release_warning(c: dict) -> str:
     d = c["detail"]
+    if isinstance(d, dict) and "error" in d:
+        return f"release_check を実行できませんでした（{d['error']}）。evaluate_vla で評価する前に、train_vla --check-only <checkpoint> で確かめ直してください。"
     return (
         f"release_check: デモがグリッパを開く場面で、モデルが開いたのは {d.get('release_rate', 0):.0%}（{d.get('queries', 0)} 回の問い合わせ）です。"
         "評価すると「掴んで運ぶが離さない」になる見込みです。convert_dataset の gripper_timing の検査を確かめ、"
@@ -241,23 +243,21 @@ def _release_warning(c: dict) -> str:
     )
 
 
-def _project_gripper_group(project: Project) -> str | None:
+def _project_action_groups(project: Project) -> list[dict]:
+    """プロジェクトの vla_interface の action のグループ（なければ空）。"""
     import yaml
 
     p = project.root / "generated" / "vla_interface.yaml"
-    groups = (yaml.safe_load(p.read_text()) or {}).get("action", {}).get("groups", []) if p.exists() else []
-    return next((g["name"] for g in groups if g.get("kind") != "joint_position"), None)
+    return (yaml.safe_load(p.read_text()) or {}).get("action", {}).get("groups", []) if p.exists() else []
+
+
+def _project_gripper_group(project: Project) -> str | None:
+    return next((g["name"] for g in _project_action_groups(project) if g.get("kind") != "joint_position"), None)
 
 
 def _project_arms(project: Project) -> int | None:
     """古い変換（meta/urdf2vla.json がない）用: プロジェクトの vla_interface の腕の数。"""
-    import yaml
-
-    p = project.root / "generated" / "vla_interface.yaml"
-    if not p.exists():
-        return None
-    groups = (yaml.safe_load(p.read_text()) or {}).get("action", {}).get("groups", [])
-    return sum(1 for g in groups if g.get("kind") == "joint_position") or None
+    return sum(1 for g in _project_action_groups(project) if g.get("kind") == "joint_position") or None
 
 
 def sys_python() -> str:

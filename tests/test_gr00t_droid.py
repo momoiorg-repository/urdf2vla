@@ -58,7 +58,9 @@ def test_resize_with_pad_keeps_aspect():
 
 
 def test_hold_tail_lets_every_step_start_a_full_action_chunk():
-    idx = droid.hold_tail(166)
+    from urdf2vla.gr00t.episodes import hold_tail
+
+    idx = hold_tail(166, droid.DROID_ACTION_HORIZON)
     assert len(idx) == 166 + 39 and list(idx[:166]) == list(range(166)) and set(idx[166:]) == {165}
     # GR00T の標本は 0..len-40。足した後は元の最後の step（開いた直後）まで標本になる
     assert len(idx) - droid.DROID_ACTION_HORIZON + 1 == 166

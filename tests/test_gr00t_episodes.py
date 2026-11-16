@@ -25,6 +25,13 @@ def test_release_13_steps_before_end_is_not_learnable_without_padding():
     assert gripper_timing(g, 16, padded=False)["ok"]
 
 
+def test_check_on_written_columns_fails_without_padding_and_passes_with_it():
+    # convert_dataset は書いたとおりの（末尾を足した後の）列で検査する（padded=False）
+    g = _grip(166, 41, 153)
+    assert not gripper_timing([g], 40, padded=False)["ok"]
+    assert gripper_timing([g[hold_tail(len(g), 40)]], 40, padded=False)["ok"]
+
+
 def test_episode_without_gripper_change_is_reported():
     t = gripper_timing([np.ones(50), _grip(100, 10, 80)], 16, padded=True)
     assert t["ok"] and t["episodes_without_gripper_change"] == [0]

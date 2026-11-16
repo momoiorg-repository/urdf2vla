@@ -7,6 +7,7 @@ import subprocess
 import time
 from pathlib import Path
 
+from urdf2vla.ports import free_port
 from urdf2vla.project import Project
 from urdf2vla.registry import Arg, skill
 from urdf2vla.result import SkillResult
@@ -15,20 +16,6 @@ from urdf2vla.runtime.dispatch import container_running, run_sim_skill, runtime_
 
 
 from urdf2vla.gr00t.droid import DROID_MODEL, DROID_TAG  # noqa: E402
-
-
-def free_port(port: int, tries: int = 50) -> int:
-    """port から順に、127.0.0.1 で使われていないポート（コンテナは host network なのでホストで確かめる）。"""
-    import socket
-
-    for p in range(port, port + tries):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            try:
-                s.bind(("127.0.0.1", p))
-            except OSError:
-                continue
-            return p
-    return port
 
 
 def _server_args(project: Project, opts: dict, gr) -> list[str] | str:

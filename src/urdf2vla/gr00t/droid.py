@@ -142,13 +142,6 @@ _droid["video"] = ModalityConfig(delta_indices=[0], modality_keys=[{EXTERIOR_KEY
 '''
 
 
-def hold_tail(n: int, horizon: int = DROID_ACTION_HORIZON) -> np.ndarray:
-    """エピソードの末尾に最後のフレームを horizon - 1 回足す添字（urdf2vla.gr00t.episodes.hold_tail。理由もそこに書いてある）。"""
-    from urdf2vla.gr00t.episodes import hold_tail as _hold
-
-    return _hold(n, horizon)
-
-
 def modality_json() -> dict:
     """DROID の embodiment の meta/modality.json（observation.state / action の範囲、動画、言語）。"""
     out: dict = {"state": {}, "action": {}, "video": {}, "annotation": {LANGUAGE_KEY: {"original_key": "task_index"}}}

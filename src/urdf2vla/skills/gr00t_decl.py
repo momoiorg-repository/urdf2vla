@@ -8,7 +8,7 @@ declare_sim_skill(
     phase=3,
     summary="HDF5 のデモを GR00T（LeRobot v2.1）形式に変換し、modality 定義・統計を作って GR00T のローダで読めるか検査する",
     inputs=["datasets/<name>.hdf5"],
-    outputs=["datasets/<name>_gr00t/ | datasets/<name>_droid_gr00t/", "build/convert_report.yaml"],
+    outputs=["datasets/<name>_gr00t/ | datasets/<name>_droid_gr00t/", "build/convert_report.yaml | build/convert_droid_report.yaml"],
     requires=["collect_dataset"],
     args=[
         Arg(("--dataset",), {"default": "demos", "help": "datasets/<名前>.hdf5"}),
