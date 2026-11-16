@@ -47,7 +47,10 @@ checkout() {  # checkout <url> <dir> <commit>
 
 mkdir -p "$ROOT/external"
 checkout https://github.com/isaac-sim/IsaacLab-Arena.git "$ARENA_DIR" "$ARENA_COMMIT"
-git "${GIT_HTTPS[@]}" -C "$ARENA_DIR" submodule update --init --filter=blob:none
+# submodule update の --filter は git 2.36 から（Ubuntu 22.04 の git 2.34 にはない。そのときは全履歴を取る）
+SUBMODULE_FILTER=()
+git submodule update -h 2>&1 | grep -q -- '--filter' && SUBMODULE_FILTER=(--filter=blob:none)
+git "${GIT_HTTPS[@]}" -C "$ARENA_DIR" submodule update --init "${SUBMODULE_FILTER[@]}"
 git -C "$ARENA_DIR" submodule status
 checkout https://github.com/NVIDIA/Isaac-GR00T.git "$GR00T_DIR" "$GR00T_COMMIT"
 

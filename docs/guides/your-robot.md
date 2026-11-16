@@ -17,11 +17,12 @@ attach one, and how to swap it for another. The steps are the same for any URDF.
 
     FANUC publishes the descriptions of its robots in
     [FANUC-CORPORATION/fanuc_description](https://github.com/FANUC-CORPORATION/fanuc_description) (Apache-2.0) as
-    xacro files. The example script downloads a pinned version and expands the CRX-3iA into a URDF. It needs `xacro`,
-    from ROS 2 or from `pip install xacro`:
+    xacro files. The example script downloads a pinned version and expands the CRX-3iA into a URDF. It needs `xacro`.
+    Without ROS (for example on a cloud GPU), install it into urdf2vla's environment; it gives the same URDF as ROS 2's
+    xacro:
 
     ```bash
-    source /opt/ros/jazzy/setup.bash      # xacro
+    uv pip install xacro                  # or, with ROS 2: source /opt/ros/jazzy/setup.bash
     bash examples/crx3ia/fetch_urdf.sh    # → examples/crx3ia/fanuc_description/crx3ia.urdf
     ```
 

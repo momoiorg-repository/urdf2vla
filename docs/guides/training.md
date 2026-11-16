@@ -1,6 +1,7 @@
 # Train and evaluate
 
-urdf2vla fine-tunes **NVIDIA Isaac GR00T N1.7** (`nvidia/GR00T-N1.7-3B`) on your demonstrations. Converting, training
+urdf2vla fine-tunes **NVIDIA Isaac GR00T N1.7** on your demonstrations: from `nvidia/GR00T-N1.7-DROID` (GR00T
+fine-tuned on the single-arm DROID dataset) for a robot with one arm, and from `nvidia/GR00T-N1.7-3B` for two arms. Converting, training
 and serving the model all happen in the GR00T container (`bash docker/run.sh gr00t`).
 
 ```mermaid
@@ -25,6 +26,11 @@ fine-tuning. It then loads the result with GR00T's own data loader and compares 
 images, so a broken conversion is caught here rather than after hours of training. `--force` rebuilds an existing
 conversion.
 
+The end of each episode is extended by repeating its last frame (the gripper open, the arm still) so that GR00T, which
+only starts training samples where a full action chunk fits, also learns the moment the gripper opens. The
+`gripper_timing` check confirms that every release falls inside the part of an action chunk that evaluation executes.
+Without it a model can grasp, carry the object to the bin and never let go, while its training loss looks fine.
+
 Each episode keeps its own instruction: `meta/tasks.jsonl` lists every distinct instruction (*"put the apple in the
 bin"*, *"put the lime in the bin"*, …) and every frame points to its episode's one, so the model learns to act on what
 the instruction names.
@@ -46,9 +52,24 @@ looks at your GPU:
 |---|---|---|
 | Training steps | 10,000 | `--max-steps` |
 | Global batch size | 32 | `--batch-size` |
-| Checkpoint every | 1,000 steps (last 5 kept) | `--save-steps` |
+| Checkpoint every | 1,000 steps | `--save-steps` |
+| Checkpoints kept | 2 (each is about 24 GB: 11 GB weights + 13 GB optimizer state) | `--save-total-limit` |
 | What is trained | the projector and the diffusion action head (LLM and vision encoder frozen) | — |
-| Base model | `nvidia/GR00T-N1.7-3B` from Hugging Face | `--base-model` |
+| Base model | `nvidia/GR00T-N1.7-DROID` for one arm, `nvidia/GR00T-N1.7-3B` for two | `--base-model` |
+
+Both base models use the gated `nvidia/Cosmos-Reason2-2B`: accept its license on Hugging Face and log in first
+(`urdf2vla doctor` checks it; see [Run on NVIDIA Brev](brev.md#huggingface)).
+
+When training on the machine ends, `train_vla` runs a **release check** on the last checkpoint, without simulation
+(about a minute): just before each demo opens the gripper, does the model open it too? A low rate is reported in
+`warnings`. Run it on any checkpoint with `--check-only <checkpoint>`.
+
+!!! note "`convert_dataset --layout droid`"
+    For a single arm with up to 7 joints, the conversion can also write GR00T's DROID layout
+    (`datasets/<name>_droid_gr00t`: the wrist camera and one exterior camera, the end-effector pose and 7 joints);
+    train it with `train_vla --dataset <name>_droid` and evaluate with `evaluate_vla --droid`. Each demo is written
+    once per exterior camera. On the FANUC example it trained about 30 % faster but did not beat the default layout
+    (19/20 vs 20/20, see [results](brev.md#results)), so the default layout is recommended.
 
 ### Training on another machine {#another-machine}
 
@@ -100,7 +121,11 @@ state and the task text; the model answers with the next actions. The result is 
 | `--execution-horizon` | how many of the predicted actions to execute before asking the model again (default 16) |
 | `--replay` | instead of a model, replay the converted dataset — tests everything except the model (see the [tutorial](../tutorial.md#replay)) |
 
-!!! warning "What has been verified"
-    With this version (Isaac Lab 3.0), conversion, job packaging, argument checks and replay evaluation are tested end
-    to end. A full training run and an evaluation of the resulting checkpoint have not been run yet, because they need
-    a 44 GB GPU.
+Each failed episode gets a name in the report: `never_closed`, `missed_grasp`, `never_released` or
+`released_off_target`. The most common one comes back in `warnings` with what to look at.
+
+!!! success "Measured on an NVIDIA L40S"
+    FANUC CRX-3iA, 50 scripted demos, fine-tuned from `nvidia/GR00T-N1.7-DROID` for 10,000 steps (about 2 h 40 min,
+    41.9 GB): **20/20** in evaluation, in about 10 minutes for 20 episodes. Details in
+    [Run on NVIDIA Brev](brev.md#results); the model is
+    [`umegan/urdf2vla-crx3ia-gr00t-n1.7`](https://huggingface.co/umegan/urdf2vla-crx3ia-gr00t-n1.7).

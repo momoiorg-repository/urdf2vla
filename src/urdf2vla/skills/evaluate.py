@@ -7,6 +7,7 @@ import subprocess
 import time
 from pathlib import Path
 
+from urdf2vla.ports import free_port
 from urdf2vla.project import Project
 from urdf2vla.registry import Arg, skill
 from urdf2vla.result import SkillResult
@@ -14,11 +15,11 @@ from urdf2vla.runtime.config import load_runtime
 from urdf2vla.runtime.dispatch import container_running, run_sim_skill, runtime_script, wrap
 
 
-DROID_MODEL = "nvidia/GR00T-N1.7-DROID"
-DROID_TAG = "OXE_DROID_RELATIVE_EEF_RELATIVE_JOINT"
 
 
 def _server_args(project: Project, opts: dict, gr) -> list[str] | str:
+    from urdf2vla.gr00t.droid import DROID_MODEL  # numpy を使うので、使うときに読む（docs のビルドには numpy がない）
+
     if opts.get("droid"):
         # GR00T の DROID の事前学習の embodiment で zero-shot に動かす（modality config は GR00T に内蔵）。
         # --model はローカルの checkpoint か Hugging Face のモデル ID（既定: nvidia/GR00T-N1.7-DROID）
@@ -66,7 +67,9 @@ def _server_args(project: Project, opts: dict, gr) -> list[str] | str:
         Arg(("--port",), {"type": int, "default": 5555}),
         Arg(("--seed",), {"type": int, "default": 0}),
         Arg(("--timeout",), {"type": float, "default": 3600.0, "help": "秒"}),
-        Arg(("--droid",), {"action": "store_true", "help": "GR00T の DROID（Franka + 外部カメラ + 手先カメラ）の事前学習で zero-shot に評価する。--model 省略時は nvidia/GR00T-N1.7-DROID"}),
+        Arg(("--droid",), {"action": "store_true", "help": "GR00T の DROID の embodiment（単腕 + 外部カメラ 1 台 + 手先カメラ）で評価する。"
+                                                         "--model 省略時は nvidia/GR00T-N1.7-DROID で zero-shot、convert_dataset --layout droid で学習した checkpoint も --model で渡す"}),
+        Arg(("--exterior",), {"default": None, "help": "--droid: 外部カメラ（既定: 最初の外部カメラ。DROID の配置では left_cam）"}),
         Arg(("--video",), {"action": "store_true", "help": "エピソードごとに VLA が見る画像を横に並べた動画を build/eval_videos/ に保存する"}),
     ],
 )
@@ -80,7 +83,11 @@ def evaluate_vla(project: Project, opts: dict, result: SkillResult, log) -> None
     if isinstance(sargs, str):
         result.fail(sargs)
         return
-    port = int(opts["port"])
+    from urdf2vla.gr00t.droid import DROID_TAG
+
+    port = free_port(int(opts["port"]))
+    if port != int(opts["port"]):
+        result.warnings.append(f"ポート {opts['port']} は使われています（NVIDIA Brev では DCGM の nv-hostengine が 5555 を使う）。{port} を使います。")
     sargs += ["--embodiment-tag", DROID_TAG if opts.get("droid") else "new_embodiment", "--port", str(port), "--host", "127.0.0.1"]
     server_log = project.new_log("gr00t_server")
     cmd = wrap(gr, runtime_script(gr, f"cd /tmp && PYTHONUNBUFFERED=1 {gr.python} -m urdf2vla.gr00t.server " + " ".join(shlex.quote(a) for a in sargs)))
@@ -110,6 +117,8 @@ def evaluate_vla(project: Project, opts: dict, result: SkillResult, log) -> None
             extra.append("--video")
         if opts.get("droid"):
             extra.append("--droid")
+            if opts.get("exterior"):
+                extra += ["--exterior", str(opts["exterior"])]
         if opts.get("model"):
             extra += ["--model", str(opts["model"])]
         sim_log = project.new_log("evaluate_vla_sim")
