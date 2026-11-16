@@ -127,4 +127,5 @@ Each failed episode gets a name in the report: `never_closed`, `missed_grasp`, `
 !!! success "Measured on an NVIDIA L40S"
     FANUC CRX-3iA, 50 scripted demos, fine-tuned from `nvidia/GR00T-N1.7-DROID` for 10,000 steps (about 2 h 40 min,
     41.9 GB): **20/20** in evaluation, in about 10 minutes for 20 episodes. Details in
-    [Run on NVIDIA Brev](brev.md#results).
+    [Run on NVIDIA Brev](brev.md#results); the model is
+    [`umegan/urdf2vla-crx3ia-gr00t-n1.7`](https://huggingface.co/umegan/urdf2vla-crx3ia-gr00t-n1.7).

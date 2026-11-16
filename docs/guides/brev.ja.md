@@ -156,6 +156,10 @@ urdf2vla train_vla --project projects/crx3ia --dataset demos_droid --check-only 
 | エピソードの長さ（中央値） | 174 step（8.7 秒） | 173 step |
 | 置いた位置と目標の距離（中央値） | 15 mm | 12 mm |
 
+カメラ 3 台のモデルは Hugging Face にあります:
+[`umegan/urdf2vla-crx3ia-gr00t-n1.7`](https://huggingface.co/umegan/urdf2vla-crx3ia-gr00t-n1.7)（NVIDIA Open Model
+License。urdf2vla での評価の手順はモデルカードにあります）。
+
 **既定の urdf2vla の並び**（全カメラ、`convert_dataset` に `--layout` を付けない）を使ってください。同等以上の結果で、
 毎フレーム 3 方向の画像をモデルが見ます。DROID の並びは学習が約 30 % 速いので、試験用に残しています。
 

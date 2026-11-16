@@ -125,3 +125,4 @@ urdf2vla evaluate_vla --project projects/myrobot \
 !!! success "NVIDIA L40S での実測"
     FANUC CRX-3iA、スクリプトのデモ 50 個、`nvidia/GR00T-N1.7-DROID` から 10,000 ステップ fine-tune（約 2 時間 40 分、
     41.9 GB）: 評価で **20/20**、20 エピソードで約 10 分。詳しくは [NVIDIA Brev で動かす](brev.md#results)。
+    モデルは [`umegan/urdf2vla-crx3ia-gr00t-n1.7`](https://huggingface.co/umegan/urdf2vla-crx3ia-gr00t-n1.7)。

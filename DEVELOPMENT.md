@@ -351,7 +351,7 @@ L40S（46 GB）、CPU 8、Ubuntu 22.04、ドライバ 580.196.07（Brev の 565.
 | setup_teleoperation | 4/4 | 64 秒 | 5.5 GB |
 | collect_dataset（scripted、50 個） | 59 回中 50 回成功（84.7 %） | 33 分 | 5.5 GB |
 | train_vla（`nvidia/GR00T-N1.7-DROID` から、urdf2vla の並び、カメラ 3 台、10,000 step） | release_check 10/10 | 約 2 時間 40 分 | 41.9 GB |
-| evaluate_vla（20 エピソード） | **20/20** | 10 分 | 12.4 GB |
+| evaluate_vla（20 エピソード） | **20/20**（モデル: [umegan/urdf2vla-crx3ia-gr00t-n1.7](https://huggingface.co/umegan/urdf2vla-crx3ia-gr00t-n1.7)） | 10 分 | 12.4 GB |
 | 比較: `--layout droid`（手先 + 外部 1 台、学習は左右のカメラを交互） | 19/20（洋梨を 1 回離さない） | 学習 2 時間 8 分 | 40.9 GB |
 
 途中で見つけて直したこと:

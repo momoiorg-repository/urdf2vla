@@ -160,6 +160,10 @@ demos, and evaluated on the same 20 episodes (same seed: random object and posit
 | Median episode | 174 steps (8.7 s) | 173 steps |
 | Median distance from the target | 15 mm | 12 mm |
 
+The 3-camera model is on Hugging Face:
+[`umegan/urdf2vla-crx3ia-gr00t-n1.7`](https://huggingface.co/umegan/urdf2vla-crx3ia-gr00t-n1.7) (NVIDIA Open Model
+License; its model card shows how to evaluate it with urdf2vla).
+
 **Use the default urdf2vla layout** (all cameras, `convert_dataset` without `--layout`). It was as good or better,
 and every frame shows the model all three views. The DROID layout trains about 30 % faster; keep it for experiments.
 
