@@ -75,6 +75,7 @@ plugins:
             Train and evaluate: 学習と評価
             Run on NVIDIA Brev: NVIDIA Brev で動かす
             Use it with an AI agent: AI エージェントから使う
+            Trained models: 学習済みモデル
             Troubleshooting: トラブルシューティング
             Reference: リファレンス
 
@@ -114,5 +115,6 @@ nav:
       - Record demonstrations: guides/recording.md
       - Train and evaluate: guides/training.md
       - Run on NVIDIA Brev: guides/brev.md
+  - Trained models: models.md
   - Troubleshooting: troubleshooting.md
   - Reference: reference.md

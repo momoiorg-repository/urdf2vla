@@ -172,6 +172,10 @@ and carried every object to the bin but never let go. `convert_dataset` now hold
 is learned, checks it (`gripper_timing`), and `train_vla` checks the trained model before you evaluate it
 (`release_check`: 0/10 for that model, 10/10 for both models above).
 
+![Four moments of one evaluation episode](../assets/crx3ia_model_steps.png)
+
+Videos and images of the evaluation: [Trained models](../models.md#crx3ia).
+
 ## The GR00T server port {#port}
 
 Brev runs NVIDIA DCGM, whose `nv-hostengine` listens on `127.0.0.1:5555`, the GR00T inference server's default

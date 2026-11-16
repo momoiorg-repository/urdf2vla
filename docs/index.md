@@ -2,8 +2,10 @@
 
 **From your robot's URDF to a trained Vision-Language-Action (VLA) model in NVIDIA Isaac Sim — without learning Omniverse first.**
 
-<video autoplay loop muted playsinline width="100%" src="assets/eval_replay.mp4"></video>
-<p class="caption"><em>What the VLA sees: the wrist camera and the two DROID-style external cameras during a pick-and-place episode in Isaac Sim.</em></p>
+<video autoplay loop muted playsinline width="100%" src="assets/crx3ia_model.mp4"></video>
+<p class="caption"><em>A GR00T N1.7 model trained with urdf2vla, running a FANUC CRX-3iA in Isaac Sim (20/20 in evaluation).
+Each frame is what the model sees: the wrist camera and the left and right cameras.
+<a href="models/">Trained models</a> · <a href="https://huggingface.co/umegan/urdf2vla-crx3ia-gr00t-n1.7">Hugging Face</a></em></p>
 
 urdf2vla turns the long list of things you normally have to know — USD conversion, articulation tuning, camera placement,
 Isaac Lab environments, dataset formats, GR00T fine-tuning — into a sequence of plain commands. Each command checks its own

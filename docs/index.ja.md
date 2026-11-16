@@ -2,8 +2,10 @@
 
 **ロボットの URDF から、NVIDIA Isaac Sim で VLA（Vision-Language-Action）モデルを学習するまで。Omniverse を先に覚える必要はありません。**
 
-<video autoplay loop muted playsinline width="100%" src="../assets/eval_replay.mp4"></video>
-<p class="caption"><em>VLA が見ている画像: Isaac Sim での Pick & Place のエピソード中の、手先カメラと DROID と同じ配置の左右の外部カメラ。</em></p>
+<video autoplay loop muted playsinline width="100%" src="../assets/crx3ia_model.mp4"></video>
+<p class="caption"><em>urdf2vla で学習した GR00T N1.7 のモデルが、Isaac Sim で FANUC CRX-3iA を動かすところ（評価で 20/20）。
+各フレームはモデルが見る画像: 手先カメラと左右のカメラ。
+<a href="models/">学習済みモデル</a> · <a href="https://huggingface.co/umegan/urdf2vla-crx3ia-gr00t-n1.7">Hugging Face</a></em></p>
 
 ふつうは USD への変換、articulation の調整、カメラの配置、Isaac Lab の環境、データセットの形式、GR00T の fine-tune
 と、知っておくべきことがたくさんあります。urdf2vla はそれを順番に実行するコマンドにまとめました。各コマンドは自分の結果を

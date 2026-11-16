@@ -4,7 +4,11 @@
 
 [English](README.md)
 
-![VLA が見ている画像: Pick & Place のエピソード中の手先・左・右のカメラ](docs/assets/eval_replay.gif)
+![urdf2vla で学習した GR00T N1.7 のモデルが Isaac Sim で FANUC CRX-3iA を動かすところ: 手先・左・右のカメラ](docs/assets/crx3ia_model.gif)
+
+*urdf2vla で最初から最後まで学習したモデル（FANUC CRX-3iA、シミュレーションで 20/20）:
+Hugging Face の [`umegan/urdf2vla-crx3ia-gr00t-n1.7`](https://huggingface.co/umegan/urdf2vla-crx3ia-gr00t-n1.7)。
+詳しくは[学習済みモデル](https://momoiorg-repository.github.io/urdf2vla/ja/models/)。*
 
 USD への変換、articulation の調整、カメラの配置、Isaac Lab の環境、データセットの形式、GR00T の fine-tune を、
 順番に実行するコマンドにまとめました。各コマンドは自分の結果を検査し、次へ進むか、ロボットについて質問するか、
