@@ -4,7 +4,11 @@
 
 [日本語](README.ja.md)
 
-![What the VLA sees: wrist, left and right cameras during a pick-and-place episode](docs/assets/eval_replay.gif)
+![A GR00T N1.7 model trained with urdf2vla running a FANUC CRX-3iA in Isaac Sim: wrist, left and right cameras](docs/assets/crx3ia_model.gif)
+
+*A model trained end to end with urdf2vla (FANUC CRX-3iA, 20/20 in simulation):
+[`umegan/urdf2vla-crx3ia-gr00t-n1.7`](https://huggingface.co/umegan/urdf2vla-crx3ia-gr00t-n1.7) on Hugging Face.
+More in [Trained models](https://momoiorg-repository.github.io/urdf2vla/models/).*
 
 urdf2vla turns USD conversion, articulation tuning, camera placement, Isaac Lab environments, dataset formats and GR00T
 fine-tuning into a sequence of plain commands. Each command checks its own result and either moves on, asks you a

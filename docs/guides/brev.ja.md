@@ -167,6 +167,10 @@ License。urdf2vla での評価の手順はモデルカードにあります）�
 箱まで運び、離しませんでした。今の `convert_dataset` は最後のフレームを足して開く動作を学べるようにし、それを検査し
 （`gripper_timing`）、`train_vla` は評価の前に学習したモデルを検査します（`release_check`: そのモデルは 0/10、上の 2 つは 10/10）。
 
+![Four moments of one evaluation episode](../assets/crx3ia_model_steps.png)
+
+評価の動画と画像: [学習済みモデル](../models.md#crx3ia)。
+
 ## GR00T のサーバのポート {#port}
 
 Brev では NVIDIA DCGM の `nv-hostengine` が `127.0.0.1:5555`（GR00T の推論サーバの既定のポート）を使っています。

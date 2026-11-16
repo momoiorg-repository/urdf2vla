@@ -6,6 +6,7 @@ Everything comes from real urdf2vla runs, so the pictures always match what user
   # run the tutorial first (docs/tutorial.md) so projects/tutorial_franka has snapshots and eval videos
   python docs/make_media.py                       # all media
   python docs/make_media.py --only view            # only the browser viewer images
+  python docs/make_media.py --only models          # trained-model videos (after evaluate_vla --model ... --video)
 
 The CRX-3iA media (--only crx) need the FANUC URDF (bash examples/crx3ia/fetch_urdf.sh) and the projects listed in
 CRX_GRIPPER_PROJECTS run through launch_sim (projects/fanuc_crx3ia also through evaluate_vla --replay --video).
@@ -360,10 +361,75 @@ def question_project() -> Path:
     return proj
 
 
+# 学習済みモデルの評価の動画（evaluate_vla --model ... --video）から作るメディア。プロジェクト → 資産の名前
+MODEL_PROJECTS = {"crx3ia": "projects/crx3ia", "franka": "projects/franka"}
+
+
+def _decode(path: Path):
+    """mp4 → RGB のフレームの列（imageio-ffmpeg）。"""
+    import imageio_ffmpeg
+    import numpy as np
+
+    reader = imageio_ffmpeg.read_frames(str(path))
+    meta = next(reader)
+    w, h = meta["size"]
+    return [np.frombuffer(f, dtype=np.uint8).reshape(h, w, 3) for f in reader]
+
+
+def model_media(name: str, project: Path) -> None:
+    """学習済みモデルの評価（build/eval_report.yaml と build/eval_videos/）→ <name>_model.mp4（物体ごとに成功した
+    最初のエピソードをつなぐ）、<name>_model.gif（その最初）、<name>_model_steps.png（1 エピソードの 4 場面）。"""
+    import yaml
+    from PIL import Image, ImageDraw
+
+    report = yaml.safe_load((project / "build" / "eval_report.yaml").read_text())
+    if report.get("mode") != "model":
+        print(f"skip {name}: {project}/build/eval_report.yaml is not a model evaluation")
+        return
+    picks, seen = [], set()
+    for e in report["episodes"]:
+        if e["outcome"] == "success" and e["object"] not in seen and e.get("video"):
+            seen.add(e["object"])
+            picks.append(e)
+    if not picks:
+        print(f"skip {name}: no successful episode with a video")
+        return
+    videos = [project / e["video"] for e in picks]
+    tmp = Path(tempfile.mkdtemp(prefix="urdf2vla_model_"))
+    lst = tmp / "list.txt"
+    lst.write_text("".join(f"file '{v}'\n" for v in videos))
+    mp4 = ASSETS / f"{name}_model.mp4"
+    run([ffmpeg(), "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(lst),
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "26", "-preset", "slow", "-movflags", "+faststart", "-an", str(mp4)])  # fmt: skip
+    gif = ASSETS / f"{name}_model.gif"
+    run([ffmpeg(), "-y", "-loglevel", "error", "-i", str(videos[0]), "-vf",
+         "fps=10,scale=768:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96[p];[b][p]paletteuse=dither=bayer:bayer_scale=4",
+         str(gif)])  # fmt: skip
+    # 1 エピソードの 4 場面（始め・掴んだ・箱の上・置いた）を縦に並べる
+    frames = _decode(videos[0])
+    n = len(frames)
+    at = [0, int(n * 0.30), int(n * 0.65), n - 1]
+    labels = ["start", "grasped", "over the bin", "placed"]
+    h, w = frames[0].shape[:2]
+    pad, text_w = 8, 150
+    out = Image.new("RGB", (w + text_w + 2 * pad, len(at) * (h + pad) + pad), "white")
+    draw = ImageDraw.Draw(out)
+    for i, (k, label) in enumerate(zip(at, labels)):
+        y = pad + i * (h + pad)
+        draw.text((pad, y + h / 2 - 10), f"{label}\nstep {k}", fill=(40, 40, 40), font=_font(18))
+        out.paste(Image.fromarray(frames[k]), (text_w + pad, y))
+    png = ASSETS / f"{name}_model_steps.png"
+    out.save(png)
+    shutil.rmtree(tmp, ignore_errors=True)
+    objs = ", ".join(f"{e['object']} (ep {e['episode']})" for e in picks)
+    print(f"wrote {mp4.name}, {gif.name}, {png.name} from {objs}; success {report['success_rate']:.0%}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--project", default="projects/tutorial_franka", help="a project that has finished the tutorial")
-    ap.add_argument("--only", choices=["sim", "view", "crx"], help="only simulation media, only viewer media, or only the CRX-3iA / gripper media")
+    ap.add_argument("--only", choices=["sim", "view", "crx", "models"],
+                    help="only simulation media, only viewer media, only the CRX-3iA / gripper media, or only the trained-model media")
     ap.add_argument("--no-question", action="store_true", help="skip the question screenshot (needs the sim container)")
     args = ap.parse_args()
     project = (ROOT / args.project).resolve()
@@ -373,6 +439,10 @@ def main() -> int:
         eval_video(project)
     if args.only in (None, "view"):
         view_media(project, None if args.no_question else question_project())
+    if args.only in (None, "models"):
+        for name, rel in MODEL_PROJECTS.items():
+            if (ROOT / rel / "build" / "eval_report.yaml").exists():
+                model_media(name, (ROOT / rel).resolve())
     if args.only in (None, "crx"):
         simready_thumbs()
         crx_media()
