@@ -15,10 +15,11 @@ from urdf2vla.runtime.config import load_runtime
 from urdf2vla.runtime.dispatch import container_running, run_sim_skill, runtime_script, wrap
 
 
-from urdf2vla.gr00t.droid import DROID_MODEL, DROID_TAG  # noqa: E402
 
 
 def _server_args(project: Project, opts: dict, gr) -> list[str] | str:
+    from urdf2vla.gr00t.droid import DROID_MODEL  # numpy を使うので、使うときに読む（docs のビルドには numpy がない）
+
     if opts.get("droid"):
         # GR00T の DROID の事前学習の embodiment で zero-shot に動かす（modality config は GR00T に内蔵）。
         # --model はローカルの checkpoint か Hugging Face のモデル ID（既定: nvidia/GR00T-N1.7-DROID）
@@ -82,6 +83,8 @@ def evaluate_vla(project: Project, opts: dict, result: SkillResult, log) -> None
     if isinstance(sargs, str):
         result.fail(sargs)
         return
+    from urdf2vla.gr00t.droid import DROID_TAG
+
     port = free_port(int(opts["port"]))
     if port != int(opts["port"]):
         result.warnings.append(f"ポート {opts['port']} は使われています（NVIDIA Brev では DCGM の nv-hostengine が 5555 を使う）。{port} を使います。")
