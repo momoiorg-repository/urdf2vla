@@ -107,10 +107,10 @@ GR00T N1.7 は画像と言語のモデル `nvidia/Cosmos-Reason2-2B` を使い�
 
 1. [huggingface.co/nvidia/Cosmos-Reason2-2B](https://huggingface.co/nvidia/Cosmos-Reason2-2B) を開き、利用規約に同意します。
 2. [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) で read 権限のトークンを作ります。
-3. GR00T のコンテナの中でログインします。トークンは `~/.cache/huggingface/token` に保存され、コンテナとホストで共有されます。
+3. インスタンスでログインします（トークンは `~/.cache/huggingface/token` に保存され、コンテナと共有されます）。
 
     ```bash
-    docker exec -it -u $(id -un) -e HOME=$HOME urdf2vla-gr00t /workspace/.venv/bin/hf auth login
+    hf auth login
     ```
 
 インスタンスを止めるとホームディレクトリが消える場合は、トークンを `/data` にも置き（例: `/data/secrets/hf_token`、

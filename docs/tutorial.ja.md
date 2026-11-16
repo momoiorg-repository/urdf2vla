@@ -6,6 +6,9 @@ urdf2vla に同梱の Franka Panda で、URDF から、デモ 50 個の記録、
 [インストール](install.md) を済ませ、2 つのコンテナを起動し、Hugging Face の準備（[手順 5](install.md#huggingface)）を
 しておきます。下の時間は NVIDIA L40S で測ったものです。1〜5 と 7 は 16 GB の RTX GPU でも動きます。
 
+コマンドはすべて手元のマシンの端末で、`urdf2vla` のフォルダで `source .venv/bin/activate` の後に実行します
+（コンテナの中ではありません）。
+
 | 工程 | コマンド | 時間 |
 |---|---|---|
 | [1. プロジェクトを作る](#create) | `init` | すぐ |

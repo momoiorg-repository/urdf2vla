@@ -238,7 +238,7 @@ def check_huggingface(token: str | None = None, opener=urllib.request.urlopen, t
     """GR00T N1.7 の学習・推論は VLM（Cosmos-Reason2-2B、gated）を Hugging Face から取得する。トークンと利用規約への同意を確かめる。
     コンテナは ~/.cache をマウントするので、ホストの ~/.cache/huggingface/token がそのまま使われる。"""
     page = f"https://huggingface.co/{GR00T_BACKBONE}"
-    login = "コンテナの中でログインします: docker exec -it -u $(id -un) -e HOME=$HOME urdf2vla-gr00t /workspace/.venv/bin/hf auth login"
+    login = "ホストの端末で hf auth login を実行します（トークンは ~/.cache/huggingface に保存され、コンテナと共有されます）"
     if token is None:
         return [Check("huggingface", "warning", f"Hugging Face にログインしていません。GR00T の学習・評価は {GR00T_BACKBONE}（利用規約への同意が要る）を取得します。",
                       f"{page} で利用規約に同意し、{login}" + docs("huggingface"))]  # fmt: skip

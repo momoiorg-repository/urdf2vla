@@ -3,6 +3,11 @@
 手元のマシンには小さな `urdf2vla` コマンドを入れます。重い処理は 2 つの Docker コンテナの中で動きます。1 つは
 Isaac Sim、Isaac Lab、Isaac Lab Arena（シミュレーション）、もう 1 つは GR00T N1.7（データ変換・学習・推論）です。
 
+!!! tip "コマンドを実行する場所"
+    このドキュメントのコマンドはすべて、**手元のマシンの端末**で、`urdf2vla` のフォルダで `source .venv/bin/activate`
+    の後に実行します。コンテナの中に入る必要はありません。`urdf2vla` が適切なコンテナで処理を動かします。
+    Docker を直接使うのは、下の手順 2 と 3 の一度だけです。
+
 ## 必要なもの
 
 | | |
@@ -59,10 +64,10 @@ GR00T N1.7 は vision-language モデル `nvidia/Cosmos-Reason2-2B` を使い、
 
 1. [huggingface.co/nvidia/Cosmos-Reason2-2B](https://huggingface.co/nvidia/Cosmos-Reason2-2B) でライセンスに同意します。
 2. [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) で読み取り権限の token を作ります。
-3. GR00T のコンテナの中でログインします（token は `~/.cache/huggingface` に保存され、ホストと共有されます）。
+3. ログインします（token は `~/.cache/huggingface` に保存され、コンテナと共有されます）。
 
     ```bash
-    docker exec -it -u $(id -un) -e HOME=$HOME urdf2vla-gr00t /workspace/.venv/bin/hf auth login
+    hf auth login
     ```
 
 ## 次へ

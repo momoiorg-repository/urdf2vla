@@ -73,7 +73,8 @@ When training on the machine ends, `train_vla` runs a **release check** on the l
 
 ### Training on another machine {#another-machine}
 
-The packed job runs anywhere the GR00T image runs. On the training machine:
+If you can install urdf2vla on the training machine, do that and run `urdf2vla train_vla` there — nothing else is
+needed. The packed job is for a machine where you can't: it runs anywhere the GR00T image runs.
 
 1. **Get the image.** Either clone urdf2vla there and run `bash docker/build.sh gr00t`, or copy the image:
 
