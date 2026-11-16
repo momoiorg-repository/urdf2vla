@@ -86,7 +86,22 @@ from the target did it end?) and `snapshots/collect_fail_*.png` shows the last f
 | `gr00t_loader` | GR00T couldn't load the converted dataset. Re-run `convert_dataset --force`; if it persists, report it with `build/convert_report.yaml`. |
 | `video_matches:<camera>` | The encoded video differs from the recorded images. Re-run `convert_dataset --force`. |
 | `finetune_args_valid` | GR00T rejected the training arguments. Check the values you passed to `train_vla`. |
+| `gripper_timing` | A gripper change falls where no training sample can execute it, so the model won't learn it. Re-run `convert_dataset --force` (it adds the frames that fix this). |
+| `release_check` | The trained model doesn't open the gripper where the demonstrations do; in evaluation it will carry the object and never let go. Convert again with `--force`, check `gripper_timing`, and train again. |
+| `401 … Cannot access gated repo` | Training and evaluation need `nvidia/Cosmos-Reason2-2B`: accept its license and log in ([Install](install.md#huggingface)). |
 | "This GPU can't train GR00T N1.7" warning | Not an error: train on a machine with 44 GB or more — see [Train and evaluate](guides/training.md#another-machine). |
+
+### The trained model fails in evaluation
+
+`evaluate_vla` names each failed episode in `build/eval_report.yaml` (`failure`) and reports the most common one in
+`warnings`. Watch that episode's video with `--video`.
+
+| `failure` | What happened | What to do |
+|---|---|---|
+| `never_closed` | The gripper never closed. | The model doesn't reach the object: more demonstrations, or check that the cameras show it. |
+| `missed_grasp` | It closed but the object wasn't lifted. | Grasping is off: more demonstrations, or less variety in object positions. |
+| `never_released` | It lifted the object and never opened. | See `gripper_timing` and `release_check` above. |
+| `released_off_target` | It let go, but not in the container. | The model hasn't learned where to go: more demonstrations or training steps. |
 
 ## Environment problems
 
@@ -100,7 +115,10 @@ Run `urdf2vla doctor` first: it checks all of these and prints the fix for each.
 | "…秒以内に終わりませんでした" (timed out) | The first start of Isaac Sim compiles shaders and can take several minutes. | Run the step again with a larger `--timeout`. |
 | `GLXBadFBConfig` | OpenGL setup doesn't match the GPU (common on laptops with two GPUs). | Add `__NV_PRIME_RENDER_OFFLOAD: "1"` and `__GLX_VENDOR_LIBRARY_NAME: nvidia` under `env:` in `runtime.yaml`. |
 | Mesh files can't be opened | The URDF references meshes the container can't see. | Check `urdf2vla show --project … robot_metadata` (meshes) and add the folder to `robot.package_paths`. |
-| `CUDA out of memory` | Another process uses the GPU. | Check `nvidia-smi`; stop other training jobs or containers. |
+| `CUDA out of memory` | Another process uses the GPU. | Check `nvidia-smi`; stop other training jobs or containers. Training and evaluation don't fit on one 46 GB GPU together. |
+| `The NVIDIA driver on your system is too old (found version 12070)` | Driver older than 580; the images need CUDA 13. | Upgrade the driver to 580 or newer ([Brev guide](guides/brev.md#driver)). |
+| `unresolvable CDI devices nvidia.com/gpu=all` | Docker's GPU description (CDI) is missing or from an older driver. | `sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml` ([details](guides/brev.md#cdi)). |
+| Training stops while saving a checkpoint | The disk is full: a checkpoint is 24 GB. | Free space or lower `train_vla --save-total-limit`; `train_vla` resumes from the last checkpoint. |
 | `urdf2vla view` says a package is missing | The viewer's extra packages aren't installed. | `uv pip install -e '.[view]'` |
 
 ## Asking for help

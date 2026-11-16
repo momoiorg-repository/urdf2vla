@@ -44,9 +44,8 @@ URDF を公開していて、多くの産業用ロボットと同じく CRX に�
 
     xacro は先に展開します: `xacro my_robot.urdf.xacro -o my_robot.urdf`
 
-    FANUC CRX-3iA と Franka のほかに、次の 7 軸アームも、公開の URDF からこのページの手順でデモの記録まで進めることを
-    確かめています: **KUKA LBR iiwa 14**（ROS-Industrial の `kuka_experimental`、腕だけ。`gripper: {simready: robotiq_2f_85}`
-    の 1 行）と **Kinova Gen3**（Kinova の `ros2_kortex` の `gen3_2f85.urdf`。付いている Robotiq を同じ 1 行で付け替え）。
+    FANUC CRX-3iA と Franka のほかに、**KUKA LBR iiwa 14** と **Kinova Gen3** も、公開の URDF からこの手順でデモの記録まで
+    進めることを確かめています。
 
 ## 2. プロジェクトを作る
 
@@ -180,20 +179,7 @@ URDF にグリッパが入っているなら、`gripper: {simready: robotiq_2f_8
 link を外し、同じ場所に、接近方向と指の向きを元のグリッパに合わせて新しいグリッパを付けます。別の場所に付けるときだけ
 `mount_link` を書きます。外すグリッパのメッシュは見つからなくても構いません。
 
-### グリッパを追加する
-
-アセットライブラリのグリッパは、`src/urdf2vla/grippers.py` に 1 項目を足すと使えます。アセットのパス、駆動する指の関節と
-その開閉の位置、それに追従する関節、接近方向と指の向き、指先までの距離、開きです。値はシミュレーションのコンテナで
-プローブを使って測ります（`docker exec` を含む全体のコマンドは `src/urdf2vla/sim/gripper_probe.py` の冒頭にあります）。
-
-```bash
-python -m urdf2vla.sim.gripper_probe Isaac/Robots/Robotiq/Hand-E/Robotiq_Hand_E_edit.usd --out hand_e.yaml
-```
-
-アセットの関節（種類、可動範囲、駆動、どの関節がどれに追従するか）と、グリッパを開いた状態での各指の衝突形状の位置を
-出力します。そのグリッパを使うプロジェクトで `import_robot` と `launch_sim` を実行すれば、値が正しいかを検査が教えてくれます。
-丸い物体が指先から抜けるなら、把持点（`grasp_depth`）を奥にします。ただし、低い物体まで下ろしたときに指先が台に
-当たらない範囲にします。
+アセットライブラリのほかのグリッパは、開発者が追加できます（`DEVELOPMENT.md` を参照）。
 
 ## 4. 設定の工程を実行し、質問に答える {#run}
 
@@ -318,13 +304,8 @@ DROID の左右のカメラ）。見つかったカメラの frame は `inspect_
 [DROID](https://droid-dataset.github.io/) の配置（手先カメラと、台を見下ろす左右のカメラ、256×256）です。双腕では腕ごとに
 手先カメラが付くので、その既定は 4 台になります。
 
-URDF のカメラの読み方:
-
-- 機器ごとに 1 台。ステレオカメラは左目の光学 frame を使い、右目は候補として残します。深度・赤外・IMU の frame は使いません。
-- 向きは ROS の約束（REP 103）: 名前に `optical` を含む frame は +z、ほかのカメラの frame は +x の方向を見ます。
-- 視野角: URDF に Gazebo の `<sensor type="camera">` の `horizontal_fov` があればその値、なければ手のカメラ 80°・頭のカメラ 70°。
-- 手前 3 cm は描きません（`clip_near`）。カメラの frame はカメラや手のメッシュの中にあることが多く、OpenArm の手のカメラは
-  手のひらの 2 cm 内側にあって、そのままでは画像が真っ黒になります。
+URDF のカメラは ROS の約束に従います（`optical` の frame は +z、ほかは +x の方向を見ます）。視野角は、URDF に Gazebo の
+カメラのセンサがあればその値を使います。ステレオカメラは左目の frame を使います。
 
 プリセットは `wrist`・`left`・`right`・`front`・`side`・`urdf`（URDF のカメラ）です。実機のカメラに合わせるなら、明示的に書きます。
 
@@ -344,7 +325,7 @@ cameras:
 
 ## 双腕ロボット
 
-2 本の arm の連鎖を別々に検出し、設定・シミュレーション・学習まで別々に保ちます。ロボット固有の Python コードは要りません。
+2 本の arm の連鎖を別々に検出し、設定・シミュレーション・学習まで別々に保ちます。
 腕ごとに関節・IK の剛体・TCP・接近方向・指の開閉方向と、任意の手先カメラを作ります。VLA の state / action は
 「右腕の関節、左腕の関節、右グリッパ、左グリッパ」の順です（検出順。上の例では right が先）。
 
@@ -356,56 +337,22 @@ cameras:
 自分でデモをいくつか記録し（N で腕を切り替え）、Isaac Lab Mimic で増やして作ります。記録のガイドの
 [双腕のロボット](recording.md#双腕のロボット) を見てください。
 
-Franka を 2 本並べたロボットで、取り込み・検査・scripted の収集・変換・replay の評価まで確かめています。このロボットは
-ダウンロードなしで使える例として同梱しているので、双腕の流れをまず試せます。
+ダウンロードなしで使える、Franka を 2 本並べた同梱の例で試せます。
 
 ```bash
 urdf2vla init projects/dual_franka --from examples/dual_franka/project.yaml
 ```
 
-URDF は `examples/dual_franka/make_dual_panda.py` が単腕の Franka から作ります（共通の台座に 0.7 m 離して 2 本）。2 本の腕が
-共通の root link から出ているときは、その link に `<inertial>` を書いてください。質量がないと importer が腕ごとに別の
+2 本の腕が共通の root link から出ているときは、その link に `<inertial>` を書いてください。質量がないと importer が腕ごとに別の
 articulation にし、`import_robot` が `Expected 1 prims at '/World/Robot', found 2` で止まります。
 
-同梱の Dual Scorpion の例では、各腕の 8 番目の関節（joint7）をグリッパにし、joint0〜6 を腕にします。
+| 例 | 結果 |
+|---|---|
+| Franka 2 本（`examples/dual_franka`、ダウンロード不要） | すべての検査、scripted の記録、変換、replay の評価が通る |
+| OpenArm v2.0（`examples/openarm`） | 同じく通る。台・トレイ・初期姿勢は例の中で手で決めている（scripted の記録は 10 回中 8 回成功） |
+| Dual Scorpion | 検査は通る。scripted の記録はまだ成功しない |
 
-```yaml
-robot:
-  urdf: /path/to/dual_scorpion_Full_urdf/urdf/scorpion.urdf
-  front_axis: +y
-  gripper_joints: [joint7_R, joint7_L]
-  gripper_open_close: [[-0.8, 0.0], [-0.8, 0.0]]  # 仮値。開閉方向は snapshot で確認する
-  effort_limits: {"joint[0-6]_[RL]": 60.0}         # 仮値（下記）
-task:
-  objects: [color_cube]
-```
-
-Dual Scorpion の URDF は全関節が `effort: 1.0` で、元プロジェクトも仮値としています。シミュレーションで把持を判断する前に、
-実機のモータ値で `robot.effort_limits` を上書きしてください。10 N·m では止まっている側の腕が下がり、`setup_teleoperation` に
-失敗します。例では腕を 60 N·m にし、グリッパは URDF の値のままです。回転する顎では果物を保持できないので、例は立方体だけです。
-またグリッパの開き幅は連続回転の 1 関節からは決まらないので、物体が開きに入るかの自動スクリーニングは行われません。
-
-この設定で Dual Scorpion は `import_robot`・`launch_sim`・`setup_teleoperation` を通りますが、scripted の収集はまだ
-成功しません（8 回中 0 回。物体の真上の点の手前で手先が止まります）。物体と箱を片方の腕の前に寄せると真上までは
-行きますが、下降の途中で止まります（4 回中 0 回）。原因はまだ特定できていません。
-
-同梱の OpenArm の例（`examples/openarm`、Enactic OpenArm v2.0）は最後まで通りますが、配置は手で決めています。OpenArm の
-グリッパは前腕の延長上にあり、手首の曲げは最大 90° です。手先が真下を向くのは前腕が水平か下向きのときだけなので、上から
-掴めるのは肩からおよそ 0.3 m 以上下に限られます。自動配置の台はそれより高く、そこに真下向きで届く姿勢は上腕を肩より上に
-上げるものしかありません。そこで例では次のようにしています。
-
-- 台を 0.17 m に下げ、縁 14.6 cm の箱の代わりに低い `plastic_tray` を使う
-- 物体とトレイを左腕の側に置く（腕は体の中心線をほとんど越えられない。joint2 の内側への回転は最大 10°）
-- scripted 操作の近づく高さを 8 cm にする（`overrides.teleop.approach_height`）
-- 肘を下げた初期姿勢を `robot.default_pose` に書く（ホストの IK で求めた）
-- 指のトルクを 2 N·m に下げる。URDF の 7 N·m では、回転する指が立方体を片方の指に押し付け、`launch_sim` の把持検査が
-  立方体を支えるのをやめると滑り落ちる
-- 物理ソルバの位置の反復回数を 64 にする（`overrides.robot.asset.solver_position_iterations`）。既定の 32 では左手の
-  把持検査にわずかに失敗する（立方体が TCP から 2.2 cm ずれる。許容は 2 cm）
-
-カメラは URDF にある両手のカメラと頭の ZED Mini を使います。この設定で OpenArm はすべての検査を通り、scripted の収集は 10 回中 8 回成功（毎回左腕）、replay の評価は 8 回中 8 回成功です。
-失敗した 2 回はどちらも物体が置く範囲のトレイ側の端にあり、手先が把持の高さの 6 mm 上で止まりました。開いた指がトレイの縁に
-当たっているとみられます。
+これらの結果のためのロボットごとの設定は、例の `project.yaml` と `DEVELOPMENT.md` にあります。
 
 ## いまの制限
 

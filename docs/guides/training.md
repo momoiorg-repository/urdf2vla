@@ -119,7 +119,7 @@ state and the task text; the model answers with the next actions. The result is 
 | `--model` | checkpoint folder; relative paths are relative to the project. Keep it inside the repository so the containers can read it. |
 | `--episodes` | number of episodes (default 10) |
 | `--execution-horizon` | how many of the predicted actions to execute before asking the model again (default 16) |
-| `--replay` | instead of a model, replay the converted dataset — tests everything except the model (see the [tutorial](../tutorial.md#replay)) |
+| `--replay` | instead of a model, replay the converted dataset — tests everything except the model (see the [tutorial](../tutorial.md#evaluate)) |
 
 Each failed episode gets a name in the report: `never_closed`, `missed_grasp`, `never_released` or
 `released_off_target`. The most common one comes back in `warnings` with what to look at.
