@@ -1,74 +1,66 @@
 # urdf2vla
 
-**ロボットの URDF から、NVIDIA Isaac Sim で VLA（Vision-Language-Action）モデルを学習するまで。Omniverse を先に覚える必要はありません。**
+**ロボットの URDF から、NVIDIA Isaac Sim で学習・評価した VLA（Vision-Language-Action）モデルまで。**
 
 <video autoplay loop muted playsinline width="100%" src="../assets/crx3ia_model.mp4"></video>
 <p class="caption"><em>urdf2vla で学習した GR00T N1.7 のモデルが、Isaac Sim で FANUC CRX-3iA を動かすところ（評価で 20/20）。
 各フレームはモデルが見る画像: 手先カメラと左右のカメラ。
 <a href="models/">学習済みモデル</a> · <a href="https://huggingface.co/umegan/urdf2vla-crx3ia-gr00t-n1.7">Hugging Face</a></em></p>
 
-ふつうは USD への変換、articulation の調整、カメラの配置、Isaac Lab の環境、データセットの形式、GR00T の fine-tune
-と、知っておくべきことがたくさんあります。urdf2vla はそれを順番に実行するコマンドにまとめました。各コマンドは自分の結果を
-検査し、次へ進むか、ロボットについて質問するか、何を直せばよいかを伝えます。
+## 誰のためのツールか
 
-```mermaid
-flowchart LR
-  subgraph S1 [1. 準備]
-    direction TB
-    U[ロボットの URDF] --> C[ロボット・台<br/>・カメラの設定]
-  end
-  subgraph S2 [2. Isaac Sim]
-    direction TB
-    I[取り込み +<br/>物理の検査] --> R[デモの記録]
-  end
-  subgraph S3 [3. GR00T N1.7]
-    direction TB
-    V[変換] --> T[学習] --> E[評価]
-  end
-  S1 --> S2 --> S3
-```
+URDF のある腕を持っていて、それで VLA 開発を始めたいロボット開発者のためのツールです。Isaac Sim や Omniverse、VLA の
+学習に先に詳しくならなくても、シミュレーションの環境を作り、デモを記録し、VLA を fine-tune して、どれだけうまく動くかを
+測れます。
 
 ## できること
 
-- **本物の物体を使った、ロボットに合わせた Pick & Place のタスク。** エピソードごとにりんご・ライム・
-  洋梨・色付きの立方体のどれか 1 つを台に置き、指示文でその名前を言います（*"put the apple in the bin"*）。物体は
-  NVIDIA の SimReady アセット、箱は工場で使う KLT の部品箱、台はオークの木目で、どれも腕の届く範囲から配置するので、
-  Omniverse でシーンを作る必要はありません。
-- **推測ではなく質問。** URDF から決められないこと（どの link が手先か、指はどちらに開くか、よい初期姿勢）は urdf2vla が
-  質問します。ブラウザでロボットを見ながら答えることもできます（[`urdf2vla view`](guides/view.md)）。
-- **データを集める前に、気づきにくい失敗を見つける検査。** 開閉はできても物体を保持できないグリッパ、物体にめり込む指、
-  更新が止まるカメラ。どれも検査があり、失敗したら具体的な直し方を示します。
-- **DROID と同じカメラ配置が既定。** 腕ごとの手先カメラと左右の外部カメラを、作業域の大きさに合わせて置きます。
-- **NVIDIA GR00T N1.7 のためのデータと学習。** 記録を GR00T が読む LeRobot v2.1 形式に変換し、GPU が足りなければ
-  大きな GPU のマシンで学習できる一式を作ります。
-- **AI エージェントでも使える。** リポジトリを [Claude Code や Codex](guides/claude-code.md) で開いて「自分のロボットで
-  VLA 開発を始めたい」と頼むと、エージェントが同じコマンドを実行し、ロボットについて聞くときだけ止まります。
+- **URDF を、検査済みの Pick & Place の環境として Isaac Sim に取り込む。** 台・物体・箱・カメラは腕の届く範囲から
+  配置します。urdf2vla が聞くのは URDF から分からないこと（どの link が手先か、よい初期姿勢）だけで、ブラウザで
+  ロボットを見ながら答えられます。
+- **グリッパの取り付け・付け替え**を 1 行で。NVIDIA のアセットライブラリのグリッパを使います。
+- **デモを記録する。** scripted の制御、キーボード、または少ないデモを Isaac Lab Mimic で多数に増やします。
+- **NVIDIA Isaac GR00T N1.7 を fine-tune し**、**シミュレーションでモデルを評価する。** 成功率、失敗ごとの理由、動画が
+  得られます。
+- **すべてをクラウドの GPU（NVIDIA Brev）で動かす**ことも、AI エージェント（Claude Code、Codex）に工程を任せてロボットに
+  ついての質問にだけ答えることもできます。
 
-## 構成
+どの工程も 1 つのコマンドで、自分の結果を検査します。次へ進むか、質問するか、何を変えればよいかを伝えます。
 
-| 層 | バージョン |
-|---|---|
-| シミュレータ | NVIDIA Isaac Sim 6.2.0 |
-| ロボット学習のフレームワーク | Isaac Lab 3.0.0 |
-| 環境の組み立て | Isaac Lab Arena（コミット `b9e37c5` に固定） |
-| VLA モデル | NVIDIA Isaac GR00T N1.7（コミット `23ace64` に固定） |
+```mermaid
+flowchart LR
+  U[ロボットの URDF] --> S[Isaac Sim の環境<br/>+ 物理の検査] --> R[デモ] --> T[GR00T N1.7<br/>fine-tune] --> E[シミュレーション<br/>での評価]
+```
 
-重い処理はすべて、urdf2vla が作る 2 つの Docker コンテナの中で動きます。`urdf2vla` コマンド自体は手元のマシンに入れる
-小さな Python パッケージです。
+## 結果
 
-## はじめに読むページ
+| ロボット | モデル | シミュレーションでの成功 |
+|---|---|---|
+| FANUC CRX-3iA + Robotiq 2F-85 | [`umegan/urdf2vla-crx3ia-gr00t-n1.7`](https://huggingface.co/umegan/urdf2vla-crx3ia-gr00t-n1.7) | **20/20** |
+
+scripted のデモ 50 本から、NVIDIA L40S 1 台で約 2 時間 40 分で学習しました。動画と詳細:
+[学習済みモデル](models.md)。
+
+## 今後の発展
+
+- **実機:** 学習したモデルをロボットのコンピュータ（Jetson Thor、RTX GPU）で動かし、シミュレーションと実際のカメラ・
+  照明・物体との差を埋める。
+- **シーンとタスクを増やす:** NVIDIA の SimReady アセットのシーンと物体、複数の物体を同時に、Pick & Place 以外のタスク。
+- **2 本の腕の協調**、グリッパの追加、USD だけで記述されたロボット。
+- **データを増やし、質を上げる:** 人が記録したデモを Mimic で増やす。
+
+## いまの範囲
+
+2 本指のグリッパの付いた単腕・双腕、タスクは 1 つ（物体を箱に入れる）、シミュレーションのみ。学習には **44 GB 以上**の
+GPU が必要です。それ以外は 16 GB の RTX GPU で動きます。
+
+## はじめに読むもの
 
 <div class="grid cards" markdown>
 
-- **[インストール](install.md)** — 必要なものと、コンテナの作り方（初回は 1〜2 時間）。
-- **[AI エージェントから使う](guides/claude-code.md)** — ロボットのシミュレーションが初めてなら、インストールの後は Claude Code や Codex に工程を任せ、ロボットについての質問にだけ答える。
+- **[インストール](install.md)** — 必要なものと、コンテナの作り方。
+- **[AI エージェントから使う](guides/claude-code.md)** — Claude Code や Codex に工程を任せる。
 - **[チュートリアル](tutorial.md)** — 同梱の Franka Panda で全工程を一度通す。
-- **[自分のロボットを使う](guides/your-robot.md)** — FANUC CRX-3iA を例に、URDF から始めて質問に答え、グリッパを取り付け・付け替える。
-- **[トラブルシューティング](troubleshooting.md)** — 失敗した検査の意味と、何を変えればよいか。
+- **[自分のロボットを使う](guides/your-robot.md)** — FANUC CRX-3iA を例に、URDF から始める。
 
 </div>
-
-!!! note "いまの対象"
-    グリッパの付いた単腕・双腕のロボットと、Pick & Place のタスク 1 つ（物体を箱に入れる）。双腕では左右の腕と
-    グリッパを policy の state / action に含め、scripted は物体に近い方の腕を使い、もう一方は開いたまま保持します。
-    GR00T N1.7 の学習には **44 GB 以上**の GPU が必要です。

@@ -310,6 +310,34 @@ projects/<name>/
 - 行動ラベルは「IK が出した関節目標 + グリッパのスカラー（0=閉, 1=開）」。teleop は目標手先姿勢を積算して IK で追従するので、
   腕の追従が遅れても指令どおりに動く。記録後、ラベルだけで腕を動かして記録時と同じ軌道になるかを検査する（把持前の区間で判定）。
 
+## SimReady のグリッパを追加する
+
+アセットのライブラリのグリッパは `src/urdf2vla/grippers.py` に 1 項目足す: アセットのパス、駆動する指の関節とその開・閉の値、
+追従する関節、接近と指の向き、指先までの距離、開きの幅。値はシミュレーションのコンテナでプローブを実行して測る
+（`docker exec` のコマンド全体は `src/urdf2vla/sim/gripper_probe.py` の先頭）:
+
+```bash
+python -m urdf2vla.sim.gripper_probe Isaac/Robots/Robotiq/Hand-E/Robotiq_Hand_E_edit.usd --out hand_e.yaml
+```
+
+関節（種類・可動範囲・駆動・追従の関係）と、開いた状態での各指の衝突形状の位置を出す。そのグリッパを使うプロジェクトで
+`import_robot` と `launch_sim` を実行し、検査で値を確かめる。丸い物体が指先から抜けるなら把持点（`grasp_depth`）を奥へ
+（低い物体へ下ろしたとき指先が台に当たらない範囲で）。
+
+## 双腕の例の設定
+
+- **Dual Scorpion**: 各腕の 8 番目の関節がグリッパ（`gripper_joints: [joint7_R, joint7_L]`、`gripper_open_close: [[-0.8, 0.0], [-0.8, 0.0]]`、
+  `front_axis: +y`）。URDF の effort は全関節 1.0（仮値）なので `robot.effort_limits` で腕を 60 N·m に（10 N·m では止まっている
+  腕が下がって `setup_teleoperation` が通らない）。回転する顎は果物を保持できないので物体は立方体だけ。開きの幅は 1 つの
+  連続関節から決まらないので、物体が入るかの検査は自動ではされない。scripted の収集は 0/8（物体の真上の手前で止まる）。
+- **OpenArm v2.0**（`examples/openarm`）: グリッパが前腕の延長上にあり手首の曲げは最大 90° なので、手先が真下を向くのは前腕が
+  水平か下向きのときだけで、上からの把持は肩からおよそ 0.3 m 以上下に限られる。自動の配置では台が高すぎるので、例では
+  台を 0.17 m に下げて低い `plastic_tray` を使い、物体とトレイを左腕の側に置き（joint2 の内転は最大 10°）、scripted の接近の
+  高さを 8 cm に（`overrides.teleop.approach_height`）、肘を下げた初期姿勢（ホストの IK で求めた）、指のトルク 2 N·m
+  （URDF の 7 N·m では立方体が抜ける）、solver の position iterations 64 にしている。
+- 共通の根の link から 2 本の腕が出ている URDF は、その link に `<inertial>` が要る（質量がないと importer が 2 つの
+  articulation に分け、`import_robot` が `Expected 1 prims at '/World/Robot', found 2` で止まる）。
+
 ## テスト
 
 ```bash

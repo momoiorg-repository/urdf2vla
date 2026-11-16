@@ -83,7 +83,22 @@ urdf2vla status   --project projects/myrobot     # どの工程が済んだか�
 | `gr00t_loader` | GR00T が変換したデータセットを読めなかった。`convert_dataset --force` をやり直し、続くなら `build/convert_report.yaml` を付けて報告してください |
 | `video_matches:<カメラ>` | エンコードした動画が記録した画像と違う。`convert_dataset --force` をやり直す |
 | `finetune_args_valid` | GR00T が学習の引数を受け付けなかった。`train_vla` に渡した値を確かめる |
+| `gripper_timing` | グリッパの切り替えが、どの学習サンプルでも実行できない位置にあり、モデルがそれを学べない。`convert_dataset --force` をやり直す（これを直すフレームを足します） |
+| `release_check` | 学習したモデルが、デモでグリッパを開く場所で開かない。評価では物体を運んだまま放さない。`--force` で変換し直し、`gripper_timing` を確かめてから学習し直す |
+| `401 … Cannot access gated repo` | 学習と評価には `nvidia/Cosmos-Reason2-2B` が必要。ライセンスに同意してログインする（[インストール](install.md#huggingface)） |
 | 「この GPU では GR00T N1.7 を学習できません」の警告 | エラーではありません。44 GB 以上のマシンで学習します（[学習と評価](guides/training.md#another-machine)） |
+
+### 学習したモデルが評価で失敗する
+
+`evaluate_vla` は失敗したエピソードごとに `build/eval_report.yaml` に原因（`failure`）を書き、いちばん多いものを
+`warnings` に出します。そのエピソードの動画を `--video` で見てください。
+
+| `failure` | 起きたこと | 対処 |
+|---|---|---|
+| `never_closed` | グリッパが一度も閉じなかった | モデルが物体まで届いていない。デモを増やすか、カメラに物体が写っているか確かめる |
+| `missed_grasp` | 閉じたが物体が持ち上がらなかった | 把持がずれている。デモを増やすか、物体の位置のばらつきを減らす |
+| `never_released` | 物体を持ち上げたまま開かなかった | 上の `gripper_timing` と `release_check` を見る |
+| `released_off_target` | 放したが容器の中ではなかった | どこへ行くかを学べていない。デモか学習ステップを増やす |
 
 ## 環境の問題
 
@@ -97,7 +112,10 @@ urdf2vla status   --project projects/myrobot     # どの工程が済んだか�
 | 「…秒以内に終わりませんでした」 | Isaac Sim の最初の起動はシェーダのコンパイルで数分かかることがある | `--timeout` を大きくしてもう一度実行する |
 | `GLXBadFBConfig` | OpenGL の設定が GPU と合わない（GPU が 2 つあるノート PC で起きやすい） | `runtime.yaml` の `env:` に `__NV_PRIME_RENDER_OFFLOAD: "1"` と `__GLX_VENDOR_LIBRARY_NAME: nvidia` を足す |
 | メッシュのファイルを開けない | URDF が参照するメッシュがコンテナから見えない | `urdf2vla show --project … robot_metadata` の meshes を確かめ、フォルダを `robot.package_paths` に足す |
-| `CUDA out of memory` | 他のプロセスが GPU を使っている | `nvidia-smi` で確かめ、他の学習ジョブやコンテナを止める |
+| `CUDA out of memory` | 他のプロセスが GPU を使っている | `nvidia-smi` で確かめ、他の学習ジョブやコンテナを止める。学習と評価は 46 GB の GPU 1 枚に同時には収まらない |
+| `The NVIDIA driver on your system is too old (found version 12070)` | ドライバが 580 より古い。イメージは CUDA 13 が必要 | ドライバを 580 以上に上げる（[Brev のガイド](guides/brev.md#driver)） |
+| `unresolvable CDI devices nvidia.com/gpu=all` | Docker 用の GPU の記述（CDI）がないか、古いドライバのもの | `sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml`（[詳細](guides/brev.md#cdi)） |
+| checkpoint の保存中に学習が止まる | ディスクがいっぱい。checkpoint は 1 つ 24 GB | 空きを作るか `train_vla --save-total-limit` を下げる。`train_vla` は最後の checkpoint から再開する |
 | `urdf2vla view` が「追加のパッケージが必要」と言う | 画面用のパッケージが入っていない | `uv pip install -e '.[view]'` |
 
 ## 助けを求める

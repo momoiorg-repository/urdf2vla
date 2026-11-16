@@ -1,71 +1,40 @@
 # urdf2vla
 
-**From your robot's URDF to a trained Vision-Language-Action (VLA) model in NVIDIA Isaac Sim — without learning Omniverse first.**
+**From your robot's URDF to a trained and evaluated Vision-Language-Action (VLA) model in NVIDIA Isaac Sim.**
 
-[日本語](README.ja.md)
+[日本語](README.ja.md) · 📖 **[Documentation](https://momoiorg-repository.github.io/urdf2vla/)**
 
 ![A GR00T N1.7 model trained with urdf2vla running a FANUC CRX-3iA in Isaac Sim: wrist, left and right cameras](docs/assets/crx3ia_model.gif)
 
 *A model trained end to end with urdf2vla (FANUC CRX-3iA, 20/20 in simulation):
-[`umegan/urdf2vla-crx3ia-gr00t-n1.7`](https://huggingface.co/umegan/urdf2vla-crx3ia-gr00t-n1.7) on Hugging Face.
-More in [Trained models](https://momoiorg-repository.github.io/urdf2vla/models/).*
+[`umegan/urdf2vla-crx3ia-gr00t-n1.7`](https://huggingface.co/umegan/urdf2vla-crx3ia-gr00t-n1.7).*
 
-urdf2vla turns USD conversion, articulation tuning, camera placement, Isaac Lab environments, dataset formats and GR00T
-fine-tuning into a sequence of plain commands. Each command checks its own result and either moves on, asks you a
-question about your robot, or tells you what to change.
-
-- A pick-and-place task with real objects (apple, lime, pear, colored cube → bin), one per episode and named in the instruction — no scene building in Omniverse
-- Questions instead of guesswork, answerable in a 3D browser view (`urdf2vla view`)
-- Physics checks that catch grippers that can't hold, fingers that sink into objects and frozen cameras before you record
-- DROID-style cameras by default (one wrist camera per arm, plus left and right)
-- Data conversion and fine-tuning for NVIDIA GR00T N1.7, packaged for a bigger GPU when yours is too small
-- An agent skill for Claude Code: "I want to start VLA development with my robot"
-
-Built on Isaac Sim 6.2.0, Isaac Lab 3.0.0, Isaac Lab Arena and Isaac GR00T N1.7, all running in Docker containers that
-urdf2vla builds for you.
+For robot developers who want to start VLA development with their own arm without first becoming experts in Isaac
+Sim, Omniverse or VLA training. urdf2vla turns the URDF into a checked pick-and-place environment in Isaac Sim, records
+demonstrations, fine-tunes NVIDIA Isaac GR00T N1.7 and evaluates the model in simulation — one command per step, each
+checking its own result and asking only what the URDF can't tell it.
 
 ## Quick start
 
-Needs Linux, an NVIDIA RTX GPU with driver 580+, Docker with the NVIDIA Container Toolkit, ~150 GB of disk, and
-[uv](https://docs.astral.sh/uv/). Training GR00T N1.7 needs a 44 GB GPU (it can be another machine).
+Needs Linux, an NVIDIA RTX GPU with driver 580+, Docker with the NVIDIA Container Toolkit, ~150 GB of disk and
+[uv](https://docs.astral.sh/uv/). Training needs a GPU with 44 GB or more (it can be another machine or a cloud GPU).
 
 ```bash
 git clone https://github.com/momoiorg-repository/urdf2vla.git && cd urdf2vla
 uv venv .venv && uv pip install -e '.[view]' && source .venv/bin/activate
-bash docker/build.sh                # once: builds the simulation and GR00T images (1–2 hours)
+bash docker/build.sh                # once, 1–2 hours
 bash docker/run.sh && bash docker/run.sh gr00t
-urdf2vla doctor                     # checks the GPU driver, Docker, images, containers, disk; prints the fix for each problem
-
-urdf2vla init projects/tutorial_franka --from examples/franka/project.yaml
-urdf2vla inspect_robot --project projects/tutorial_franka
-# … then follow "next" in each command's JSON output, or the tutorial below
+urdf2vla doctor                     # checks the machine and prints the fix for each problem
 ```
 
-New to robot simulation? After `urdf2vla doctor` passes, open the repository in Claude Code (`claude`) or Codex
-(`codex`) and say "I want to start VLA development with my robot" — the bundled agent skill runs the steps and asks you
-only about your robot.
-
-## Documentation
-
-**📖 [https://momoiorg-repository.github.io/urdf2vla/](https://momoiorg-repository.github.io/urdf2vla/)** (English / [日本語](https://momoiorg-repository.github.io/urdf2vla/ja/))
-
-The site is built from [`docs/`](docs/) by `.github/workflows/docs.yml`. To read it locally:
-`uv pip install -e '.[docs]' && mkdocs serve`.
-
-- [Install](https://momoiorg-repository.github.io/urdf2vla/install/) · [Use it with an AI agent (Claude Code / Codex)](https://momoiorg-repository.github.io/urdf2vla/guides/claude-code/)
-- [Tutorial: Franka end to end](https://momoiorg-repository.github.io/urdf2vla/tutorial/)
-- [Bring your own robot](https://momoiorg-repository.github.io/urdf2vla/guides/your-robot/) · [Check your robot in the browser](https://momoiorg-repository.github.io/urdf2vla/guides/view/) ·
-  [Record demonstrations](https://momoiorg-repository.github.io/urdf2vla/guides/recording/) · [Train and evaluate](https://momoiorg-repository.github.io/urdf2vla/guides/training/)
-- [Troubleshooting](https://momoiorg-repository.github.io/urdf2vla/troubleshooting/) · [Reference](https://momoiorg-repository.github.io/urdf2vla/reference/)
-
-Design notes, simulator pitfalls and verification status (in Japanese): [DEVELOPMENT.md](DEVELOPMENT.md).
+Then follow the [tutorial](https://momoiorg-repository.github.io/urdf2vla/tutorial/), or open the repository in
+Claude Code or Codex and say "I want to start VLA development with my robot".
 
 ## Status
 
-Single- and dual-arm robots with a two-finger gripper, one pick-and-place task (an object into a bin). The bundled
-Franka Panda is verified end to end up to a replay evaluation; a full GR00T training run on this version is not yet
-verified. Dual-arm robots are verified the same way on two Franka arms side by side (`examples/dual_franka`) and on
-the bundled OpenArm example (the scripted expert moves one arm per demonstration; OpenArm's table and starting pose
-are set by hand in the example).
-The bundled Dual Scorpion example gets through the checks but not yet through scripted collection.
-urdf2vla's command output is currently in Japanese; the documentation explains every key and message in English.
+Single- and dual-arm robots with a two-finger gripper, one task (an object into a container), simulation only.
+Verified end to end, from the URDF to an evaluated GR00T N1.7 model, on the FANUC CRX-3iA (20/20) on an NVIDIA L40S;
+see [Trained models](https://momoiorg-repository.github.io/urdf2vla/models/). Command output is in Japanese; the
+documentation explains every key in English.
+
+Design notes and verification details (in Japanese): [DEVELOPMENT.md](DEVELOPMENT.md).
