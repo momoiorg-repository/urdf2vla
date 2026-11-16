@@ -71,7 +71,8 @@ urdf2vla train_vla --project projects/myrobot --dataset demos
 
 ### 別のマシンで学習する {#another-machine}
 
-まとめたジョブは、GR00T の image が動く所ならどこでも動きます。学習するマシンで:
+学習するマシンに urdf2vla を入れられるなら、入れてそこで `urdf2vla train_vla` を実行するだけです。まとめたジョブは、
+入れられないマシン向けで、GR00T の image が動く所ならどこでも動きます。
 
 1. **image を用意します。** urdf2vla を clone して `bash docker/build.sh gr00t` を実行するか、image をコピーします。
 

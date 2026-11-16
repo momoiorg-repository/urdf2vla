@@ -8,6 +8,9 @@ You need the [installation](install.md) finished, both containers running, and H
 ([step 5](install.md#huggingface)). The times below were measured on an NVIDIA L40S; steps 1–5 and 7 also run on a
 16 GB RTX GPU.
 
+Run every command in a terminal on your machine, in the `urdf2vla` folder with `source .venv/bin/activate` — not
+inside a container.
+
 | Step | Commands | Time |
 |---|---|---|
 | [1. Create the project](#create) | `init` | instant |

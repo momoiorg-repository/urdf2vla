@@ -3,6 +3,11 @@
 You install the small `urdf2vla` command on your machine. It runs the heavy work in two Docker containers: one with
 Isaac Sim, Isaac Lab and Isaac Lab Arena (simulation), one with GR00T N1.7 (conversion, training, inference).
 
+!!! tip "Where to run commands"
+    Every command in these docs runs **in a terminal on your machine**, in the `urdf2vla` folder, after
+    `source .venv/bin/activate`. You never enter a container: `urdf2vla` starts the work in the right one for you.
+    Docker itself only appears once, in steps 2 and 3 below.
+
 ## What you need
 
 | | |
@@ -59,10 +64,10 @@ GR00T N1.7 uses the vision-language model `nvidia/Cosmos-Reason2-2B`, which need
 
 1. Accept the license at [huggingface.co/nvidia/Cosmos-Reason2-2B](https://huggingface.co/nvidia/Cosmos-Reason2-2B).
 2. Create a token with read access at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens).
-3. Log in inside the GR00T container (the token is saved in `~/.cache/huggingface`, shared with the host):
+3. Log in (the token is saved in `~/.cache/huggingface`, which the containers share):
 
     ```bash
-    docker exec -it -u $(id -un) -e HOME=$HOME urdf2vla-gr00t /workspace/.venv/bin/hf auth login
+    hf auth login
     ```
 
 ## Next

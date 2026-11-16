@@ -109,11 +109,10 @@ stop with `401 Client Error … Cannot access gated repo` until you have access.
 1. Open [huggingface.co/nvidia/Cosmos-Reason2-2B](https://huggingface.co/nvidia/Cosmos-Reason2-2B) and accept the
    license.
 2. Create a token with read access at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens).
-3. Log in inside the GR00T container. The token is saved in `~/.cache/huggingface/token`, which the containers share
-   with the host:
+3. Log in on the instance (the token is saved in `~/.cache/huggingface/token`, which the containers share):
 
     ```bash
-    docker exec -it -u $(id -un) -e HOME=$HOME urdf2vla-gr00t /workspace/.venv/bin/hf auth login
+    hf auth login
     ```
 
 Keep a copy of the token on `/data` (for example `/data/secrets/hf_token`, mode 600) if your instance's home
