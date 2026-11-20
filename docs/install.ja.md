@@ -76,6 +76,6 @@ GR00T N1.7 は vision-language モデル `nvidia/Cosmos-Reason2-2B` を使い、
 
 - **AI エージェントに工程を任せる** → [AI エージェントから使う](guides/claude-code.md)
 - **各工程を自分で実行する**（同梱の Franka で） → [チュートリアル](tutorial.md)
-- **クラウドの GPU で**（ドライバ、Docker から GPU を使う設定、ディスク） → [NVIDIA Brev で動かす](guides/brev.md)
+- **クラウドの GPU で**（ドライバ、Docker から GPU を使う設定、ディスクをスクリプト 1 つで準備） → [NVIDIA Brev で動かす](guides/brev.md)
 
 </div>
