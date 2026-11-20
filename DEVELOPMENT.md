@@ -401,7 +401,33 @@ L40S（46 GB）、CPU 8、Ubuntu 22.04、ドライバ 580.196.07（Brev の 565.
 - DROID の並びの動画の delta [-15, 0] は、Isaac-GR00T の既定（allow_padding=False）でエピソードの先頭 15 step の過去の
   フレームが末尾に回り込む → DROID の並びは delta [0]（`nvidia/GR00T-N1.7-DROID` と同じ）。
 
+## Brev の準備スクリプトと Launchable（2026-11-20、実機では未検証）
+
+`docker/brev_setup.sh` は、上の Brev の手順（ドライバ 580・Docker の保存先・CDI・ビルドと起動・doctor）を 1 回で行う。
+Launchable（VM モード）の setup script には、このファイルを取得して実行する数行を貼る（`docs/guides/brev.md` の「A Brev Launchable」）。
+
+- 段階ごとに `/var/lib/urdf2vla-setup/<段階>.done` を残し、実行し直すと止まった段階から。状態は `status`、ログは
+  `/var/log/urdf2vla-setup.log`、ログインしたときの案内は `~/.bashrc` の印で囲んだ数行。
+- root の段階（ドライバ・daemon.json・CDI・docker グループ）と、ログインするユーザの段階（uv・.venv・build.sh・run.sh）を分ける。
+  `run.sh` は `id -u` と `~/.cache` を使うので、root で実行するとコンテナと `~/.cache` が root の持ち物になる。
+  Brev が setup script をどのユーザで実行するかはドキュメントにない。root なら `ubuntu`（なければ uid 1000）を使う。
+- systemd の oneshot（`urdf2vla-setup.service`）で動かす: SSH や setup script の時間制限で止まらない。ドライバを上げた
+  再起動の後に続きを実行する（Brev は再起動の後に setup script を実行し直さない）。systemd がなければその場で実行し、再起動は手で。
+- `HF_TOKEN` は `~/.cache/huggingface/token`（600）に書くだけで、ログ・systemd の unit・状態のファイルには残さない。
+- 確かめたこと: shellcheck、`tests/test_brev_setup.py`（構文・`--status`）、偽の nvidia-smi / docker / nvidia-ctk / apt / df を置いた
+  Ubuntu 22.04 のコンテナで: root で実行・ubuntu で実行（sudo）・実行し直し・トークンがログに出ない・ドライバ 565 → 580 の
+  コマンド（unhold・pinning・565 の purge・580 の install）・build の失敗から続き・Docker の保存先を大きいディスクへ（daemon.json の
+  nvidia の設定が残る）・ホームに十分な空きがあれば移さない・clone 済みのリポジトリのディスクが小さいときの注意・存在しない ref で
+  準備が止まる（unit も案内も入れない）。systemd の経路は、unit の ExecStart を実行する偽の systemctl で: 565 → 580 を入れて
+  （nvidia-smi が動かなくなる）再起動 → 起動時に続きから完了・disable、install が途中で失敗 → nvidia-smi が動かなくても印から
+  やり直す、build の失敗が終了コードで伝わる。unit は `systemd-analyze verify` を通る。
+- **未検証:** 実際の Brev。とくに setup script を実行するユーザ、ドライバの更新と再起動の後の続き（systemd）、Brev のディスクの
+  配置、全体の時間。このマシンでは実行しない（daemon.json と /etc/cdi を書き換え、Docker を再起動する）。
+
 ## 次の作業
+
+- **Brev:** 新しい L40S で `brev_setup.sh` を確かめる（手で 1 回、次に Launchable から）。動いたら Launchable を公開し、
+  README とインストールのページに Deploy のボタン、`URDF2VLA_REF` をリリースのタグに。
 
 Brev（L40S）での FANUC の例の作業（下の 1〜3）は終わった。残り:
 

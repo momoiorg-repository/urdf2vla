@@ -76,6 +76,6 @@ GR00T N1.7 uses the vision-language model `nvidia/Cosmos-Reason2-2B`, which need
 
 - **Let an AI agent run the steps** → [Use it with an AI agent](guides/claude-code.md)
 - **Run each step yourself** with the bundled Franka → [Tutorial](tutorial.md)
-- **On a cloud GPU** (driver, Docker GPU access, disk) → [Run on NVIDIA Brev](guides/brev.md)
+- **On a cloud GPU** (one script sets up the driver, Docker GPU access and disk) → [Run on NVIDIA Brev](guides/brev.md)
 
 </div>

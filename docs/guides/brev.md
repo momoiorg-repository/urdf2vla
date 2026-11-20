@@ -20,6 +20,79 @@ urdf2vla doctor
 | Hugging Face | An account, a token with read access, and the license of `nvidia/Cosmos-Reason2-2B` accepted (see [Hugging Face](#huggingface)) |
 | Time | About 30 minutes of setup, 35 minutes of recording, 2 hours per training run |
 
+## Set up with one script {#script}
+
+On a fresh instance, one script does sections 1–4 of this page and starts both containers. Run it as the user you log
+in with (it uses `sudo` where it needs to):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/momoiorg-repository/urdf2vla/main/docker/brev_setup.sh -o /tmp/urdf2vla_brev_setup.sh
+bash /tmp/urdf2vla_brev_setup.sh
+```
+
+The script clones the repository itself, onto the disk with the most free space. If you've already cloned it, run
+`bash docker/brev_setup.sh` in it instead: it uses that checkout where it is, and warns if its disk is too small for
+training checkpoints (24 GB each).
+
+| Step | What the script does |
+|---|---|
+| [Driver](#driver) | Below 580: releases Brev's holds, pins the 580 branch, installs 580 and reboots. After the reboot, setup continues by itself |
+| [Disk](#disk) | If the system disk has less than 130 GB free and a larger disk exists, moves Docker's storage there (keeping the nvidia entries in `/etc/docker/daemon.json`). The repository goes on the larger disk too, linked from `~/urdf2vla` |
+| [CDI](#cdi) | Generates `/etc/cdi/nvidia.yaml` and checks that a container sees the GPU |
+| [Build and start](#build) | Adds you to the `docker` group, installs uv and the `urdf2vla` command (`.venv`), runs `docker/build.sh` and `docker/run.sh` for both containers, then `urdf2vla doctor` |
+
+It takes about 30 minutes, longer if the driver needs upgrading. The setup runs as a systemd service, so it keeps going
+if your SSH connection drops. To follow it:
+
+```bash
+bash ~/urdf2vla/docker/brev_setup.sh --status   # where it is, and what to do next
+tail -f /var/log/urdf2vla-setup.log              # everything it prints
+```
+
+When you log in, the status is shown; once setup is done, the login also moves into the repository and activates
+`.venv`. If a step fails, the log says which one. Fix the cause (the sections below explain each step) and run the
+script again: it continues from the step that failed.
+
+Then do [Hugging Face](#huggingface): accept the license and run `hf auth login`, or pass the token to the script
+with `HF_TOKEN=hf_... bash /tmp/urdf2vla_brev_setup.sh` (it's saved to `~/.cache/huggingface/token` and never printed).
+Accepting the license stays a step in the browser. Continue with the [tutorial](../tutorial.md).
+
+!!! note
+    `docker/run.sh` starts the simulation container with `ACCEPT_EULA=Y`, as it does on your own machine: using it means
+    accepting the license of the Isaac Sim image (see
+    [Isaac Sim's container installation](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/install_container.html)).
+
+### A Brev Launchable {#launchable}
+
+A [Launchable](https://docs.nvidia.com/brev/latest/concepts/launchables) is a saved instance configuration that runs
+a setup script when someone deploys it. Brev bills the account that deploys it. To make one that runs the script
+above, create it in the Brev console with these settings:
+
+| Setting | Value |
+|---|---|
+| Mode | VM mode, no Jupyter |
+| Setup script | Paste the script below |
+| Compute | One GPU with 44 GB or more (we measured on an L40S) |
+| Disk | **300 GiB or more**. Brev can't resize the disk later |
+| Secure Link | Port 8080, for [`urdf2vla view`](view.md). Don't open 8080 as a plain TCP port: the viewer has no login |
+| Setup value (optional) | `HF_TOKEN`, from a saved organization secret. Don't put a token in a default value |
+
+```bash
+#!/bin/bash
+# urdf2vla: https://github.com/momoiorg-repository/urdf2vla (docs/guides/brev.md)
+export URDF2VLA_REF=main
+curl -fsSL "https://raw.githubusercontent.com/momoiorg-repository/urdf2vla/${URDF2VLA_REF}/docker/brev_setup.sh" -o /tmp/urdf2vla_brev_setup.sh
+bash /tmp/urdf2vla_brev_setup.sh
+```
+
+The script clones the repository at `URDF2VLA_REF`; use a release tag instead of `main` so every deployment gets the same
+version. Brev runs a setup script once and doesn't run it again after a restart, which is why the script carries on
+after the driver reboot as a systemd service. Brev may show the setup as finished or interrupted at that reboot.
+Check with `--status` after logging in.
+
+The sections below are what the script does, step by step. Follow them to set up by hand, or when the script stops at a
+step.
+
 ## 1. Driver 580 or newer {#driver}
 
 Isaac Sim 6.2 and the GR00T image need driver **580 or newer**. With an older driver, the first Isaac Sim step stops

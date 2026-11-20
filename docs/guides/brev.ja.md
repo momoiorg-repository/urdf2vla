@@ -20,6 +20,78 @@ urdf2vla doctor
 | Hugging Face | アカウント、read 権限のトークン、`nvidia/Cosmos-Reason2-2B` の利用規約への同意（[Hugging Face](#huggingface)） |
 | 時間 | 準備 約 30 分、デモの記録 35 分、学習 1 回 2 時間 |
 
+## スクリプト 1 つで準備する {#script}
+
+新しいインスタンスなら、このページの 1〜4 と 2 つのコンテナの起動を、スクリプト 1 つで済ませられます。ログインする
+ユーザで実行してください（要るところでは `sudo` を使います）:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/momoiorg-repository/urdf2vla/main/docker/brev_setup.sh -o /tmp/urdf2vla_brev_setup.sh
+bash /tmp/urdf2vla_brev_setup.sh
+```
+
+リポジトリはスクリプトが空きのいちばん大きいディスクに clone します。clone 済みなら、その中で
+`bash docker/brev_setup.sh` を実行してください。その場所のまま使い、学習の checkpoint（1 つ 24 GB）に空きが足りなければ
+注意を表示します。
+
+| 段階 | スクリプトがすること |
+|---|---|
+| [ドライバ](#driver) | 580 より古ければ、Brev の hold を外し、580 系に固定して 580 を入れ、再起動します。再起動の後は続きを自動で実行します |
+| [ディスク](#disk) | システムのディスクの空きが 130 GB 未満で、もっと大きいディスクがあれば、Docker の保存先をそこに移します（`/etc/docker/daemon.json` の nvidia の設定は残します）。リポジトリも大きいディスクに置き、`~/urdf2vla` からリンクします |
+| [CDI](#cdi) | `/etc/cdi/nvidia.yaml` を作り、コンテナから GPU が見えることを確かめます |
+| [ビルドと起動](#build) | あなたを `docker` グループに入れ、uv と `urdf2vla` コマンド（`.venv`）を入れ、`docker/build.sh` と 2 つのコンテナの `docker/run.sh`、最後に `urdf2vla doctor` を実行します |
+
+約 30 分かかります（ドライバを上げるときはもっと）。準備は systemd のサービスとして動くので、SSH の接続が切れても
+止まりません。進み具合は:
+
+```bash
+bash ~/urdf2vla/docker/brev_setup.sh --status   # どこまで進んだか、次に何をするか
+tail -f /var/log/urdf2vla-setup.log              # 出力のすべて
+```
+
+ログインすると進み具合が表示されます。準備が終わっていれば、ログインしたときにリポジトリに移って `.venv` を有効に
+します。途中の段階で止まったら、ログにどの段階かが出ます。原因を直して（各段階は下の節で説明しています）もう一度
+スクリプトを実行すると、止まった段階から続けます。
+
+その後 [Hugging Face](#huggingface) の準備をします: 利用規約に同意して `hf auth login`。トークンは
+`HF_TOKEN=hf_... bash /tmp/urdf2vla_brev_setup.sh` のようにスクリプトに渡すこともできます（`~/.cache/huggingface/token`
+に保存し、表示はしません）。利用規約への同意だけはブラウザで行います。続きは[チュートリアル](../tutorial.md)へ。
+
+!!! note
+    `docker/run.sh` は、手元のマシンと同じく `ACCEPT_EULA=Y` でシミュレーションのコンテナを起動します。使うことは
+    Isaac Sim の image の利用規約に同意することです（[Isaac Sim のコンテナのインストール](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/install_container.html)）。
+
+### Brev の Launchable {#launchable}
+
+[Launchable](https://docs.nvidia.com/brev/latest/concepts/launchables) は、インスタンスの設定を保存したもので、誰かが
+デプロイすると setup script を実行します。料金はデプロイしたアカウントにかかります。上のスクリプトを実行する
+Launchable は、Brev のコンソールで次の設定で作ります:
+
+| 設定 | 値 |
+|---|---|
+| モード | VM モード、Jupyter なし |
+| Setup script | 下のスクリプトを貼る |
+| Compute | 44 GB 以上の GPU 1 枚（L40S で測りました） |
+| ディスク | **300 GiB 以上**。後から大きくできません |
+| Secure Link | ポート 8080（[`urdf2vla view`](view.md) 用）。ビューアにはログインがないので、TCP のポートとしては公開しないでください |
+| Setup value（任意） | `HF_TOKEN`。組織の secret から渡します。既定値にトークンを書かないでください |
+
+```bash
+#!/bin/bash
+# urdf2vla: https://github.com/momoiorg-repository/urdf2vla (docs/guides/brev.md)
+export URDF2VLA_REF=main
+curl -fsSL "https://raw.githubusercontent.com/momoiorg-repository/urdf2vla/${URDF2VLA_REF}/docker/brev_setup.sh" -o /tmp/urdf2vla_brev_setup.sh
+bash /tmp/urdf2vla_brev_setup.sh
+```
+
+スクリプトはリポジトリを `URDF2VLA_REF` で clone します。どのデプロイも同じ版になるよう、`main` ではなくリリースの
+タグにしてください。Brev は setup script を 1 回だけ実行し、再起動の後は実行しません。そのためスクリプトは、ドライバの
+再起動の後も systemd のサービスとして続きを実行します。その再起動で Brev の表示が「完了」や「中断」になることが
+あります。ログインして `--status` で確かめてください。
+
+下の節は、スクリプトがすることを 1 段階ずつ説明したものです。手で準備するときや、スクリプトがどこかの段階で止まった
+ときに使ってください。
+
 ## 1. ドライバ 580 以降 {#driver}
 
 Isaac Sim 6.2 と GR00T の image には**ドライバ 580 以降**が要ります。古いドライバでは、最初の Isaac Sim の工程が
