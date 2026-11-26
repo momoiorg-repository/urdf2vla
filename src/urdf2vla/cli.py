@@ -248,6 +248,11 @@ def cmd_teleop_keys(args) -> int:
 
 def run_skill(name: str, args) -> int:
     spec = SKILLS[name]
+    if name == "launch_sim":
+        if (args.livestream == 1) != (args.public_ip is not None):
+            result = SkillResult(skill=name)
+            result.fail("--livestream 1 と --public-ip <IPv4> は一緒に指定してください。")
+            return _emit(result)
     project = _project(args)
     log_path = project.new_log(name)
     opts = {a.flags[0].lstrip("-").replace("-", "_"): getattr(args, a.flags[0].lstrip("-").replace("-", "_"), None) for a in spec.args}

@@ -16,6 +16,8 @@ NVIDIA Isaac GR00T N1.7 を fine-tune して、シミュレーションでモデ
 
 ## クイックスタート
 
+クラウド GPU を使う場合は、[NVIDIA Brev のセットアップと Launchable のガイド](docs/guides/brev.ja.md)を参照してください。
+
 Linux、NVIDIA の RTX GPU とドライバ 580 以降、NVIDIA Container Toolkit 付きの Docker、空きディスク 150 GB 程度、
 [uv](https://docs.astral.sh/uv/) が必要です。学習には 44 GB 以上の GPU が必要です（別のマシンやクラウドの GPU でもかまいません）。
 

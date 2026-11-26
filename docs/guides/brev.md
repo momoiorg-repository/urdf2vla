@@ -1,8 +1,7 @@
 # Running on NVIDIA Brev
 
-This page walks through urdf2vla on a cloud GPU from NVIDIA Brev, from a fresh instance to a trained model. Every
-number on it was measured on one instance: an **NVIDIA L40S (46 GB)**, 8 CPUs, 144 GB RAM, Ubuntu 22.04, with the
-FANUC CRX-3iA example.
+This page walks through urdf2vla on a cloud GPU from NVIDIA Brev, from a fresh instance to a trained model. The
+FANUC CRX-3iA timings were measured on an **NVIDIA L40S (46 GB)**, 8 CPUs, 144 GB RAM, and Ubuntu 22.04.
 
 `urdf2vla doctor` checks each point below. When something is wrong, it prints the fix and links to the section here.
 Run it after every step of the setup:
@@ -37,7 +36,7 @@ training checkpoints (24 GB each).
 | Step | What the script does |
 |---|---|
 | [Driver](#driver) | Below 580: releases Brev's holds, pins the 580 branch, installs 580 and reboots. After the reboot, setup continues by itself |
-| [Disk](#disk) | If the system disk has less than 130 GB free and a larger disk exists, moves Docker's storage there (keeping the nvidia entries in `/etc/docker/daemon.json`). The repository goes on the larger disk too, linked from `~/urdf2vla` |
+| [Disk](#disk) | If the system disk has less than 130 GB free and a larger disk exists, switches Docker to a new directory there and keeps the NVIDIA settings in `/etc/docker/daemon.json`. When the script clones the repository to the larger disk, it links it from `~/urdf2vla`. |
 | [CDI](#cdi) | Generates `/etc/cdi/nvidia.yaml` and checks that a container sees the GPU |
 | [Build and start](#build) | Adds you to the `docker` group, installs uv and the `urdf2vla` command (`.venv`), runs `docker/build.sh` and `docker/run.sh` for both containers, then `urdf2vla doctor` |
 
@@ -64,31 +63,179 @@ Accepting the license stays a step in the browser. Continue with the [tutorial](
 
 ### A Brev Launchable {#launchable}
 
-A [Launchable](https://docs.nvidia.com/brev/latest/concepts/launchables) is a saved instance configuration that runs
-a setup script when someone deploys it. Brev bills the account that deploys it. To make one that runs the script
-above, create it in the Brev console with these settings:
+In the [Brev Console](https://brev.nvidia.com), open **Launchables → Create Launchable**. Use the following settings
+to make a VM that runs the setup above. Brev bills the account that deploys the VM. [NVIDIA Brev Launchables](https://docs.nvidia.com/brev/concepts/launchables)
 
 | Setting | Value |
 |---|---|
-| Mode | VM mode, no Jupyter |
-| Setup script | Paste the script below |
-| Compute | One GPU with 44 GB or more (we measured on an L40S) |
-| Disk | **300 GiB or more**. Brev can't resize the disk later |
-| Secure Link | Port 8080, for [`urdf2vla view`](view.md). Don't open 8080 as a plain TCP port: the viewer has no login |
-| Setup value (optional) | `HF_TOKEN`, from a saved organization secret. Don't put a token in a default value |
+| Name | `urdf2vla` |
+| Description | Build a pick-and-place simulation from a robot URDF, record demonstrations, and fine-tune GR00T N1.7. Connect over SSH and start with the Franka example. |
+| Compute | One NVIDIA L40S, or another compatible GPU with at least 44 GB of VRAM for training |
+| Disk storage | **300 GiB or more** |
+| Software configuration | **VM Mode**, with Jupyter off |
+| Setup script | Paste the contents of [docker/brev_launchable.sh](https://github.com/momoiorg-repository/urdf2vla/blob/main/docker/brev_launchable.sh) |
+| Source | Select **I don’t have any code files**. The setup script clones the repo onto the instance. |
+| Network for Isaac Sim (optional) | For public livestreaming, forward `49100/TCP` and `47998/UDP` and restrict both rules to the deployer's IP. Use the assigned public ports in the [desktop client](#desktop-streaming-client) or [browser viewer](#remapped-kit-ports). |
+| Network for the URDF viewer (optional) | Add an authenticated **Secure Link** named `Robot viewer` for HTTP port `8080`. |
+| Launch parameter (optional) | Add `HF_TOKEN` as an optional **Text** parameter with an empty default. Deployers can select a saved organization secret or sign in later with `hf auth login`. |
+| View access | Select **Only my organization** for the first test deployment. |
+
+The setup script defaults to `main`. To test changes before merging, set `URDF2VLA_REF` in the pasted script to the
+branch containing them on the public repository. Use a release tag for a repeatable deployment. Brev runs the script
+once. If the driver upgrade reboots the VM, the systemd service resumes
+setup. To confirm it finished, SSH into the VM and check `bash ~/urdf2vla/docker/brev_setup.sh --status` and
+`/var/log/urdf2vla-setup.log`.
+
+Select **Create Launchable** to generate the deployment link. Deploy a test VM from that link and run the Franka
+check below. After it passes, set the intended **View access** and use **My Launchables → Copy Markdown Badge** to
+get a **Launch on Brev** button for your README or docs. [NVIDIA Brev sharing and badges](https://docs.nvidia.com/brev/concepts/launchables#embedding-launchables)
+
+### Verify the deployment with Franka {#franka-smoke-test}
+
+Run this on the Brev VM after setup finishes. On an existing VM, check `nvidia-smi`, `docker info`, and `df -h . /data`
+first. Setup can upgrade the driver and reboot, or switch Docker to a new storage directory. If the storage directory
+changes, existing containers and images stay in the previous directory.
 
 ```bash
-#!/bin/bash
-# urdf2vla: https://github.com/momoiorg-repository/urdf2vla (docs/guides/brev.md)
-export URDF2VLA_REF=main
-curl -fsSL "https://raw.githubusercontent.com/momoiorg-repository/urdf2vla/${URDF2VLA_REF}/docker/brev_setup.sh" -o /tmp/urdf2vla_brev_setup.sh
-bash /tmp/urdf2vla_brev_setup.sh
+cd ~/urdf2vla                         # or your existing checkout
+source .venv/bin/activate
+urdf2vla doctor
 ```
 
-The script clones the repository at `URDF2VLA_REF`; use a release tag instead of `main` so every deployment gets the same
-version. Brev runs a setup script once and doesn't run it again after a restart, which is why the script carries on
-after the driver reboot as a systemd service. Brev may show the setup as finished or interrupted at that reboot.
-Check with `--status` after logging in.
+Resolve any `doctor` errors before starting. Signing in to Hugging Face can wait until training or model evaluation.
+Run these commands in order and stop if any returns a status other than `ok`. If you already created this project,
+use `urdf2vla status --project projects/brev_franka` to resume. The first Isaac Sim start may take several minutes
+while Kit compiles shaders.
+
+```bash
+project=projects/brev_franka
+urdf2vla init "$project" --from examples/franka/project.yaml
+urdf2vla inspect_robot --project "$project"
+urdf2vla configure_robot --project "$project"
+urdf2vla configure_task --project "$project"
+urdf2vla configure_camera --project "$project"
+urdf2vla import_robot --project "$project"
+urdf2vla launch_sim --project "$project"
+```
+
+Check the `*_start.png` and `*_end.png` images in `projects/brev_franka/snapshots/` for the Franka arm, table,
+objects and bin. If you configured a Secure Link, run `urdf2vla view --project "$project" --port 8080` on the VM
+and open **Robot viewer** in the Brev Console.
+
+#### Record and replay three demonstrations {#franka-replay-test}
+
+After the scene checks pass, run a short smoke test through Isaac Sim and the GR00T container. This test uses
+recorded actions, so it requires no model checkpoint or Hugging Face sign-in. Stop any Kit livestream first to free
+the GPU. Use a fresh dataset name for a repeated run.
+
+```bash
+project=projects/brev_franka
+dataset=brev_smoke
+urdf2vla configure_vla_interface --project "$project"
+urdf2vla setup_teleoperation --project "$project"
+urdf2vla collect_dataset --project "$project" --device scripted --num-demos 3 --dataset "$dataset"
+urdf2vla convert_dataset --project "$project" --dataset "$dataset"
+urdf2vla evaluate_vla --project "$project" --replay --dataset "$dataset" --episodes 3 --video
+```
+
+Recording can take more than three attempts because it saves only successful demonstrations. Check
+`build/collect_report.yaml` for the saved count and `build/eval_report.yaml` for the replay results. Replay checks the
+recorded actions and the server connection. The `--video` option saves one MP4 per episode in `build/eval_videos/`.
+
+<figure>
+  <video controls muted playsinline preload="none" width="100%" poster="../../assets/brev_franka_replay.jpg" src="../../assets/brev_franka_replay.mp4" aria-label="Franka replay from three cameras"></video>
+  <figcaption>The Franka places a cube in the bin during replay. From left to right: wrist, left, and right camera.</figcaption>
+</figure>
+
+To train and evaluate a model, follow the [training guide](training.md).
+
+### Stream the Isaac Sim Kit viewport {#kit-livestream}
+
+Use a GPU with NVIDIA NVENC, such as the L40S. The workstation needs a route to both Kit ports. For public access,
+use the provider firewall or the Brev **Ports** tab. Restrict public access to
+the deployer's IP because the native WebRTC stream has no built-in authentication. [Brev networking options](https://docs.nvidia.com/brev/concepts/launchables#network) ·
+[Isaac Sim 6.2 livestream clients](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/manual_livestream_clients.html)
+
+| Destination port | Protocol | Purpose |
+|---|---|---|
+| `49100` | TCP | WebRTC signaling |
+| `47998` | UDP | WebRTC media |
+
+Check the **Public Port** and **Destination Port** columns in Brev. The destination ports are Kit's ports on the VM.
+When you connect through Brev's public endpoint, use the assigned public port numbers in your client.
+[Kit stream settings](https://docs.omniverse.nvidia.com/kit/docs/omni.kit.livestream.app/latest/Overview.html)
+
+After `import_robot` succeeds, run the command for your connection from the urdf2vla checkout on the VM.
+
+=== "Public endpoint"
+
+    Replace `STREAM_IPV4` with a public endpoint IPv4 address that the workstation can reach on both public ports.
+    Mode `1` selects the Kit visualizer and advertises this address to the client.
+
+    ```bash
+    urdf2vla launch_sim --project projects/brev_franka --livestream 1 --public-ip STREAM_IPV4
+    ```
+
+=== "Private network"
+
+    Connect the VM and workstation to the same routed private network or VPN. Use mode `2` to stream over that network.
+
+    ```bash
+    urdf2vla launch_sim --project projects/brev_franka --livestream 2
+    ```
+
+#### Connect with the Isaac Sim WebRTC Streaming Client {#desktop-streaming-client}
+
+On your **workstation**, download the **Isaac Sim WebRTC Streaming Client** for your OS and CPU architecture.
+[NVIDIA client downloads](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/download.html#latest-release)
+
+| Workstation | Installation |
+|---|---|
+| Windows | Run the `.exe` installer, then open **Isaac Sim WebRTC Streaming Client** from Start. |
+| macOS | Open the `.dmg` for Apple silicon or Intel, then drag the app to **Applications**. |
+| Ubuntu or Debian | From the download directory, run `sudo apt install ./isaacsim-webrtc-streaming-client-*-linux-*.deb` with the package for your architecture, then launch the app from the application menu. |
+
+1. Keep `launch_sim` running on the Brev VM. Wait for `env ready` in the newest `*_launch_sim.log` under the project's `logs/` directory.
+2. Open the client on your workstation. In **Server**, enter the IPv4 address supplied to `--public-ip` for mode `1`, or the reachable private IPv4 address of the VM for mode `2`.
+3. For a Brev public endpoint, enter the TCP **Public Port** under **Signal** and the UDP **Public Port** under **Stream**. For a private or direct connection to Kit's default ports, use `49100` and `47998`.
+4. Select **Connect**. Close the client to disconnect and press Ctrl+C in the VM terminal to stop Kit.
+
+<figure markdown="span">
+  ![Desktop client with Server, Signal port, Stream port, and Connect controls](../assets/brev_webrtc_client.png)
+  <figcaption>Isaac Sim WebRTC Streaming Client 2.0.0 with its default values.</figcaption>
+</figure>
+
+If the client cannot connect, check the TCP port entered under **Signal** and close any other streaming client.
+If it connects but shows a blank viewport, check the UDP port entered under **Stream** and try **View → Reload**.
+[NVIDIA client setup and troubleshooting](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/manual_livestream_clients.html#isaac-sim-short-webrtc-streaming-client)
+
+#### Browser viewer for remapped ports {#remapped-kit-ports}
+
+NVIDIA's browser viewer accepts separate public signaling and media ports. In `launch_sim --livestream 1`, set
+`--public-ip` to a reachable IPv4 address of the public endpoint. Keep Kit on its default destination ports.
+Build the viewer with the hostname and **public** port numbers shown in Brev, without the `:port` suffix on the
+hostname. [Isaac Sim 6.2 browser viewer](https://github.com/isaac-sim/IsaacSim/blob/v6.2.0/tools/docker/web-viewer/Dockerfile)
+
+```bash
+viewer_dir=$(mktemp -d)
+curl -fsSL https://raw.githubusercontent.com/isaac-sim/IsaacSim/v6.2.0/tools/docker/web-viewer/Dockerfile \
+  -o "$viewer_dir/Dockerfile"
+docker build -t urdf2vla/kit-web-viewer \
+  --build-arg ISAACSIM_HOST=PUBLIC_HOSTNAME \
+  --build-arg ISAACSIM_SIGNAL_PORT=PUBLIC_TCP_PORT \
+  --build-arg ISAACSIM_STREAM_PORT=PUBLIC_UDP_PORT "$viewer_dir"
+docker run --rm -p 127.0.0.1:8210:8210 urdf2vla/kit-web-viewer
+```
+
+From your workstation, forward the viewer's HTTP port using `brev port-forward INSTANCE --port 8210:8210` and open
+`http://localhost:8210` in Chromium or Chrome. The browser uses the public Brev endpoint for WebRTC. Close other
+streaming clients before connecting. Kit supports one client at a time. [Brev port forwarding](https://docs.nvidia.com/brev/cli/connectivity) ·
+[Isaac Sim client limits](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/manual_livestream_clients.html)
+
+<figure markdown="span">
+  ![Streamed Isaac Sim viewport with the Franka pick-and-place table, bin, and lime](../assets/brev_webrtc_viewport.png)
+  <figcaption>The Franka scene streamed through Brev to the browser viewer.</figcaption>
+</figure>
 
 The sections below are what the script does, step by step. Follow them to set up by hand, or when the script stops at a
 step.

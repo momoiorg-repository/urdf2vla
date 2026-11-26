@@ -37,7 +37,7 @@ bash /tmp/urdf2vla_brev_setup.sh
 | 段階 | スクリプトがすること |
 |---|---|
 | [ドライバ](#driver) | 580 より古ければ、Brev の hold を外し、580 系に固定して 580 を入れ、再起動します。再起動の後は続きを自動で実行します |
-| [ディスク](#disk) | システムのディスクの空きが 130 GB 未満で、もっと大きいディスクがあれば、Docker の保存先をそこに移します（`/etc/docker/daemon.json` の nvidia の設定は残します）。リポジトリも大きいディスクに置き、`~/urdf2vla` からリンクします |
+| [ディスク](#disk) | システムのディスクの空きが 130 GB 未満で、もっと大きいディスクがあれば、Docker の保存先をそこに切り替えます。`/etc/docker/daemon.json` の NVIDIA の設定は維持します。リポジトリを大きいディスクに clone した場合は、`~/urdf2vla` からリンクします。 |
 | [CDI](#cdi) | `/etc/cdi/nvidia.yaml` を作り、コンテナから GPU が見えることを確かめます |
 | [ビルドと起動](#build) | あなたを `docker` グループに入れ、uv と `urdf2vla` コマンド（`.venv`）を入れ、`docker/build.sh` と 2 つのコンテナの `docker/run.sh`、最後に `urdf2vla doctor` を実行します |
 
@@ -63,31 +63,156 @@ tail -f /var/log/urdf2vla-setup.log              # 出力のすべて
 
 ### Brev の Launchable {#launchable}
 
-[Launchable](https://docs.nvidia.com/brev/latest/concepts/launchables) は、インスタンスの設定を保存したもので、誰かが
-デプロイすると setup script を実行します。料金はデプロイしたアカウントにかかります。上のスクリプトを実行する
-Launchable は、Brev のコンソールで次の設定で作ります:
+[Brev コンソール](https://brev.nvidia.com)で **Launchables → Create Launchable** を開き、次の設定を使います。
+VM の料金はデプロイしたアカウントにかかります。[NVIDIA Brev Launchables](https://docs.nvidia.com/brev/concepts/launchables)
 
 | 設定 | 値 |
 |---|---|
-| モード | VM モード、Jupyter なし |
-| Setup script | 下のスクリプトを貼る |
-| Compute | 44 GB 以上の GPU 1 枚（L40S で測りました） |
-| ディスク | **300 GiB 以上**。後から大きくできません |
-| Secure Link | ポート 8080（[`urdf2vla view`](view.md) 用）。ビューアにはログインがないので、TCP のポートとしては公開しないでください |
-| Setup value（任意） | `HF_TOKEN`。組織の secret から渡します。既定値にトークンを書かないでください |
+| Name | `urdf2vla` |
+| Description | ロボットの URDF から Pick & Place の環境を作成し、デモの収集と GR00T N1.7 の学習を行います。SSH で接続し、Franka の例から始められます。 |
+| Compute | NVIDIA L40S 1 枚。別の対応 GPU で学習する場合は VRAM 44 GB 以上 |
+| Disk storage | **300 GiB 以上** |
+| Software configuration | **VM Mode**、Jupyter なし |
+| Setup script | [docker/brev_launchable.sh](https://github.com/momoiorg-repository/urdf2vla/blob/main/docker/brev_launchable.sh) の中身を貼る |
+| Source | **I don’t have any code files**。リポジトリは setup script が clone します。 |
+| Network（Isaac Sim、任意） | 公開配信では `49100/TCP` と `47998/UDP` を転送し、両方をデプロイした人の IP に制限します。割り当てられた公開ポート番号を[デスクトップクライアント](#desktop-streaming-client)か[ブラウザビューア](#remapped-kit-ports)に指定します。 |
+| Network（URDF ビューア、任意） | HTTP ポート `8080` の認証付き **Secure Link** を追加し、名前を `Robot viewer` にします。 |
+| Launch parameter（任意） | `HF_TOKEN` を任意の **Text** として追加し、既定値は空にします。組織の secret を選ぶか、後で `hf auth login` できます。 |
+| View access | 最初のテストでは **Only my organization** を選びます。 |
+
+既定のリビジョンは `main` です。マージ前にテストする場合は、貼り付けたスクリプトの `URDF2VLA_REF` に公開リポジトリ上の
+対象ブランチを指定します。毎回同じ版を使うにはリリースタグを指定します。
+Brev が setup script を実行するのは一度だけです。ドライバの更新で再起動した場合は systemd サービスが続きを実行します。
+SSH で接続し、`bash ~/urdf2vla/docker/brev_setup.sh --status` と `/var/log/urdf2vla-setup.log` で完了を確認します。
+
+**Create Launchable** でデプロイ用のリンクを発行し、そのリンクからテスト用の VM を作成します。下の Franka の確認が
+通ったら **View access** を公開したい範囲に変更し、**My Launchables → Copy Markdown Badge** から README やドキュメント
+用の **Launch on Brev** ボタンを取得できます。[NVIDIA Brev の共有とバッジ](https://docs.nvidia.com/brev/concepts/launchables#embedding-launchables)
+
+### Franka でデプロイを確認する {#franka-smoke-test}
+
+既存の VM ではセットアップ前に `nvidia-smi`、`docker info`、`df -h . /data` を確認します。セットアップにより、ドライバの
+更新と再起動や、Docker の保存先の切り替えが行われる場合があります。切り替え前のイメージとコンテナは元の保存先に残ります。
+
+セットアップが終わったら、VM の端末でリポジトリに移動し、`.venv` を有効にして `urdf2vla doctor` を実行します。
+エラーを解消したら、[Franka チュートリアルの手順 1〜3](../tutorial.md#create) を `projects/brev_franka` で実行し、
+`snapshots/` の `*_start.png` と `*_end.png` にアーム、台、物体、箱が写っていることを確認します。Secure Link を追加した
+場合は、VM で `urdf2vla view --project projects/brev_franka --port 8080` を起動し、コンソールで **Robot viewer** を開きます。
+初回は Kit がシェーダーをコンパイルするため、Isaac Sim の起動に数分かかることがあります。
+
+#### デモ 3 件を記録して再生する {#franka-replay-test}
+
+シーンの検査が通ったら、Isaac Sim と GR00T コンテナを使って記録から再生まで確認します。記録済みの行動を使うため、
+学習済みチェックポイントや Hugging Face へのログインは不要です。Kit で配信中の場合は GPU を空けるために停止します。
+繰り返し試す場合は、別のデータセット名を使います。
 
 ```bash
-#!/bin/bash
-# urdf2vla: https://github.com/momoiorg-repository/urdf2vla (docs/guides/brev.md)
-export URDF2VLA_REF=main
-curl -fsSL "https://raw.githubusercontent.com/momoiorg-repository/urdf2vla/${URDF2VLA_REF}/docker/brev_setup.sh" -o /tmp/urdf2vla_brev_setup.sh
-bash /tmp/urdf2vla_brev_setup.sh
+project=projects/brev_franka
+dataset=brev_smoke
+urdf2vla configure_vla_interface --project "$project"
+urdf2vla setup_teleoperation --project "$project"
+urdf2vla collect_dataset --project "$project" --device scripted --num-demos 3 --dataset "$dataset"
+urdf2vla convert_dataset --project "$project" --dataset "$dataset"
+urdf2vla evaluate_vla --project "$project" --replay --dataset "$dataset" --episodes 3 --video
 ```
 
-スクリプトはリポジトリを `URDF2VLA_REF` で clone します。どのデプロイも同じ版になるよう、`main` ではなくリリースの
-タグにしてください。Brev は setup script を 1 回だけ実行し、再起動の後は実行しません。そのためスクリプトは、ドライバの
-再起動の後も systemd のサービスとして続きを実行します。その再起動で Brev の表示が「完了」や「中断」になることが
-あります。ログインして `--status` で確かめてください。
+記録では成功したデモだけを保存するため、3 回以上試行することがあります。`build/collect_report.yaml` で保存件数を、
+`build/eval_report.yaml` で再生の結果を確認します。再生では記録された行動とサーバーとの通信を検査します。
+`--video` を指定すると、`build/eval_videos/` にエピソードごとの MP4 が保存されます。
+
+<figure>
+  <video controls muted playsinline preload="none" width="100%" poster="../../../assets/brev_franka_replay.jpg" src="../../../assets/brev_franka_replay.mp4" aria-label="3 台のカメラで見た Franka のデモ再生"></video>
+  <figcaption>Franka がキューブを箱に入れるデモの再生。左から手先、左、右のカメラ。</figcaption>
+</figure>
+
+モデルを学習して評価する手順は[学習と評価](training.md)にあります。
+
+### Isaac Sim の Kit ビューポートを配信する {#kit-livestream}
+
+L40S など、NVIDIA NVENC に対応する GPU を使います。手元のマシンから Kit の両方のポートに到達できる必要があります。
+公開配信には、プロバイダーのファイアウォールか Brev の **Ports** タブを使います。
+WebRTC 配信自体には認証がないため、両方の公開ポートをデプロイした人の IP に制限します。[Brev のネットワーク設定](https://docs.nvidia.com/brev/concepts/launchables#network) ·
+[Isaac Sim 6.2 の配信クライアント](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/manual_livestream_clients.html)
+
+| 宛先ポート | プロトコル | 用途 |
+|---|---|---|
+| `49100` | TCP | WebRTC シグナリング |
+| `47998` | UDP | WebRTC 映像 |
+
+Brev の **Public Port** と **Destination Port** を確認します。宛先ポートは VM 上で Kit が使う番号です。Brev の公開
+エンドポイントに接続するときは、クライアントに割り当てられた公開ポート番号を指定します。
+
+`import_robot` が成功したら、VM のリポジトリで接続方法に対応するコマンドを実行します。
+
+=== "公開エンドポイント"
+
+    `STREAM_IPV4` は、手元から両方の公開ポートに接続できるエンドポイントの IPv4 アドレスに置き換えます。
+    モード `1` は Kit ビジュアライザーを有効にし、このアドレスをクライアントに通知します。
+
+    ```bash
+    urdf2vla launch_sim --project projects/brev_franka --livestream 1 --public-ip STREAM_IPV4
+    ```
+
+=== "プライベートネットワーク"
+
+    VM と手元のマシンを、相互に通信できる同じプライベートネットワークまたは VPN につなぎます。
+
+    ```bash
+    urdf2vla launch_sim --project projects/brev_franka --livestream 2
+    ```
+
+#### Isaac Sim WebRTC Streaming Client で接続する {#desktop-streaming-client}
+
+**手元のマシン**の OS と CPU アーキテクチャに合う **Isaac Sim WebRTC Streaming Client** を取得します。
+[NVIDIA のクライアント配布ページ](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/download.html#latest-release)
+
+| 手元の OS | インストール方法 |
+|---|---|
+| Windows | `.exe` インストーラーを実行し、スタートメニューから **Isaac Sim WebRTC Streaming Client** を開きます。 |
+| macOS | Apple シリコンまたは Intel 向けの `.dmg` を開き、アプリを **Applications** にドラッグします。 |
+| Ubuntu または Debian | ダウンロード先で、対象の `.deb` パッケージを `sudo apt install ./isaacsim-webrtc-streaming-client-*-linux-*.deb` でインストールし、アプリケーションメニューから開きます。 |
+
+1. Brev VM で `launch_sim` を起動したまま、プロジェクトの `logs/` にある最新の `*_launch_sim.log` に `env ready` が出るまで待ちます。
+2. 手元でクライアントを開きます。**Server** には、モード `1` なら `--public-ip` に渡した IPv4、モード `2` なら到達可能な VM のプライベート IPv4 を入力します。
+3. Brev の公開エンドポイントを使う場合は、TCP の **Public Port** を **Signal** に、UDP の **Public Port** を **Stream** に入力します。Kit の既定ポートに直接接続する場合は `49100` と `47998` を使います。
+4. **Connect** を押します。接続を切るにはクライアントを閉じ、Kit を停止するには VM の端末で Ctrl+C を押します。
+
+<figure markdown="span">
+  ![デスクトップクライアントの Server、Signal、Stream の入力欄と Connect ボタン](../assets/brev_webrtc_client.png)
+  <figcaption>Isaac Sim WebRTC Streaming Client 2.0.0 の既定値。</figcaption>
+</figure>
+
+接続できない場合は **Signal** に入力した TCP ポートを確認し、ほかの配信クライアントを閉じます。接続できても画面が
+空白の場合は、**Stream** に入力した UDP ポートを確認し、**View → Reload** を試します。
+[NVIDIA のクライアント設定とトラブルシューティング](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/manual_livestream_clients.html#isaac-sim-short-webrtc-streaming-client)
+
+#### ポート番号が異なる場合のブラウザビューア {#remapped-kit-ports}
+
+NVIDIA のブラウザビューアには、シグナリングと映像の公開ポートを個別に指定できます。`launch_sim --livestream 1` の
+`--public-ip` に公開エンドポイントの到達可能な IPv4 アドレスを渡し、Kit は既定の宛先ポートで起動します。ビューアの
+ビルドには、Brev に表示されたホスト名（`:port` の部分を除く）と **Public Port** の番号を使います。
+[Isaac Sim 6.2 のブラウザビューア](https://github.com/isaac-sim/IsaacSim/blob/v6.2.0/tools/docker/web-viewer/Dockerfile)
+
+```bash
+viewer_dir=$(mktemp -d)
+curl -fsSL https://raw.githubusercontent.com/isaac-sim/IsaacSim/v6.2.0/tools/docker/web-viewer/Dockerfile \
+  -o "$viewer_dir/Dockerfile"
+docker build -t urdf2vla/kit-web-viewer \
+  --build-arg ISAACSIM_HOST=PUBLIC_HOSTNAME \
+  --build-arg ISAACSIM_SIGNAL_PORT=PUBLIC_TCP_PORT \
+  --build-arg ISAACSIM_STREAM_PORT=PUBLIC_UDP_PORT "$viewer_dir"
+docker run --rm -p 127.0.0.1:8210:8210 urdf2vla/kit-web-viewer
+```
+
+手元のマシンで `brev port-forward INSTANCE --port 8210:8210` を実行し、Chromium または Chrome で
+`http://localhost:8210` を開きます。ブラウザは WebRTC に Brev の公開エンドポイントを使います。Kit に同時に接続できるのは
+クライアント 1 台です。既存の接続を閉じてから開いてください。[Brev のポートフォワーディング](https://docs.nvidia.com/brev/cli/connectivity) ·
+[Isaac Sim クライアントの制限](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/manual_livestream_clients.html)
+
+<figure markdown="span">
+  ![Franka の作業台、箱、ライムを表示している Isaac Sim の配信画面](../assets/brev_webrtc_viewport.png)
+  <figcaption>Brev 経由でブラウザビューアに配信された Franka のシーン。</figcaption>
+</figure>
 
 下の節は、スクリプトがすることを 1 段階ずつ説明したものです。手で準備するときや、スクリプトがどこかの段階で止まった
 ときに使ってください。

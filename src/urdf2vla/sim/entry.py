@@ -44,8 +44,12 @@ def main() -> None:
 
     # Isaac Lab 3.0: Kit を headless で起動し、カメラの描画を有効にする（無いと画像が黒い）
     launcher = {"headless": True, "enable_cameras": True, "require_kit": True}
-    if getattr(args, "livestream", False):
-        launcher["livestream"] = 2
+    livestream = getattr(args, "livestream", None)
+    if livestream:
+        # collect_dataset keeps its boolean flag. Isaac Lab selects the Kit visualizer for either mode.
+        launcher["livestream"] = 2 if livestream is True else livestream
+        if launcher["livestream"] == 1:
+            os.environ["PUBLIC_IP"] = str(args.public_ip)
     # 終了処理（コンテキストを抜ける）は行わない: Isaac Sim は終了処理で止まることがあるので、結果を書いたら os._exit で抜ける。
     # コンテキストへの参照を持ち続けること（参照が切れると generator が閉じられ、その場で Kit が終了する）
     global _SIM_CONTEXT

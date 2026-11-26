@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # NVIDIA Brev のインスタンスを urdf2vla が動く状態にする（Launchable の setup script として、または手で 1 回）。
 #
-#   Launchable: setup script に docs/guides/brev.md の数行を貼る（このファイルを取得して実行する）
+#   Launchable: setup script に docker/brev_launchable.sh の内容を貼る（このファイルを取得して実行する）
 #   手で:       curl -fsSL https://raw.githubusercontent.com/momoiorg-repository/urdf2vla/main/docker/brev_setup.sh -o /tmp/urdf2vla_brev_setup.sh
 #               bash /tmp/urdf2vla_brev_setup.sh     （空きの大きいディスクに clone する。clone 済みなら bash docker/brev_setup.sh）
 #   進み具合:   bash docker/brev_setup.sh --status      （ログ: /var/log/urdf2vla-setup.log）

@@ -1,5 +1,7 @@
 """Isaac Sim 内で動く Skill の宣言（実装は urdf2vla.sim 側）。"""
 
+from ipaddress import IPv4Address
+
 from urdf2vla.registry import Arg, declare_sim_skill
 
 declare_sim_skill(
@@ -24,7 +26,14 @@ declare_sim_skill(
     requires=["import_robot", "configure_camera"],
     args=[
         Arg(("--steps",), {"type": int, "default": 60, "help": "動作確認で進める制御ステップ数"}),
-        Arg(("--livestream",), {"action": "store_true", "help": "WebRTC で GUI を配信し、Ctrl-C まで動かし続ける"}),
+        Arg(("--livestream",), {
+            "nargs": "?",
+            "type": int,
+            "choices": [1, 2],
+            "const": 2,
+            "help": "Kit を WebRTC で配信する（1: リモート接続、2: ローカル・プライベート接続。値の省略時は 2）",
+        }),
+        Arg(("--public-ip",), {"type": IPv4Address, "help": "--livestream 1 でクライアントが接続する VM の IPv4 アドレス"}),
         Arg(("--timeout",), {"type": float, "default": 900.0, "help": "秒（--livestream では無制限）"}),
     ],
 )

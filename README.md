@@ -16,6 +16,8 @@ checking its own result and asking only what the URDF can't tell it.
 
 ## Quick start
 
+For a cloud GPU, see the [NVIDIA Brev setup and Launchable guide](docs/guides/brev.md).
+
 Needs Linux, an NVIDIA RTX GPU with driver 580+, Docker with the NVIDIA Container Toolkit, ~150 GB of disk and
 [uv](https://docs.astral.sh/uv/). Training needs a GPU with 44 GB or more (it can be another machine or a cloud GPU).
 

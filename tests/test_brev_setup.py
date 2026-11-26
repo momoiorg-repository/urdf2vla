@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 SCRIPT = Path(__file__).resolve().parent.parent / "docker" / "brev_setup.sh"
+LAUNCHABLE = SCRIPT.with_name("brev_launchable.sh")
 pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="bash がない")
 
 
@@ -60,3 +61,36 @@ def test_status_done_shows_doctor_errors(tmp_path: Path):
     (tmp_path / "doctor.json").write_text('{"skill": "doctor", "status": "error", "errors": ["cdi_spec: GPU の CDI の定義がありません"]}')
     r = run("--status", state=tmp_path)
     assert "cdi_spec: GPU の CDI の定義がありません" in r.stdout
+
+
+@pytest.mark.parametrize("download_exit", [0, 22])
+def test_launchable_uses_the_selected_ref_and_requires_a_successful_download(tmp_path: Path, download_exit: int):
+    curl = tmp_path / "curl"
+    curl.write_text(
+        """#!/bin/bash
+set -eu
+previous=
+for arg; do
+    if [[ "$arg" == https://* ]]; then printf '%s\\n' "$arg" > "$TEST_DIR/url"; fi
+    if [[ "$previous" == --output ]]; then
+        printf '%s\\n' "$arg" > "$TEST_DIR/download"
+        printf '%s\\n' 'printf "%s\\n" "$URDF2VLA_REF"' > "$arg"
+    fi
+    previous="$arg"
+done
+exit "$DOWNLOAD_EXIT"
+"""
+    )
+    curl.chmod(0o755)
+    env = {
+        "PATH": f"{tmp_path}:/usr/bin:/bin",
+        "TEST_DIR": str(tmp_path),
+        "URDF2VLA_REF": "v1.2.3",
+        "DOWNLOAD_EXIT": str(download_exit),
+    }
+    result = subprocess.run(["bash", str(LAUNCHABLE)], capture_output=True, text=True, env=env, timeout=30)
+
+    assert result.returncode == download_exit
+    assert result.stdout == ("v1.2.3\n" if download_exit == 0 else "")
+    assert (tmp_path / "url").read_text().strip().endswith("/v1.2.3/docker/brev_setup.sh")
+    assert not Path((tmp_path / "download").read_text().strip()).exists()

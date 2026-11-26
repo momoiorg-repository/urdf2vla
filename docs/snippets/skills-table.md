@@ -7,7 +7,7 @@
 | `configure_task` | host | `configure_robot` | `generated/robot_config.yaml`<br>`project.yaml: task.*` | `generated/task.yaml` | — |
 | `configure_camera` | host | `configure_task` | `generated/robot_config.yaml`<br>`generated/task.yaml`<br>`project.yaml: cameras`<br>`answers.yaml: cameras` | `generated/cameras.yaml` | `--preset` |
 | `import_robot` | sim | `configure_robot` | `generated/robot_config.yaml`<br>`build/robot.urdf` | `build/usd/robot.usd`<br>`build/import_report.yaml` | `--force`<br>`--timeout` |
-| `launch_sim` | sim | `import_robot`<br>`configure_camera` | `generated/robot_config.yaml`<br>`generated/cameras.yaml`<br>`generated/task.yaml`<br>`build/usd/robot.usd` | `snapshots/*.png`<br>`build/launch_report.yaml` | `--steps`<br>`--livestream`<br>`--timeout` |
+| `launch_sim` | sim | `import_robot`<br>`configure_camera` | `generated/robot_config.yaml`<br>`generated/cameras.yaml`<br>`generated/task.yaml`<br>`build/usd/robot.usd` | `snapshots/*.png`<br>`build/launch_report.yaml` | `--steps`<br>`--livestream`<br>`--public-ip`<br>`--timeout` |
 | `configure_vla_interface` | host | `launch_sim` | `generated/robot_config.yaml`<br>`generated/cameras.yaml`<br>`generated/task.yaml` | `generated/vla_interface.yaml` | `--vla-type` |
 | `setup_teleoperation` | sim | `configure_vla_interface` | `generated/robot_config.yaml`<br>`generated/vla_interface.yaml` | `generated/teleop.yaml`<br>`build/teleop_report.yaml` | `--timeout` |
 | `collect_dataset` | sim | `setup_teleoperation` | `generated/teleop.yaml`<br>`generated/vla_interface.yaml` | `datasets/<name>.hdf5`<br>`build/collect_report.yaml` | `--device`<br>`--source`<br>`--num-demos`<br>`--max-attempts`<br>`--dataset`<br>`--seed`<br>`--livestream`<br>`--timeout` |
