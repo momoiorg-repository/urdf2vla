@@ -1,6 +1,12 @@
 Third-party material in docs/assets
 ===================================
 
+brev-setup/create-launchable.png, brev-setup/source.png
+-----------------------------------------------------
+Screenshots from NVIDIA's Brev Launchable Creation Guide. Copyright (c) 1993-2025
+NVIDIA CORPORATION & AFFILIATES. Licensed under Apache License 2.0.
+https://github.com/brevdev/launchables/blob/b515e456fe6298c78a7209ec407b0ad8fe0f3079/LAUNCHABLE-CREATION-GUIDE.md
+
 simready_grippers.png
 ---------------------
 Thumbnails of gripper assets from the NVIDIA Isaac Sim 6.2 asset library

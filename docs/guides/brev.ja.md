@@ -1,8 +1,10 @@
 # NVIDIA Brev で動かす
 
-NVIDIA Brev のクラウドの GPU で、新しいインスタンスから学習済みモデルまで urdf2vla を動かす手順です。このページの
-数値はすべて 1 台のインスタンスで測ったものです: **NVIDIA L40S（46 GB）**、CPU 8、メモリ 144 GB、Ubuntu 22.04、
-FANUC CRX-3iA の例。
+NVIDIA Brev のクラウド GPU で、新しいインスタンスから学習済みモデルまで urdf2vla を動かす手順です。FANUC CRX-3iA の
+実行時間は **NVIDIA L40S（46 GB）**、CPU 8、メモリ 144 GB、Ubuntu 22.04 の環境で測りました。
+
+Brev を初めて使う場合は[コンソールの図解手順](#launchable)から始めます。すでに GPU インスタンスがある場合は
+[VM のセットアップ](#script)に進みます。
 
 下の各項目は `urdf2vla doctor` が検査します。問題があれば直し方と、このページの該当の節へのリンクを表示します。
 準備の各段階のあとで実行してください。
@@ -61,33 +63,119 @@ tail -f /var/log/urdf2vla-setup.log              # 出力のすべて
     `docker/run.sh` は、手元のマシンと同じく `ACCEPT_EULA=Y` でシミュレーションのコンテナを起動します。使うことは
     Isaac Sim の image の利用規約に同意することです（[Isaac Sim のコンテナのインストール](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/install_container.html)）。
 
-### Brev の Launchable {#launchable}
+### Brev の Launchable を作成してデプロイする {#launchable}
 
-[Brev コンソール](https://brev.nvidia.com)で **Launchables → Create Launchable** を開き、次の設定を使います。
-VM の料金はデプロイしたアカウントにかかります。[NVIDIA Brev Launchables](https://docs.nvidia.com/brev/concepts/launchables)
+Launchable は GPU、ソフトウェア、ネットワークの設定を保存し、そのリンクから VM を起動できるようにします。
+VM の料金はデプロイしたアカウントにかかります。画像には公開コンソールとログイン後の画面の公開例を使っています。
+画面の順序と見た目はコンソールの版やプロバイダーによって変わります。
+[NVIDIA Brev Launchables](https://docs.nvidia.com/brev/concepts/launchables)
 
-| 設定 | 値 |
+#### 1. サインインして作成画面を開く
+
+[Brev コンソール](https://brev.nvidia.com)で **Sign In** を選び、Launchable を作る組織を選びます。
+**Launchables → Create Launchable** を開きます。**Details** で名前を `urdf2vla` などにし、
+「Pick & Place のシミュレーションを作成し、GR00T を学習する」などの説明を入力します。
+
+<figure markdown="span">
+  ![上部に Sign In と Launchables がある Brev のホーム画面](../assets/brev-setup/sign-in.png)
+  <figcaption>Brev のホーム画面からサインインします。</figcaption>
+</figure>
+
+<figure markdown="span">
+  ![Brev の Launchables ページの Create Launchable ボタン](../assets/brev-setup/create-launchable.png)
+  <figcaption>NVIDIA の公開例にある Create Launchable ボタン。</figcaption>
+</figure>
+
+#### 2. GPU とディスクを選ぶ
+
+**Default hardware configuration** で **NVIDIA L40S を 1 枚**選ぶと、同じ VM でシミュレーション、配信、学習が
+できます。**Disk Storage (GiB)** は **300** 以上にします。WebRTC を公開する場合は TCP と UDP のルールを設定できる
+プランを選び、選択したプランの料金とストレージを確認します。
+
+<figure markdown="span">
+  ![L40S が選ばれ、各プランのストレージとポートの特徴が表示された GPU 選択画面](../assets/brev-setup/compute.png)
+  <figcaption>プランごとに GPU の枚数、ストレージ、ポート設定を確認します。</figcaption>
+</figure>
+
+<figure markdown="span">
+  ![Disk Storage と Cost Breakdown が表示された Configure and Deploy 画面](../assets/brev-setup/storage.png)
+  <figcaption>公開の構成画面でディスク容量と合計料金を確認できます。</figcaption>
+</figure>
+
+#### 3. セットアップスクリプトを登録する
+
+**Software configuration** で **VM Mode** を選び、Jupyter はオフにします。
+[brev_launchable.sh](https://raw.githubusercontent.com/momoiorg-repository/urdf2vla/main/docker/brev_launchable.sh) を開き、
+ファイル全体を **Setup script** に貼り付けます。**Source** は **I don’t have any code files** を選びます。
+スクリプトが urdf2vla を clone して両方のコンテナをビルドします。
+
+既定のリビジョンは `main` です。マージ前に試す場合は、貼り付けたスクリプトの `URDF2VLA_REF` に公開ブランチを
+指定します。毎回同じ版を使うにはリリースタグを指定します。
+
+<figure markdown="span">
+  ![Brev の Source 画面の右側にあるコードファイルなしの選択肢](../assets/brev-setup/source.png)
+  <figcaption>コードファイルなしを選び、リポジトリの取得をセットアップスクリプトに任せます。</figcaption>
+</figure>
+
+#### 4. ポートと任意の認証情報を設定する
+
+**Network** で、使うビューアに必要な項目を追加します。
+
+| 機能 | Brev の設定 |
 |---|---|
-| Name | `urdf2vla` |
-| Description | ロボットの URDF から Pick & Place の環境を作成し、デモの収集と GR00T N1.7 の学習を行います。SSH で接続し、Franka の例から始められます。 |
-| Compute | NVIDIA L40S 1 枚。別の対応 GPU で学習する場合は VRAM 44 GB 以上 |
-| Disk storage | **300 GiB 以上** |
-| Software configuration | **VM Mode**、Jupyter なし |
-| Setup script | [docker/brev_launchable.sh](https://github.com/momoiorg-repository/urdf2vla/blob/main/docker/brev_launchable.sh) の中身を貼る |
-| Source | **I don’t have any code files**。リポジトリは setup script が clone します。 |
-| Network（Isaac Sim、任意） | 公開配信では `49100/TCP` と `47998/UDP` を転送し、両方をデプロイした人の IP に制限します。割り当てられた公開ポート番号を[デスクトップクライアント](#desktop-streaming-client)か[ブラウザビューア](#remapped-kit-ports)に指定します。 |
-| Network（URDF ビューア、任意） | HTTP ポート `8080` の認証付き **Secure Link** を追加し、名前を `Robot viewer` にします。 |
-| Launch parameter（任意） | `HF_TOKEN` を任意の **Text** として追加し、既定値は空にします。組織の secret を選ぶか、後で `hf auth login` できます。 |
-| View access | 最初のテストでは **Only my organization** を選びます。 |
+| Isaac Sim のシグナリング | **TCP/UDP Ports**。宛先 `49100`、**TCP**、デプロイした人の IP に制限 |
+| Isaac Sim の映像 | **TCP/UDP Ports**。宛先 `47998`、**UDP**、デプロイした人の IP に制限 |
+| URDF のブラウザビューア | **Secure Link**。名前は `Robot viewer`、HTTP ポートは `8080` |
 
-既定のリビジョンは `main` です。マージ前にテストする場合は、貼り付けたスクリプトの `URDF2VLA_REF` に公開リポジトリ上の
-対象ブランチを指定します。毎回同じ版を使うにはリリースタグを指定します。
-Brev が setup script を実行するのは一度だけです。ドライバの更新で再起動した場合は systemd サービスが続きを実行します。
-SSH で接続し、`bash ~/urdf2vla/docker/brev_setup.sh --status` と `/var/log/urdf2vla-setup.log` で完了を確認します。
+デプロイ後に WebRTC の各ルールの **Public Port** を確認します。宛先と異なる番号が割り当てられる場合があります。
+[WebRTC クライアント](#desktop-streaming-client)には公開ポート番号を入力します。
 
-**Create Launchable** でデプロイ用のリンクを発行し、そのリンクからテスト用の VM を作成します。下の Franka の確認が
-通ったら **View access** を公開したい範囲に変更し、**My Launchables → Copy Markdown Badge** から README やドキュメント
-用の **Launch on Brev** ボタンを取得できます。[NVIDIA Brev の共有とバッジ](https://docs.nvidia.com/brev/concepts/launchables#embedding-launchables)
+<figure markdown="span">
+  ![47998 と 49100 が表示され、IP が制限された Brev の TCP/UDP ポート画面](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/_images/isim_5.0_full_ref_external_brev_expose_ports.png)
+  <figcaption>NVIDIA の公開例では、デプロイ済みインスタンスでポートと IP 制限を確認できます。</figcaption>
+</figure>
+
+Franka の動作確認では **Launch parameters** は空欄のままで構いません。学習する場合は、VM 上で後から Hugging Face に
+サインインするか、既定値が空の任意の **Text** パラメーター `HF_TOKEN` を追加します。このパラメーターを使う場合は
+デプロイ時に組織の secret を選びます。[NVIDIA Brev の Launch parameters](https://docs.nvidia.com/brev/concepts/launchables#launch-parameters)
+
+#### 5. 保存してデプロイする
+
+最初の確認では **View access** を **Only my organization** に設定します。**Create Launchable** を選び、生成されたリンクを
+コピーします。そのリンクを開いて GPU と見積もり料金を確認し、**Deploy Launchable** を選びます。デプロイが始まったら
+**Go to Instance Page** を開きます。確認後に **My Launchables** から公開範囲を変更し、Markdown バッジを取得できます。
+[NVIDIA Brev の共有とバッジ](https://docs.nvidia.com/brev/concepts/launchables#embedding-launchables)
+
+<figure markdown="span">
+  ![右上に Deploy Launchable ボタンがある Brev のデプロイ画面の例](../assets/brev-setup/deploy.png)
+  <figcaption>NVIDIA の公開 Isaac Launchable で、Deploy Launchable の位置と見積もり料金を確認できます。</figcaption>
+</figure>
+
+#### 6. VM に接続してセットアップを確認する
+
+VM が **Running** になったら **Access** を開き、インスタンス名を確認します。手元のマシンに
+[Brev CLI](https://docs.nvidia.com/brev/cli/getting-started) を入れ、次のコマンドで接続します。
+`INSTANCE` を Brev に表示された名前に置き換えます。
+
+```bash
+brev login
+brev shell INSTANCE
+```
+
+<figure markdown="span">
+  ![Running、Built、Access タブが表示された Brev のインスタンス画面](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/_images/isim_5.0_full_ref_external_brev_instance_start.png)
+  <figcaption>インスタンス画面の Access を開きます。VM が起動済みでも、urdf2vla の準備は続いている場合があります。</figcaption>
+</figure>
+
+VM でセットアップの状態とログを確認します。ドライバ更新で VM が再起動した場合は接続し直してください。
+再起動後は systemd サービスが続きを実行します。
+
+```bash
+bash ~/urdf2vla/docker/brev_setup.sh --status
+tail -f /var/log/urdf2vla-setup.log
+```
+
+Ctrl+C でログの表示を止めます。セットアップが完了したら、下の Franka の動作確認へ進みます。
 
 ### Franka でデプロイを確認する {#franka-smoke-test}
 

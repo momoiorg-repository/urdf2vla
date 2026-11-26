@@ -3,6 +3,9 @@
 This page walks through urdf2vla on a cloud GPU from NVIDIA Brev, from a fresh instance to a trained model. The
 FANUC CRX-3iA timings were measured on an **NVIDIA L40S (46 GB)**, 8 CPUs, 144 GB RAM, and Ubuntu 22.04.
 
+New to Brev? Start with the [illustrated console walkthrough](#launchable). If you already have a GPU instance,
+go straight to [setup on the VM](#script).
+
 `urdf2vla doctor` checks each point below. When something is wrong, it prints the fix and links to the section here.
 Run it after every step of the setup:
 
@@ -61,34 +64,119 @@ Accepting the license stays a step in the browser. Continue with the [tutorial](
     accepting the license of the Isaac Sim image (see
     [Isaac Sim's container installation](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/install_container.html)).
 
-### A Brev Launchable {#launchable}
+### Create and deploy a Brev Launchable {#launchable}
 
-In the [Brev Console](https://brev.nvidia.com), open **Launchables → Create Launchable**. Use the following settings
-to make a VM that runs the setup above. Brev bills the account that deploys the VM. [NVIDIA Brev Launchables](https://docs.nvidia.com/brev/concepts/launchables)
+A Launchable saves the GPU, software, and network settings for a VM deployers can start from a link. Brev bills
+the account that deploys the VM. The screenshots show the public console and published examples of signed-in
+screens. The order and appearance of controls can vary by console version and provider.
+[NVIDIA Brev Launchables](https://docs.nvidia.com/brev/concepts/launchables)
 
-| Setting | Value |
+#### 1. Sign in and open the builder
+
+Open the [Brev Console](https://brev.nvidia.com), select **Sign In**, and choose the organization that will own
+the Launchable. Open **Launchables → Create Launchable**. Under **Details**, enter a name such as
+`urdf2vla` and a description such as “Create a robot pick-and-place simulation and train a GR00T model.”
+
+<figure markdown="span">
+  ![Brev home page with Sign In and Launchables in the top navigation](../assets/brev-setup/sign-in.png)
+  <figcaption>Sign in from the Brev home page.</figcaption>
+</figure>
+
+<figure markdown="span">
+  ![Create Launchable button on the Brev Launchables page](../assets/brev-setup/create-launchable.png)
+  <figcaption>The Create Launchable button in NVIDIA’s published console example.</figcaption>
+</figure>
+
+#### 2. Choose the GPU and disk
+
+Under **Default hardware configuration**, choose **one NVIDIA L40S** for simulation, streaming, and training on
+the same VM. Set **Disk Storage (GiB)** to **300** or more. For public WebRTC streaming, choose an offer that
+allows custom TCP and UDP rules. Compare the current price and storage on the selected offer.
+
+<figure markdown="span">
+  ![Brev compute picker with L40S selected and provider cards showing storage and port features](../assets/brev-setup/compute.png)
+  <figcaption>Check the GPU count, storage, and port features on each offer.</figcaption>
+</figure>
+
+<figure markdown="span">
+  ![Configure and Deploy screen showing the Disk Storage and Cost Breakdown fields](../assets/brev-setup/storage.png)
+  <figcaption>The public compute preview shows where to check storage and the total price.</figcaption>
+</figure>
+
+#### 3. Add the setup script
+
+In **Software configuration**, choose **VM Mode** and leave Jupyter off. Open the raw
+[brev_launchable.sh setup script](https://raw.githubusercontent.com/momoiorg-repository/urdf2vla/main/docker/brev_launchable.sh)
+and paste the whole file into **Setup script**. Under **Source**, select **I don’t have any code files**. The
+script clones urdf2vla and builds both containers.
+
+The script defaults to `main`. To test changes before merging, set `URDF2VLA_REF` in the pasted script to the
+public branch containing the changes. Use a release tag for a repeatable deployment.
+
+<figure markdown="span">
+  ![Brev Source choices with the no-code-files option on the right](../assets/brev-setup/source.png)
+  <figcaption>Choose the no-code-files option so the setup script can clone the repository.</figcaption>
+</figure>
+
+#### 4. Configure ports and optional credentials
+
+Under **Network**, add these entries only for the viewers you plan to use.
+
+| Feature | Brev setting |
 |---|---|
-| Name | `urdf2vla` |
-| Description | Build a pick-and-place simulation from a robot URDF, record demonstrations, and fine-tune GR00T N1.7. Connect over SSH and start with the Franka example. |
-| Compute | One NVIDIA L40S, or another compatible GPU with at least 44 GB of VRAM for training |
-| Disk storage | **300 GiB or more** |
-| Software configuration | **VM Mode**, with Jupyter off |
-| Setup script | Paste the contents of [docker/brev_launchable.sh](https://github.com/momoiorg-repository/urdf2vla/blob/main/docker/brev_launchable.sh) |
-| Source | Select **I don’t have any code files**. The setup script clones the repo onto the instance. |
-| Network for Isaac Sim (optional) | For public livestreaming, forward `49100/TCP` and `47998/UDP` and restrict both rules to the deployer's IP. Use the assigned public ports in the [desktop client](#desktop-streaming-client) or [browser viewer](#remapped-kit-ports). |
-| Network for the URDF viewer (optional) | Add an authenticated **Secure Link** named `Robot viewer` for HTTP port `8080`. |
-| Launch parameter (optional) | Add `HF_TOKEN` as an optional **Text** parameter with an empty default. Deployers can select a saved organization secret or sign in later with `hf auth login`. |
-| View access | Select **Only my organization** for the first test deployment. |
+| Isaac Sim signaling | **TCP/UDP Ports**, destination `49100`, protocol **TCP**, restricted to the deployer’s IP |
+| Isaac Sim video | **TCP/UDP Ports**, destination `47998`, protocol **UDP**, restricted to the deployer’s IP |
+| URDF browser viewer | **Secure Link**, name `Robot viewer`, HTTP port `8080` |
 
-The setup script defaults to `main`. To test changes before merging, set `URDF2VLA_REF` in the pasted script to the
-branch containing them on the public repository. Use a release tag for a repeatable deployment. Brev runs the script
-once. If the driver upgrade reboots the VM, the systemd service resumes
-setup. To confirm it finished, SSH into the VM and check `bash ~/urdf2vla/docker/brev_setup.sh --status` and
-`/var/log/urdf2vla-setup.log`.
+After deployment, check **Public Port** for each WebRTC rule. Brev may assign numbers that differ from the
+destination ports. Enter the public numbers in the [WebRTC client](#desktop-streaming-client).
 
-Select **Create Launchable** to generate the deployment link. Deploy a test VM from that link and run the Franka
-check below. After it passes, set the intended **View access** and use **My Launchables → Copy Markdown Badge** to
-get a **Launch on Brev** button for your README or docs. [NVIDIA Brev sharing and badges](https://docs.nvidia.com/brev/concepts/launchables#embedding-launchables)
+<figure markdown="span">
+  ![Brev TCP and UDP port panel with restricted access and ports 47998 and 49100](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/_images/isim_5.0_full_ref_external_brev_expose_ports.png)
+  <figcaption>NVIDIA’s example shows the port controls and IP restriction on a deployed instance.</figcaption>
+</figure>
+
+Leave **Launch parameters** empty for the Franka smoke test. For training, either sign in to Hugging Face on
+the VM later or add an optional **Text** parameter named `HF_TOKEN` with an empty default. At deployment,
+select a saved organization secret if you use this parameter. [NVIDIA Brev launch parameters](https://docs.nvidia.com/brev/concepts/launchables#launch-parameters)
+
+#### 5. Save and deploy
+
+In **View access**, choose **Only my organization** for the first test. Select **Create Launchable** and copy
+the generated link. Open it, check the compute and estimated cost, then select **Deploy Launchable**. After
+deployment begins, select **Go to Instance Page**. After verifying your setup, you can change access in
+**My Launchables** and copy the Markdown badge. [NVIDIA Brev sharing and badges](https://docs.nvidia.com/brev/concepts/launchables#embedding-launchables)
+
+<figure markdown="span">
+  ![Example Brev deployment page with the Deploy Launchable button at upper right](../assets/brev-setup/deploy.png)
+  <figcaption>NVIDIA’s public Isaac Launchable shows where to find Deploy Launchable and the estimated price.</figcaption>
+</figure>
+
+#### 6. Open the instance and verify setup
+
+When the VM reaches **Running**, open **Access** and note the instance name. On your workstation, install the
+[Brev CLI](https://docs.nvidia.com/brev/cli/getting-started), then sign in and connect. Replace `INSTANCE` with
+the name shown in Brev.
+
+```bash
+brev login
+brev shell INSTANCE
+```
+
+<figure markdown="span">
+  ![Brev instance page showing Running, Built, and the Access tab](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/_images/isim_5.0_full_ref_external_brev_instance_start.png)
+  <figcaption>Open Access on the instance page. The Brev VM can be running while the urdf2vla setup script still works.</figcaption>
+</figure>
+
+On the VM, check the setup status and log. If the driver upgrade reboots the VM, reconnect. The systemd service
+resumes the setup after boot.
+
+```bash
+bash ~/urdf2vla/docker/brev_setup.sh --status
+tail -f /var/log/urdf2vla-setup.log
+```
+
+Press Ctrl+C to stop following the log. Once setup reports completion, run the Franka smoke test below.
 
 ### Verify the deployment with Franka {#franka-smoke-test}
 
