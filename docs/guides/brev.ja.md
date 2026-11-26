@@ -1,69 +1,25 @@
 # NVIDIA Brev で動かす
 
-NVIDIA Brev のクラウド GPU で、新しいインスタンスから学習済みモデルまで urdf2vla を動かす手順です。FANUC CRX-3iA の
-実行時間は **NVIDIA L40S（46 GB）**、CPU 8、メモリ 144 GB、Ubuntu 22.04 の環境で測りました。
+Brev で GPU VM を起動し、Franka のシミュレーションを確認して、手元で Kit の画面を表示する手順です。動作確認のあとに、デモの記録・再生やモデルの学習に進めます。
 
-Brev を初めて使う場合は[コンソールの図解手順](#launchable)から始めます。すでに GPU インスタンスがある場合は
-[VM のセットアップ](#script)に進みます。
+## 始める前に
 
-下の各項目は `urdf2vla doctor` が検査します。問題があれば直し方と、このページの該当の節へのリンクを表示します。
-準備の各段階のあとで実行してください。
-
-```bash
-urdf2vla doctor
-```
-
-## 始める前に用意するもの
-
-| | |
+| 項目 | 用意するもの |
 |---|---|
-| インスタンス | インスタンスの上で学習するなら **44 GB 以上**の GPU 1 枚（L40S、A100、H100）。小さい GPU でも学習以外はすべて動きます |
-| ディスク | Docker の image とリポジトリを置くディスクに **300 GB 以上**（[ディスク](#disk)） |
-| Hugging Face | アカウント、read 権限のトークン、`nvidia/Cosmos-Reason2-2B` の利用規約への同意（[Hugging Face](#huggingface)） |
-| 時間 | 準備 約 30 分、デモの記録 35 分、学習 1 回 2 時間 |
-
-## スクリプト 1 つで準備する {#script}
-
-新しいインスタンスなら、このページの 1〜4 と 2 つのコンテナの起動を、スクリプト 1 つで済ませられます。ログインする
-ユーザで実行してください（要るところでは `sudo` を使います）:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/momoiorg-repository/urdf2vla/main/docker/brev_setup.sh -o /tmp/urdf2vla_brev_setup.sh
-bash /tmp/urdf2vla_brev_setup.sh
-```
-
-リポジトリはスクリプトが空きのいちばん大きいディスクに clone します。clone 済みなら、その中で
-`bash docker/brev_setup.sh` を実行してください。その場所のまま使い、学習の checkpoint（1 つ 24 GB）に空きが足りなければ
-注意を表示します。
-
-| 段階 | スクリプトがすること |
-|---|---|
-| [ドライバ](#driver) | 580 より古ければ、Brev の hold を外し、580 系に固定して 580 を入れ、再起動します。再起動の後は続きを自動で実行します |
-| [ディスク](#disk) | システムのディスクの空きが 130 GB 未満で、もっと大きいディスクがあれば、Docker の保存先をそこに切り替えます。`/etc/docker/daemon.json` の NVIDIA の設定は維持します。リポジトリを大きいディスクに clone した場合は、`~/urdf2vla` からリンクします。 |
-| [CDI](#cdi) | `/etc/cdi/nvidia.yaml` を作り、コンテナから GPU が見えることを確かめます |
-| [ビルドと起動](#build) | あなたを `docker` グループに入れ、uv と `urdf2vla` コマンド（`.venv`）を入れ、`docker/build.sh` と 2 つのコンテナの `docker/run.sh`、最後に `urdf2vla doctor` を実行します |
-
-約 30 分かかります（ドライバを上げるときはもっと）。準備は systemd のサービスとして動くので、SSH の接続が切れても
-止まりません。進み具合は:
-
-```bash
-bash ~/urdf2vla/docker/brev_setup.sh --status   # どこまで進んだか、次に何をするか
-tail -f /var/log/urdf2vla-setup.log              # 出力のすべて
-```
-
-ログインすると進み具合が表示されます。準備が終わっていれば、ログインしたときにリポジトリに移って `.venv` を有効に
-します。途中の段階で止まったら、ログにどの段階かが出ます。原因を直して（各段階は下の節で説明しています）もう一度
-スクリプトを実行すると、止まった段階から続けます。
-
-その後 [Hugging Face](#huggingface) の準備をします: 利用規約に同意して `hf auth login`。トークンは
-`HF_TOKEN=hf_... bash /tmp/urdf2vla_brev_setup.sh` のようにスクリプトに渡すこともできます（`~/.cache/huggingface/token`
-に保存し、表示はしません）。利用規約への同意だけはブラウザで行います。続きは[チュートリアル](../tutorial.md)へ。
+| Brev | GPU インスタンスを起動できる組織に所属する Brev アカウント |
+| GPU とディスク | 一通り試すには **NVIDIA L40S 1 枚**と **300 GiB 以上**。Kit の配信には NVENC が、VM 上での学習には **44 GB 以上の VRAM** が必要です。 |
+| Hugging Face | [モデルの学習・評価](#huggingface)で必要です。Franka のシミュレーションとデモの再生はログイン前に確認できます。 |
 
 !!! note
     `docker/run.sh` は、手元のマシンと同じく `ACCEPT_EULA=Y` でシミュレーションのコンテナを起動します。使うことは
     Isaac Sim の image の利用規約に同意することです（[Isaac Sim のコンテナのインストール](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/install_container.html)）。
 
-### Brev の Launchable を作成してデプロイする {#launchable}
+## Brev の VM を準備する
+
+- Launchable を作る場合は[コンソールで設定](#launchable)します。リンクを受け取っている場合は[デプロイ](#deploy-launchable)から始めます。
+- すでに Brev VM を持っている場合は[SSH で接続](#connect-vm)します。
+
+### Brev の Launchable を作成する {#launchable}
 
 Launchable は GPU、ソフトウェア、ネットワークの設定を保存し、そのリンクから VM を起動できるようにします。
 VM の料金はデプロイしたアカウントにかかります。画像には公開コンソールとログイン後の画面の公開例を使っています。
@@ -73,13 +29,13 @@ VM の料金はデプロイしたアカウントにかかります。画像に�
 #### 1. サインインして作成画面を開く
 
 [Brev コンソール](https://brev.nvidia.com)で **Sign In** を選び、Launchable を作る組織を選びます。
-**Launchables → Create Launchable** を開きます。**Details** で名前を `urdf2vla` などにし、
-「Pick & Place のシミュレーションを作成し、GR00T を学習する」などの説明を入力します。
 
 <figure markdown="span">
   ![上部に Sign In と Launchables がある Brev のホーム画面](../assets/brev-setup/sign-in.png)
   <figcaption>Brev のホーム画面からサインインします。</figcaption>
 </figure>
+
+**Launchables → Create Launchable** を開きます。**Details** で名前に `urdf2vla`、説明に用途を短く入力します。
 
 <figure markdown="span">
   ![Brev の Launchables ページの Create Launchable ボタン](../assets/brev-setup/create-launchable.png)
@@ -89,13 +45,14 @@ VM の料金はデプロイしたアカウントにかかります。画像に�
 #### 2. GPU とディスクを選ぶ
 
 **Default hardware configuration** で **NVIDIA L40S を 1 枚**選ぶと、同じ VM でシミュレーション、配信、学習が
-できます。**Disk Storage (GiB)** は **300** 以上にします。WebRTC を公開する場合は TCP と UDP のルールを設定できる
-プランを選び、選択したプランの料金とストレージを確認します。
+できます。WebRTC を公開する場合は TCP と UDP のルールを設定できるプランを選びます。
 
 <figure markdown="span">
   ![L40S が選ばれ、各プランのストレージとポートの特徴が表示された GPU 選択画面](../assets/brev-setup/compute.png)
   <figcaption>プランごとに GPU の枚数、ストレージ、ポート設定を確認します。</figcaption>
 </figure>
+
+**Disk Storage (GiB)** は **300** 以上に設定し、そのプランの料金を確認します。
 
 <figure markdown="span">
   ![Disk Storage と Cost Breakdown が表示された Configure and Deploy 画面](../assets/brev-setup/storage.png)
@@ -130,44 +87,67 @@ VM の料金はデプロイしたアカウントにかかります。画像に�
 デプロイ後に WebRTC の各ルールの **Public Port** を確認します。宛先と異なる番号が割り当てられる場合があります。
 [WebRTC クライアント](#desktop-streaming-client)には公開ポート番号を入力します。
 
-<figure markdown="span">
-  ![47998 と 49100 が表示され、IP が制限された Brev の TCP/UDP ポート画面](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/_images/isim_5.0_full_ref_external_brev_expose_ports.png)
-  <figcaption>NVIDIA の公開例では、デプロイ済みインスタンスでポートと IP 制限を確認できます。</figcaption>
-</figure>
-
 Franka の動作確認では **Launch parameters** は空欄のままで構いません。学習する場合は、VM 上で後から Hugging Face に
 サインインするか、既定値が空の任意の **Text** パラメーター `HF_TOKEN` を追加します。このパラメーターを使う場合は
 デプロイ時に組織の secret を選びます。[NVIDIA Brev の Launch parameters](https://docs.nvidia.com/brev/concepts/launchables#launch-parameters)
 
-#### 5. 保存してデプロイする
+#### 5. 保存してデプロイする {#deploy-launchable}
 
-最初の確認では **View access** を **Only my organization** に設定します。**Create Launchable** を選び、生成されたリンクを
-コピーします。そのリンクを開いて GPU と見積もり料金を確認し、**Deploy Launchable** を選びます。デプロイが始まったら
-**Go to Instance Page** を開きます。確認後に **My Launchables** から公開範囲を変更し、Markdown バッジを取得できます。
-[NVIDIA Brev の共有とバッジ](https://docs.nvidia.com/brev/concepts/launchables#embedding-launchables)
+1. 新しく作る場合は **View access** を **Only my organization** にし、**Create Launchable** を選んで生成されたリンクをコピーします。
+2. 作成したリンクか、チームから受け取ったリンクを開きます。GPU と見積もり料金を確認します。
+3. **Deploy Launchable** を選び、起動が始まったら **Go to Instance Page** を開きます。
 
 <figure markdown="span">
   ![右上に Deploy Launchable ボタンがある Brev のデプロイ画面の例](../assets/brev-setup/deploy.png)
   <figcaption>NVIDIA の公開 Isaac Launchable で、Deploy Launchable の位置と見積もり料金を確認できます。</figcaption>
 </figure>
 
-#### 6. VM に接続してセットアップを確認する
+### VM に接続する {#connect-vm}
 
 VM が **Running** になったら **Access** を開き、インスタンス名を確認します。手元のマシンに
 [Brev CLI](https://docs.nvidia.com/brev/cli/getting-started) を入れ、次のコマンドで接続します。
 `INSTANCE` を Brev に表示された名前に置き換えます。
-
-```bash
-brev login
-brev shell INSTANCE
-```
 
 <figure markdown="span">
   ![Running、Built、Access タブが表示された Brev のインスタンス画面](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/_images/isim_5.0_full_ref_external_brev_instance_start.png)
   <figcaption>インスタンス画面の Access を開きます。VM が起動済みでも、urdf2vla の準備は続いている場合があります。</figcaption>
 </figure>
 
-VM でセットアップの状態とログを確認します。ドライバ更新で VM が再起動した場合は接続し直してください。
+```bash
+brev login
+brev shell INSTANCE
+```
+
+Launchable で起動した場合は[セットアップの確認](#check-setup)に進みます。通常の VM を作った場合は、次のスクリプトを実行します。
+
+### 既存の VM でセットアップを実行する {#script}
+
+通常の Brev VM を作った場合や、既存の VM に urdf2vla を入れる場合は、SSH で接続した VM の端末で実行します。Launchable で起動した場合は[セットアップの確認](#check-setup)に進みます。
+
+既存の VM でセットアップを始める前に `nvidia-smi`、`docker info`、`df -h . /data` を確認します。スクリプトはドライバを更新して再起動したり、Docker の保存先を切り替えたりする場合があります。切り替え前のイメージとコンテナは元の保存先に残ります。
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/momoiorg-repository/urdf2vla/main/docker/brev_setup.sh -o /tmp/urdf2vla_brev_setup.sh
+bash /tmp/urdf2vla_brev_setup.sh
+```
+
+リポジトリはスクリプトが空きのいちばん大きいディスクに clone します。clone 済みなら、その中で
+`bash docker/brev_setup.sh` を実行してください。その場所のまま使い、学習の checkpoint（1 つ 24 GB）に空きが足りなければ
+注意を表示します。
+
+| 段階 | スクリプトがすること |
+|---|---|
+| [ドライバ](#driver) | 580 より古ければ、Brev の hold を外し、580 系に固定して 580 を入れ、再起動します。再起動の後は続きを自動で実行します |
+| [ディスク](#disk) | システムのディスクの空きが 130 GB 未満で、もっと大きいディスクがあれば、Docker の保存先をそこに切り替えます。`/etc/docker/daemon.json` の NVIDIA の設定は維持します。リポジトリを大きいディスクに clone した場合は、`~/urdf2vla` からリンクします。 |
+| [CDI](#cdi) | `/etc/cdi/nvidia.yaml` を作り、コンテナから GPU が見えることを確かめます |
+| [ビルドと起動](#build) | あなたを `docker` グループに入れ、uv と `urdf2vla` コマンド（`.venv`）を入れ、`docker/build.sh` と 2 つのコンテナの `docker/run.sh`、最後に `urdf2vla doctor` を実行します |
+
+途中で止まった場合は、ログで原因を確認して修正し、同じスクリプトを実行すると、止まった工程から再開します。
+
+### セットアップの完了を確認する {#check-setup}
+
+VM でセットアップの状態とログを確認します。既存のチェックアウトを使った場合は、そのフォルダで
+`bash docker/brev_setup.sh --status` を実行します。ドライバ更新で VM が再起動した場合は接続し直してください。
 再起動後は systemd サービスが続きを実行します。
 
 ```bash
@@ -175,47 +155,34 @@ bash ~/urdf2vla/docker/brev_setup.sh --status
 tail -f /var/log/urdf2vla-setup.log
 ```
 
-Ctrl+C でログの表示を止めます。セットアップが完了したら、下の Franka の動作確認へ進みます。
+セットアップの目安は約 30 分です。Ctrl+C でログの表示を止め、完了後に VM 上のリポジトリを開いて検査します。既存のチェックアウトを使った場合は、そのフォルダに移動します。
 
-### Franka でデプロイを確認する {#franka-smoke-test}
+```bash
+cd ~/urdf2vla
+source .venv/bin/activate
+urdf2vla doctor
+```
 
-既存の VM ではセットアップ前に `nvidia-smi`、`docker info`、`df -h . /data` を確認します。セットアップにより、ドライバの
-更新と再起動や、Docker の保存先の切り替えが行われる場合があります。切り替え前のイメージとコンテナは元の保存先に残ります。
+`doctor` のエラーがあれば対応してから、Franka の動作確認に進みます。
 
-セットアップが終わったら、VM の端末でリポジトリに移動し、`.venv` を有効にして `urdf2vla doctor` を実行します。
-エラーを解消したら、[Franka チュートリアルの手順 1〜3](../tutorial.md#create) を `projects/brev_franka` で実行し、
-`snapshots/` の `*_start.png` と `*_end.png` にアーム、台、物体、箱が写っていることを確認します。Secure Link を追加した
-場合は、VM で `urdf2vla view --project projects/brev_franka --port 8080` を起動し、コンソールで **Robot viewer** を開きます。
-初回は Kit がシェーダーをコンパイルするため、Isaac Sim の起動に数分かかることがあります。
+## Franka でデプロイを確認する {#franka-smoke-test}
 
-#### デモ 3 件を記録して再生する {#franka-replay-test}
-
-シーンの検査が通ったら、Isaac Sim と GR00T コンテナを使って記録から再生まで確認します。記録済みの行動を使うため、
-学習済みチェックポイントや Hugging Face へのログインは不要です。Kit で配信中の場合は GPU を空けるために停止します。
-繰り返し試す場合は、別のデータセット名を使います。
+VM 上の urdf2vla リポジトリで、以下のコマンドを順に実行します。初回は Isaac Sim がシェーダーをコンパイルするため、起動に数分かかることがあります。結果が `ok` 以外なら、その工程で止めて原因を確認します。既存のプロジェクトは `urdf2vla status --project projects/brev_franka` で進み具合を確認できます。
 
 ```bash
 project=projects/brev_franka
-dataset=brev_smoke
-urdf2vla configure_vla_interface --project "$project"
-urdf2vla setup_teleoperation --project "$project"
-urdf2vla collect_dataset --project "$project" --device scripted --num-demos 3 --dataset "$dataset"
-urdf2vla convert_dataset --project "$project" --dataset "$dataset"
-urdf2vla evaluate_vla --project "$project" --replay --dataset "$dataset" --episodes 3 --video
+urdf2vla init "$project" --from examples/franka/project.yaml
+urdf2vla inspect_robot --project "$project"
+urdf2vla configure_robot --project "$project"
+urdf2vla configure_task --project "$project"
+urdf2vla configure_camera --project "$project"
+urdf2vla import_robot --project "$project"
+urdf2vla launch_sim --project "$project"
 ```
 
-記録では成功したデモだけを保存するため、3 回以上試行することがあります。`build/collect_report.yaml` で保存件数を、
-`build/eval_report.yaml` で再生の結果を確認します。再生では記録された行動とサーバーとの通信を検査します。
-`--video` を指定すると、`build/eval_videos/` にエピソードごとの MP4 が保存されます。
+プロジェクトの `snapshots/` にある `*_start.png` と `*_end.png` を開き、アーム、台、物体、箱が写っていることを確認します。シーンを確認できたら、[Kit の画面を表示](#kit-livestream)するか、[デモの記録と再生](#franka-replay-test)に進みます。
 
-<figure>
-  <video controls muted playsinline preload="none" width="100%" poster="../../../assets/brev_franka_replay.jpg" src="../../../assets/brev_franka_replay.mp4" aria-label="3 台のカメラで見た Franka のデモ再生"></video>
-  <figcaption>Franka がキューブを箱に入れるデモの再生。左から手先、左、右のカメラ。</figcaption>
-</figure>
-
-モデルを学習して評価する手順は[学習と評価](training.md)にあります。
-
-### Isaac Sim の Kit ビューポートを配信する {#kit-livestream}
+## Isaac Sim の Kit ビューポートを配信する {#kit-livestream}
 
 L40S など、NVIDIA NVENC に対応する GPU を使います。手元のマシンから Kit の両方のポートに到達できる必要があります。
 公開配信には、プロバイダーのファイアウォールか Brev の **Ports** タブを使います。
@@ -230,12 +197,18 @@ WebRTC 配信自体には認証がないため、両方の公開ポートをデ�
 Brev の **Public Port** と **Destination Port** を確認します。宛先ポートは VM 上で Kit が使う番号です。Brev の公開
 エンドポイントに接続するときは、クライアントに割り当てられた公開ポート番号を指定します。
 
+<figure markdown="span">
+  ![47998 と 49100 が表示され、IP が制限された Brev の TCP/UDP ポート画面](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/_images/isim_5.0_full_ref_external_brev_expose_ports.png)
+  <figcaption>NVIDIA の公開例では、デプロイ済みインスタンスでポートと IP 制限を確認できます。</figcaption>
+</figure>
+
 `import_robot` が成功したら、VM のリポジトリで接続方法に対応するコマンドを実行します。
 
 === "公開エンドポイント"
 
     `STREAM_IPV4` は、手元から両方の公開ポートに接続できるエンドポイントの IPv4 アドレスに置き換えます。
-    モード `1` は Kit ビジュアライザーを有効にし、このアドレスをクライアントに通知します。
+    Brev にホスト名とポート番号が表示されている場合は、VM で `getent ahostsv4 PUBLIC_HOSTNAME` を実行し、
+    ホスト名だけを検索します。モード `1` は Kit ビジュアライザーを有効にし、このアドレスをクライアントに通知します。
 
     ```bash
     urdf2vla launch_sim --project projects/brev_franka --livestream 1 --public-ip STREAM_IPV4
@@ -249,7 +222,7 @@ Brev の **Public Port** と **Destination Port** を確認します。宛先ポ
     urdf2vla launch_sim --project projects/brev_franka --livestream 2
     ```
 
-#### Isaac Sim WebRTC Streaming Client で接続する {#desktop-streaming-client}
+### Isaac Sim WebRTC Streaming Client で接続する {#desktop-streaming-client}
 
 **手元のマシン**の OS と CPU アーキテクチャに合う **Isaac Sim WebRTC Streaming Client** を取得します。
 [NVIDIA のクライアント配布ページ](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/download.html#latest-release)
@@ -274,7 +247,7 @@ Brev の **Public Port** と **Destination Port** を確認します。宛先ポ
 空白の場合は、**Stream** に入力した UDP ポートを確認し、**View → Reload** を試します。
 [NVIDIA のクライアント設定とトラブルシューティング](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/manual_livestream_clients.html#isaac-sim-short-webrtc-streaming-client)
 
-#### ポート番号が異なる場合のブラウザビューア {#remapped-kit-ports}
+### ポート番号が異なる場合のブラウザビューア {#remapped-kit-ports}
 
 NVIDIA のブラウザビューアには、シグナリングと映像の公開ポートを個別に指定できます。`launch_sim --livestream 1` の
 `--public-ip` に公開エンドポイントの到達可能な IPv4 アドレスを渡し、Kit は既定の宛先ポートで起動します。ビューアの
@@ -302,90 +275,41 @@ docker run --rm -p 127.0.0.1:8210:8210 urdf2vla/kit-web-viewer
   <figcaption>Brev 経由でブラウザビューアに配信された Franka のシーン。</figcaption>
 </figure>
 
-下の節は、スクリプトがすることを 1 段階ずつ説明したものです。手で準備するときや、スクリプトがどこかの段階で止まった
-ときに使ってください。
+### SSH でのビューアと遠隔操作
 
-## 1. ドライバ 580 以降 {#driver}
+Secure Link を追加した場合は、VM で `urdf2vla view --project projects/brev_franka --port 8080` を起動し、Brev コンソールから **Robot viewer** を開きます。
 
-Isaac Sim 6.2 と GR00T の image には**ドライバ 580 以降**が要ります。古いドライバでは、最初の Isaac Sim の工程が
-`The NVIDIA driver on your system is too old (found version 12070)` で止まります（image の PyTorch が CUDA 13 向け）。
+- `urdf2vla view` はポート 8080 で動きます: `ssh -L 8080:localhost:8080 <インスタンス>` で転送し、`http://localhost:8080` を開きます。
+- 端末のキーボードで記録します: 1 つ目の SSH で `collect_dataset --device socket`、2 つ目で `urdf2vla teleop-keys`。
 
-`nvidia-smi` で確かめます。古ければ、新しいドライバの入ったインスタンスのイメージを選ぶのが早いです。
-その場で上げる手順（このインスタンスは 565.57.01 でした）:
+## デモ 3 件を記録して再生する {#franka-replay-test}
 
-```bash
-# Brev は入っているドライバを hold している。hold を外す（nvidia-modprobe、nvidia-settings、nvidia-prime も）
-sudo apt-mark unhold $(apt-mark showhold | grep -E 'nvidia|cuda-drivers')
-# ドライバのパッケージを 580 の系列にそろえる（これがないと CUDA のリポジトリから新しい系列が混ざる）
-apt-get download nvidia-driver-pinning-580 && sudo dpkg -i nvidia-driver-pinning-580_*.deb
-# 古いドライバを外して 580 を入れる（カーネルモジュールは DKMS でビルドされる）
-sudo apt-get purge -y $(dpkg -l | awk '$1 ~ /^[ih]i$/ && $2 ~ /565/ {print $2}')
-sudo apt-get install -y nvidia-driver-580-open nvidia-utils-580 nvidia-compute-utils-580
-sudo reboot
-```
-
-再起動のあと `nvidia-smi` が 580 を示します。続けて CDI の定義を作り直してください（次の節）。
-
-## 2. Docker から GPU を使う（CDI） {#cdi}
-
-Brev の NVIDIA Container Toolkit は **CDI モード**で、`docker run --gpus all` は `/etc/cdi/nvidia.yaml` にある GPU の
-定義を使います。このインスタンスではこのファイルがなく、`docker run --gpus all` が次のエラーで止まりました。
-
-```text
-could not apply required modification to OCI specification: error modifying OCI spec:
-failed to inject CDI devices: unresolvable CDI devices nvidia.com/gpu=all
-```
-
-作ります:
+シーンの検査が通ったら、Isaac Sim と GR00T コンテナを使って記録から再生まで確認します。記録済みの行動を使うため、
+学習済みチェックポイントや Hugging Face へのログインは不要です。Kit で配信中の場合は GPU を空けるために停止します。
+繰り返し試す場合は、別のデータセット名を使います。
 
 ```bash
-sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
-docker run --rm --gpus all ubuntu nvidia-smi        # GPU が表示されれば OK
+project=projects/brev_franka
+dataset=brev_smoke
+urdf2vla configure_vla_interface --project "$project"
+urdf2vla setup_teleoperation --project "$project"
+urdf2vla collect_dataset --project "$project" --device scripted --num-demos 3 --dataset "$dataset"
+urdf2vla convert_dataset --project "$project" --dataset "$dataset"
+urdf2vla evaluate_vla --project "$project" --replay --dataset "$dataset" --episodes 3 --video
 ```
 
-- ドライバが **580 より古い**と `nvidia-ctk` が落ちます（`nvSandboxUtilsShutdown` で `free(): invalid pointer`）。
-  `--feature-flag=disable-nvsandboxutils` を付けます。
-- **ドライバを更新したら作り直します。** ファイルにはドライバのライブラリの版が書かれていて、このインスタンスでは
-  更新のあとも自動では作り直されませんでした。
+記録では成功したデモだけを保存するため、3 回以上試行することがあります。`build/collect_report.yaml` で保存件数を、
+`build/eval_report.yaml` で再生の結果を確認します。再生では記録された行動とサーバーとの通信を検査します。
+`--video` を指定すると、`build/eval_videos/` にエピソードごとの MP4 が保存されます。
 
-## 3. Docker の保存先を大きいディスクに {#disk}
+<figure>
+  <video controls muted playsinline preload="none" width="100%" poster="../../../assets/brev_franka_replay.jpg" src="../../../assets/brev_franka_replay.mp4" aria-label="3 台のカメラで見た Franka のデモ再生"></video>
+  <figcaption>Franka がキューブを箱に入れるデモの再生。左から手先、左、右のカメラ。</figcaption>
+</figure>
 
-Brev のインスタンスはシステムのディスクが小さく（このインスタンスは 124 GB）、大きいディスクが `/data`（295 GB）に
-あります。Docker の image とリポジトリを `/data` に置きます。
+モデルを学習して評価する場合は、次に [Hugging Face のアクセスを設定](#huggingface)します。
 
-```bash
-# Docker: /etc/docker/daemon.json に "data-root": "/data/docker" を足す（nvidia の runtime の設定は残す）
-sudo systemctl restart docker && docker info | grep "Root Dir"
-# リポジトリ
-cd /data && git clone https://github.com/momoiorg-repository/urdf2vla.git
-```
-
-容量を使うもの（実測）:
-
-| | |
-|---|---|
-| image | Isaac Lab Arena 38 GB、GR00T 26 GB（と、層を共有する 26 GB の base image）。合わせて約 64 GB。ビルドのキャッシュが最大 50 GB（`docker builder prune` で消せる） |
-| データセット | FANUC のデモ 50 個: HDF5 で 2.6 GB、変換後 61 MB |
-| GR00T のモデル | `~/.cache/huggingface` に 6.5 GB（`nvidia/GR00T-N1.7-DROID`）+ 4.6 GB（`nvidia/Cosmos-Reason2-2B`） |
-| **checkpoint** | **1 つ 24 GB**（重み 11 GB + optimizer の状態 13 GB）。`train_vla` は既定で 2 つ残す（`--save-total-limit`） |
-
-足りなくなるのは checkpoint です。1 回の学習で 5 つ残していたとき、2 回の学習で 295 GB のディスクがいっぱいになり、
-2 回目は保存の途中で止まりました。今の `train_vla` は、checkpoint の分の空きがなければ始めません。学習が終わった
-checkpoint の `optimizer.pt` は学習の再開にしか使わないので、消して空きを作れます（重みは `evaluate_vla` に使えます）。
-
-## 4. ビルドと起動 {#build}
-
-```bash
-uv venv .venv && uv pip install -e '.[view,dev,docs]' xacro && source .venv/bin/activate
-bash docker/build.sh            # L40S で Arena の image 13 分、GR00T の image 4 分
-bash docker/run.sh && bash docker/run.sh gr00t
-urdf2vla doctor
-```
-
-`docker/build.sh` は SSH が切れても続くように実行してください（`tmux`、または `setsid nohup … &`）。起動したシェルが
-終わるとビルドも止まります。
-
-## 5. Hugging Face {#huggingface}
+## GR00T モデルを学習・評価する {#huggingface}
 
 GR00T N1.7 は画像と言語のモデル `nvidia/Cosmos-Reason2-2B` を使います。これは **gated**（利用規約への同意が要る）で、
 アクセスできるまで学習と評価が `401 Client Error … Cannot access gated repo` で止まります。
@@ -401,9 +325,11 @@ GR00T N1.7 は画像と言語のモデル `nvidia/Cosmos-Reason2-2B` を使い�
 インスタンスを止めるとホームディレクトリが消える場合は、トークンを `/data` にも置き（例: `/data/secrets/hf_token`、
 権限 600）、再開のあと `~/.cache/huggingface/token` にコピーし直します。
 
-## 6. 例を動かす
+続きは[学習と評価](training.md)を参照してください。
 
-手順は[自分のロボットで](your-robot.md)と同じです。L40S、FANUC CRX-3iA での実測:
+## FANUC CRX-3iA の実測値
+
+FANUC CRX-3iA の実測値です。環境は NVIDIA L40S（46 GB）、CPU 8、メモリ 144 GB、Ubuntu 22.04 です。
 
 | 工程 | 結果 | 時間 | GPU メモリの最大 |
 |---|---|---|---|
@@ -427,7 +353,7 @@ checkpoint を保存した直後に学習を止めて評価し、同じ `train_v
 urdf2vla train_vla --project projects/crx3ia --dataset demos_droid --check-only training/crx3ia_demos_droid/checkpoints/checkpoint-10000
 ```
 
-## 結果 {#results}
+### 学習済みモデルの評価結果 {#results}
 
 どちらのモデルも `nvidia/GR00T-N1.7-DROID`（単腕のロボットの既定）から、同じスクリプトのデモ 50 個で fine-tune し、
 同じ 20 エピソード（同じ乱数の種: 毎回ランダムな物体と位置）で評価しました。
@@ -456,12 +382,91 @@ License。urdf2vla での評価の手順はモデルカードにあります）�
 
 評価の動画と画像: [学習済みモデル](../models.md#crx3ia)。
 
-## GR00T のサーバのポート {#port}
+## セットアップのトラブルシューティング
+
+セットアップが途中で止まった場合や、手動で準備する場合に参照してください。
+
+### ドライバ 580 以降を入れる {#driver}
+
+Isaac Sim 6.2 と GR00T の image には**ドライバ 580 以降**が要ります。古いドライバでは、最初の Isaac Sim の工程が
+`The NVIDIA driver on your system is too old (found version 12070)` で止まります（image の PyTorch が CUDA 13 向け）。
+
+`nvidia-smi` で確かめます。古ければ、新しいドライバの入ったインスタンスのイメージを選ぶのが早いです。
+その場で上げる手順（このインスタンスは 565.57.01 でした）:
+
+```bash
+# Brev は入っているドライバを hold している。hold を外す（nvidia-modprobe、nvidia-settings、nvidia-prime も）
+sudo apt-mark unhold $(apt-mark showhold | grep -E 'nvidia|cuda-drivers')
+# ドライバのパッケージを 580 の系列にそろえる（これがないと CUDA のリポジトリから新しい系列が混ざる）
+apt-get download nvidia-driver-pinning-580 && sudo dpkg -i nvidia-driver-pinning-580_*.deb
+# 古いドライバを外して 580 を入れる（カーネルモジュールは DKMS でビルドされる）
+sudo apt-get purge -y $(dpkg -l | awk '$1 ~ /^[ih]i$/ && $2 ~ /565/ {print $2}')
+sudo apt-get install -y nvidia-driver-580-open nvidia-utils-580 nvidia-compute-utils-580
+sudo reboot
+```
+
+再起動のあと `nvidia-smi` が 580 を示します。続けて [CDI の定義](#cdi)を作り直してください。
+
+### Docker の保存先を大きいディスクに切り替える {#disk}
+
+Brev のインスタンスはシステムのディスクが小さく（このインスタンスは 124 GB）、大きいディスクが `/data`（295 GB）に
+あります。Docker の image とリポジトリを `/data` に置きます。
+
+```bash
+# Docker: /etc/docker/daemon.json に "data-root": "/data/docker" を足す（nvidia の runtime の設定は残す）
+sudo systemctl restart docker && docker info | grep "Root Dir"
+# リポジトリ
+cd /data && git clone https://github.com/momoiorg-repository/urdf2vla.git
+```
+
+容量を使うもの（実測）:
+
+| | |
+|---|---|
+| image | Isaac Lab Arena 38 GB、GR00T 26 GB（と、層を共有する 26 GB の base image）。合わせて約 64 GB。ビルドのキャッシュが最大 50 GB（`docker builder prune` で消せる） |
+| データセット | FANUC のデモ 50 個: HDF5 で 2.6 GB、変換後 61 MB |
+| GR00T のモデル | `~/.cache/huggingface` に 6.5 GB（`nvidia/GR00T-N1.7-DROID`）+ 4.6 GB（`nvidia/Cosmos-Reason2-2B`） |
+| **checkpoint** | **1 つ 24 GB**（重み 11 GB + optimizer の状態 13 GB）。`train_vla` は既定で 2 つ残す（`--save-total-limit`） |
+
+足りなくなるのは checkpoint です。1 回の学習で 5 つ残していたとき、2 回の学習で 295 GB のディスクがいっぱいになり、
+2 回目は保存の途中で止まりました。今の `train_vla` は、checkpoint の分の空きがなければ始めません。学習が終わった
+checkpoint の `optimizer.pt` は学習の再開にしか使わないので、消して空きを作れます（重みは `evaluate_vla` に使えます）。
+
+### CDI で Docker から GPU を使う {#cdi}
+
+Brev の NVIDIA Container Toolkit は **CDI モード**で、`docker run --gpus all` は `/etc/cdi/nvidia.yaml` にある GPU の
+定義を使います。このインスタンスではこのファイルがなく、`docker run --gpus all` が次のエラーで止まりました。
+
+```text
+could not apply required modification to OCI specification: error modifying OCI spec:
+failed to inject CDI devices: unresolvable CDI devices nvidia.com/gpu=all
+```
+
+作ります:
+
+```bash
+sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
+docker run --rm --gpus all ubuntu nvidia-smi        # GPU が表示されれば OK
+```
+
+- ドライバが **580 より古い**と `nvidia-ctk` が落ちます（`nvSandboxUtilsShutdown` で `free(): invalid pointer`）。
+  `--feature-flag=disable-nvsandboxutils` を付けます。
+- **ドライバを更新したら作り直します。** ファイルにはドライバのライブラリの版が書かれていて、このインスタンスでは
+  更新のあとも自動では作り直されませんでした。
+
+### コンテナをビルドして起動する {#build}
+
+```bash
+uv venv .venv && uv pip install -e '.[view,dev,docs]' xacro && source .venv/bin/activate
+bash docker/build.sh            # L40S で Arena の image 13 分、GR00T の image 4 分
+bash docker/run.sh && bash docker/run.sh gr00t
+urdf2vla doctor
+```
+
+`docker/build.sh` は SSH が切れても続くように実行してください（`tmux`、または `setsid nohup … &`）。起動したシェルが
+終わるとビルドも止まります。
+
+### GR00T サーバーのポート {#port}
 
 Brev では NVIDIA DCGM の `nv-hostengine` が `127.0.0.1:5555`（GR00T の推論サーバの既定のポート）を使っています。
 `evaluate_vla` は空いているポートに自動で移り、警告で知らせます。`doctor` は info として表示します。
-
-## SSH でのビューアと遠隔操作
-
-- `urdf2vla view` はポート 8080 で動きます: `ssh -L 8080:localhost:8080 <インスタンス>` で転送し、`http://localhost:8080` を開きます。
-- 端末のキーボードで記録します: 1 つ目の SSH で `collect_dataset --device socket`、2 つ目で `urdf2vla teleop-keys`。

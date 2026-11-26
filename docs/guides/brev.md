@@ -1,70 +1,26 @@
 # Running on NVIDIA Brev
 
-This page walks through urdf2vla on a cloud GPU from NVIDIA Brev, from a fresh instance to a trained model. The
-FANUC CRX-3iA timings were measured on an **NVIDIA L40S (46 GB)**, 8 CPUs, 144 GB RAM, and Ubuntu 22.04.
+Start a GPU VM on Brev, verify the Franka simulation, and connect to the Kit viewport. Once the scene works, you can record demonstrations, replay them, or train a model.
 
-New to Brev? Start with the [illustrated console walkthrough](#launchable). If you already have a GPU instance,
-go straight to [setup on the VM](#script).
+## Before you start
 
-`urdf2vla doctor` checks each point below. When something is wrong, it prints the fix and links to the section here.
-Run it after every step of the setup:
-
-```bash
-urdf2vla doctor
-```
-
-## What you need before you start
-
-| | |
+| Item | What you need |
 |---|---|
-| Instance | One GPU with **44 GB or more** to train on the instance itself (L40S, A100, H100). Smaller GPUs can run everything except training |
-| Disk | **300 GB or more** on the disk that holds Docker's images and the repository (see [Disk](#disk)) |
-| Hugging Face | An account, a token with read access, and the license of `nvidia/Cosmos-Reason2-2B` accepted (see [Hugging Face](#huggingface)) |
-| Time | About 30 minutes of setup, 35 minutes of recording, 2 hours per training run |
-
-## Set up with one script {#script}
-
-On a fresh instance, one script does sections 1–4 of this page and starts both containers. Run it as the user you log
-in with (it uses `sudo` where it needs to):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/momoiorg-repository/urdf2vla/main/docker/brev_setup.sh -o /tmp/urdf2vla_brev_setup.sh
-bash /tmp/urdf2vla_brev_setup.sh
-```
-
-The script clones the repository itself, onto the disk with the most free space. If you've already cloned it, run
-`bash docker/brev_setup.sh` in it instead: it uses that checkout where it is, and warns if its disk is too small for
-training checkpoints (24 GB each).
-
-| Step | What the script does |
-|---|---|
-| [Driver](#driver) | Below 580: releases Brev's holds, pins the 580 branch, installs 580 and reboots. After the reboot, setup continues by itself |
-| [Disk](#disk) | If the system disk has less than 130 GB free and a larger disk exists, switches Docker to a new directory there and keeps the NVIDIA settings in `/etc/docker/daemon.json`. When the script clones the repository to the larger disk, it links it from `~/urdf2vla`. |
-| [CDI](#cdi) | Generates `/etc/cdi/nvidia.yaml` and checks that a container sees the GPU |
-| [Build and start](#build) | Adds you to the `docker` group, installs uv and the `urdf2vla` command (`.venv`), runs `docker/build.sh` and `docker/run.sh` for both containers, then `urdf2vla doctor` |
-
-It takes about 30 minutes, longer if the driver needs upgrading. The setup runs as a systemd service, so it keeps going
-if your SSH connection drops. To follow it:
-
-```bash
-bash ~/urdf2vla/docker/brev_setup.sh --status   # where it is, and what to do next
-tail -f /var/log/urdf2vla-setup.log              # everything it prints
-```
-
-When you log in, the status is shown; once setup is done, the login also moves into the repository and activates
-`.venv`. If a step fails, the log says which one. Fix the cause (the sections below explain each step) and run the
-script again: it continues from the step that failed.
-
-Then do [Hugging Face](#huggingface): accept the license and run `hf auth login`, or pass the token to the script
-with `HF_TOKEN=hf_... bash /tmp/urdf2vla_brev_setup.sh` (it's saved to `~/.cache/huggingface/token` and never printed).
-Accepting the license stays a step in the browser. Continue with the [tutorial](../tutorial.md).
+| Brev access | A Brev account in an organization that can deploy GPU instances |
+| Compute and storage | One NVIDIA L40S and at least **300 GiB** for the full workflow. Choose a GPU with NVENC to stream Kit and at least **44 GB of VRAM** to train on the VM. |
+| Hugging Face | Required for [model training and evaluation](#huggingface). You can run the Franka simulation and replay before signing in. |
 
 !!! note
     `docker/run.sh` starts the simulation container with `ACCEPT_EULA=Y`, as it does on your own machine: using it means
     accepting the license of the Isaac Sim image (see
     [Isaac Sim's container installation](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/install_container.html)).
 
-### Create and deploy a Brev Launchable {#launchable}
+## Set up a Brev VM
+
+- To create a reusable Launchable, start in the [Brev Console](#launchable). If you already have a Launchable link, skip to [deployment](#deploy-launchable).
+- If you already have a Brev VM, start by [connecting over SSH](#connect-vm).
+
+### Create a Brev Launchable {#launchable}
 
 A Launchable saves the GPU, software, and network settings for a VM deployers can start from a link. Brev bills
 the account that deploys the VM. The screenshots show the public console and published examples of signed-in
@@ -74,13 +30,14 @@ screens. The order and appearance of controls can vary by console version and pr
 #### 1. Sign in and open the builder
 
 Open the [Brev Console](https://brev.nvidia.com), select **Sign In**, and choose the organization that will own
-the Launchable. Open **Launchables → Create Launchable**. Under **Details**, enter a name such as
-`urdf2vla` and a description such as “Create a robot pick-and-place simulation and train a GR00T model.”
+the Launchable.
 
 <figure markdown="span">
   ![Brev home page with Sign In and Launchables in the top navigation](../assets/brev-setup/sign-in.png)
   <figcaption>Sign in from the Brev home page.</figcaption>
 </figure>
+
+Open **Launchables → Create Launchable**. Under **Details**, enter `urdf2vla` as the name and a short description.
 
 <figure markdown="span">
   ![Create Launchable button on the Brev Launchables page](../assets/brev-setup/create-launchable.png)
@@ -90,13 +47,14 @@ the Launchable. Open **Launchables → Create Launchable**. Under **Details**, e
 #### 2. Choose the GPU and disk
 
 Under **Default hardware configuration**, choose **one NVIDIA L40S** for simulation, streaming, and training on
-the same VM. Set **Disk Storage (GiB)** to **300** or more. For public WebRTC streaming, choose an offer that
-allows custom TCP and UDP rules. Compare the current price and storage on the selected offer.
+the same VM. For public WebRTC streaming, choose an offer that allows custom TCP and UDP rules.
 
 <figure markdown="span">
   ![Brev compute picker with L40S selected and provider cards showing storage and port features](../assets/brev-setup/compute.png)
   <figcaption>Check the GPU count, storage, and port features on each offer.</figcaption>
 </figure>
+
+Set **Disk Storage (GiB)** to **300** or more and review the price for that offer.
 
 <figure markdown="span">
   ![Configure and Deploy screen showing the Disk Storage and Cost Breakdown fields](../assets/brev-setup/storage.png)
@@ -131,69 +89,86 @@ Under **Network**, add these entries only for the viewers you plan to use.
 After deployment, check **Public Port** for each WebRTC rule. Brev may assign numbers that differ from the
 destination ports. Enter the public numbers in the [WebRTC client](#desktop-streaming-client).
 
-<figure markdown="span">
-  ![Brev TCP and UDP port panel with restricted access and ports 47998 and 49100](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/_images/isim_5.0_full_ref_external_brev_expose_ports.png)
-  <figcaption>NVIDIA’s example shows the port controls and IP restriction on a deployed instance.</figcaption>
-</figure>
-
 Leave **Launch parameters** empty for the Franka smoke test. For training, either sign in to Hugging Face on
 the VM later or add an optional **Text** parameter named `HF_TOKEN` with an empty default. At deployment,
 select a saved organization secret if you use this parameter. [NVIDIA Brev launch parameters](https://docs.nvidia.com/brev/concepts/launchables#launch-parameters)
 
-#### 5. Save and deploy
+#### 5. Save and deploy {#deploy-launchable}
 
-In **View access**, choose **Only my organization** for the first test. Select **Create Launchable** and copy
-the generated link. Open it, check the compute and estimated cost, then select **Deploy Launchable**. After
-deployment begins, select **Go to Instance Page**. After verifying your setup, you can change access in
-**My Launchables** and copy the Markdown badge. [NVIDIA Brev sharing and badges](https://docs.nvidia.com/brev/concepts/launchables#embedding-launchables)
+1. To save a new Launchable, select **Only my organization** under **View access**, select **Create Launchable**, and copy the generated link.
+2. Open the deployment link you just created or the one your team shared. Check the compute and estimated cost.
+3. Select **Deploy Launchable**, then select **Go to Instance Page**.
 
 <figure markdown="span">
   ![Example Brev deployment page with the Deploy Launchable button at upper right](../assets/brev-setup/deploy.png)
   <figcaption>NVIDIA’s public Isaac Launchable shows where to find Deploy Launchable and the estimated price.</figcaption>
 </figure>
 
-#### 6. Open the instance and verify setup
+### Connect to the VM {#connect-vm}
 
 When the VM reaches **Running**, open **Access** and note the instance name. On your workstation, install the
 [Brev CLI](https://docs.nvidia.com/brev/cli/getting-started), then sign in and connect. Replace `INSTANCE` with
 the name shown in Brev.
-
-```bash
-brev login
-brev shell INSTANCE
-```
 
 <figure markdown="span">
   ![Brev instance page showing Running, Built, and the Access tab](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/_images/isim_5.0_full_ref_external_brev_instance_start.png)
   <figcaption>Open Access on the instance page. The Brev VM can be running while the urdf2vla setup script still works.</figcaption>
 </figure>
 
-On the VM, check the setup status and log. If the driver upgrade reboots the VM, reconnect. The systemd service
-resumes the setup after boot.
+```bash
+brev login
+brev shell INSTANCE
+```
+
+If you deployed a Launchable, [check the setup status](#check-setup) next. If you created a plain VM, run the setup script below.
+
+### Run setup on an existing VM {#script}
+
+For a plain Brev VM, run these commands in the VM terminal after connecting over SSH. For a VM started from the Launchable, continue to [Check that setup is ready](#check-setup).
+
+On an existing VM, check `nvidia-smi`, `docker info`, and `df -h . /data` first. Setup can upgrade the driver and reboot, or switch Docker to a new storage directory. Existing containers and images stay in the previous directory if Docker switches storage.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/momoiorg-repository/urdf2vla/main/docker/brev_setup.sh -o /tmp/urdf2vla_brev_setup.sh
+bash /tmp/urdf2vla_brev_setup.sh
+```
+
+The script clones the repository itself, onto the disk with the most free space. If you've already cloned it, run
+`bash docker/brev_setup.sh` in it instead: it uses that checkout where it is, and warns if its disk is too small for
+training checkpoints (24 GB each).
+
+| Step | What the script does |
+|---|---|
+| [Driver](#driver) | Below 580: releases Brev's holds, pins the 580 branch, installs 580 and reboots. After the reboot, setup continues by itself |
+| [Disk](#disk) | If the system disk has less than 130 GB free and a larger disk exists, switches Docker to a new directory there and keeps the NVIDIA settings in `/etc/docker/daemon.json`. When the script clones the repository to the larger disk, it links it from `~/urdf2vla`. |
+| [CDI](#cdi) | Generates `/etc/cdi/nvidia.yaml` and checks that a container sees the GPU |
+| [Build and start](#build) | Adds you to the `docker` group, installs uv and the `urdf2vla` command (`.venv`), runs `docker/build.sh` and `docker/run.sh` for both containers, then `urdf2vla doctor` |
+
+If setup fails, fix the error shown in the log and rerun the setup script. It resumes at the failed stage.
+
+### Check that setup is ready {#check-setup}
+
+On the VM, check the setup status and log. For an existing checkout, run `bash docker/brev_setup.sh --status`
+from that checkout. If the driver upgrade reboots the VM, reconnect. The systemd service resumes setup after boot.
 
 ```bash
 bash ~/urdf2vla/docker/brev_setup.sh --status
 tail -f /var/log/urdf2vla-setup.log
 ```
 
-Press Ctrl+C to stop following the log. Once setup reports completion, run the Franka smoke test below.
-
-### Verify the deployment with Franka {#franka-smoke-test}
-
-Run this on the Brev VM after setup finishes. On an existing VM, check `nvidia-smi`, `docker info`, and `df -h . /data`
-first. Setup can upgrade the driver and reboot, or switch Docker to a new storage directory. If the storage directory
-changes, existing containers and images stay in the previous directory.
+Allow around 30 minutes for setup. Press Ctrl+C to stop following the log. When setup reports completion, open the checkout and run the checks. If you reused a checkout, use its actual path.
 
 ```bash
-cd ~/urdf2vla                         # or your existing checkout
+cd ~/urdf2vla
 source .venv/bin/activate
 urdf2vla doctor
 ```
 
-Resolve any `doctor` errors before starting. Signing in to Hugging Face can wait until training or model evaluation.
-Run these commands in order and stop if any returns a status other than `ok`. If you already created this project,
-use `urdf2vla status --project projects/brev_franka` to resume. The first Isaac Sim start may take several minutes
-while Kit compiles shaders.
+Resolve any `doctor` errors before running the Franka smoke test.
+
+## Verify the deployment with Franka {#franka-smoke-test}
+
+Run these commands in the VM checkout. The first Isaac Sim start may take several minutes while Kit compiles shaders. Stop if a command returns a status other than `ok`. To resume an existing project, run `urdf2vla status --project projects/brev_franka`.
 
 ```bash
 project=projects/brev_franka
@@ -206,38 +181,9 @@ urdf2vla import_robot --project "$project"
 urdf2vla launch_sim --project "$project"
 ```
 
-Check the `*_start.png` and `*_end.png` images in `projects/brev_franka/snapshots/` for the Franka arm, table,
-objects and bin. If you configured a Secure Link, run `urdf2vla view --project "$project" --port 8080` on the VM
-and open **Robot viewer** in the Brev Console.
+Open the `*_start.png` and `*_end.png` files in the project's `snapshots/` directory. Check that the Franka arm, table, object, and bin are visible. Then [open the Kit viewport](#kit-livestream) or [record and replay three demonstrations](#franka-replay-test).
 
-#### Record and replay three demonstrations {#franka-replay-test}
-
-After the scene checks pass, run a short smoke test through Isaac Sim and the GR00T container. This test uses
-recorded actions, so it requires no model checkpoint or Hugging Face sign-in. Stop any Kit livestream first to free
-the GPU. Use a fresh dataset name for a repeated run.
-
-```bash
-project=projects/brev_franka
-dataset=brev_smoke
-urdf2vla configure_vla_interface --project "$project"
-urdf2vla setup_teleoperation --project "$project"
-urdf2vla collect_dataset --project "$project" --device scripted --num-demos 3 --dataset "$dataset"
-urdf2vla convert_dataset --project "$project" --dataset "$dataset"
-urdf2vla evaluate_vla --project "$project" --replay --dataset "$dataset" --episodes 3 --video
-```
-
-Recording can take more than three attempts because it saves only successful demonstrations. Check
-`build/collect_report.yaml` for the saved count and `build/eval_report.yaml` for the replay results. Replay checks the
-recorded actions and the server connection. The `--video` option saves one MP4 per episode in `build/eval_videos/`.
-
-<figure>
-  <video controls muted playsinline preload="none" width="100%" poster="../../assets/brev_franka_replay.jpg" src="../../assets/brev_franka_replay.mp4" aria-label="Franka replay from three cameras"></video>
-  <figcaption>The Franka places a cube in the bin during replay. From left to right: wrist, left, and right camera.</figcaption>
-</figure>
-
-To train and evaluate a model, follow the [training guide](training.md).
-
-### Stream the Isaac Sim Kit viewport {#kit-livestream}
+## Stream the Isaac Sim Kit viewport {#kit-livestream}
 
 Use a GPU with NVIDIA NVENC, such as the L40S. The workstation needs a route to both Kit ports. For public access,
 use the provider firewall or the Brev **Ports** tab. Restrict public access to
@@ -253,12 +199,18 @@ Check the **Public Port** and **Destination Port** columns in Brev. The destinat
 When you connect through Brev's public endpoint, use the assigned public port numbers in your client.
 [Kit stream settings](https://docs.omniverse.nvidia.com/kit/docs/omni.kit.livestream.app/latest/Overview.html)
 
+<figure markdown="span">
+  ![Brev TCP and UDP port panel with restricted access and ports 47998 and 49100](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/_images/isim_5.0_full_ref_external_brev_expose_ports.png)
+  <figcaption>NVIDIA’s example shows the port controls and IP restriction on a deployed instance.</figcaption>
+</figure>
+
 After `import_robot` succeeds, run the command for your connection from the urdf2vla checkout on the VM.
 
 === "Public endpoint"
 
     Replace `STREAM_IPV4` with a public endpoint IPv4 address that the workstation can reach on both public ports.
-    Mode `1` selects the Kit visualizer and advertises this address to the client.
+    If Brev lists an endpoint as a hostname and port, look up the hostname alone on the VM with `getent ahostsv4 PUBLIC_HOSTNAME`.
+    Mode `1` selects the Kit visualizer and advertises the address to the client.
 
     ```bash
     urdf2vla launch_sim --project projects/brev_franka --livestream 1 --public-ip STREAM_IPV4
@@ -272,7 +224,7 @@ After `import_robot` succeeds, run the command for your connection from the urdf
     urdf2vla launch_sim --project projects/brev_franka --livestream 2
     ```
 
-#### Connect with the Isaac Sim WebRTC Streaming Client {#desktop-streaming-client}
+### Connect with the Isaac Sim WebRTC Streaming Client {#desktop-streaming-client}
 
 On your **workstation**, download the **Isaac Sim WebRTC Streaming Client** for your OS and CPU architecture.
 [NVIDIA client downloads](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/download.html#latest-release)
@@ -297,7 +249,7 @@ If the client cannot connect, check the TCP port entered under **Signal** and cl
 If it connects but shows a blank viewport, check the UDP port entered under **Stream** and try **View → Reload**.
 [NVIDIA client setup and troubleshooting](https://docs.isaacsim.omniverse.nvidia.com/6.2.0/installation/manual_livestream_clients.html#isaac-sim-short-webrtc-streaming-client)
 
-#### Browser viewer for remapped ports {#remapped-kit-ports}
+### Browser viewer for remapped ports {#remapped-kit-ports}
 
 NVIDIA's browser viewer accepts separate public signaling and media ports. In `launch_sim --livestream 1`, set
 `--public-ip` to a reachable IPv4 address of the public endpoint. Keep Kit on its default destination ports.
@@ -325,91 +277,42 @@ streaming clients before connecting. Kit supports one client at a time. [Brev po
   <figcaption>The Franka scene streamed through Brev to the browser viewer.</figcaption>
 </figure>
 
-The sections below are what the script does, step by step. Follow them to set up by hand, or when the script stops at a
-step.
+### Viewer and teleoperation over SSH
 
-## 1. Driver 580 or newer {#driver}
+If you configured a Secure Link, run `urdf2vla view --project projects/brev_franka --port 8080` on the VM and open **Robot viewer** in the Brev Console.
 
-Isaac Sim 6.2 and the GR00T image need driver **580 or newer**. With an older driver, the first Isaac Sim step stops
-with `The NVIDIA driver on your system is too old (found version 12070)`: the image's PyTorch is built for CUDA 13.
+- `urdf2vla view` serves on port 8080: `ssh -L 8080:localhost:8080 <instance>` and open `http://localhost:8080`.
+- Record with the terminal keyboard: `collect_dataset --device socket` in one SSH session and `urdf2vla teleop-keys`
+  in a second one.
 
-Check with `nvidia-smi`. If the driver is older, the fastest fix is to pick an instance image with a newer driver.
-To upgrade in place (our instance came with 565.57.01):
+## Record and replay three demonstrations {#franka-replay-test}
 
-```bash
-# Brev holds the installed driver; release the holds (also on nvidia-modprobe, nvidia-settings, nvidia-prime)
-sudo apt-mark unhold $(apt-mark showhold | grep -E 'nvidia|cuda-drivers')
-# keep every driver package on the 580 branch (otherwise the CUDA repository mixes in a newer branch)
-apt-get download nvidia-driver-pinning-580 && sudo dpkg -i nvidia-driver-pinning-580_*.deb
-# remove the old driver, install 580 (the kernel module is built with DKMS)
-sudo apt-get purge -y $(dpkg -l | awk '$1 ~ /^[ih]i$/ && $2 ~ /565/ {print $2}')
-sudo apt-get install -y nvidia-driver-580-open nvidia-utils-580 nvidia-compute-utils-580
-sudo reboot
-```
-
-After the reboot, `nvidia-smi` shows 580, and you must regenerate the CDI spec (next section).
-
-## 2. GPU access from Docker (CDI) {#cdi}
-
-The NVIDIA Container Toolkit on Brev runs in **CDI mode**: `docker run --gpus all` uses a description of the GPU in
-`/etc/cdi/nvidia.yaml`. On our instance that file was missing, and `docker run --gpus all` failed with:
-
-```text
-could not apply required modification to OCI specification: error modifying OCI spec:
-failed to inject CDI devices: unresolvable CDI devices nvidia.com/gpu=all
-```
-
-Generate it:
+After the scene checks pass, run a short smoke test through Isaac Sim and the GR00T container. This test uses
+recorded actions, so it requires no model checkpoint or Hugging Face sign-in. Stop any Kit livestream first to free
+the GPU. Use a fresh dataset name for a repeated run.
 
 ```bash
-sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
-docker run --rm --gpus all ubuntu nvidia-smi        # should print the GPU
+project=projects/brev_franka
+dataset=brev_smoke
+urdf2vla configure_vla_interface --project "$project"
+urdf2vla setup_teleoperation --project "$project"
+urdf2vla collect_dataset --project "$project" --device scripted --num-demos 3 --dataset "$dataset"
+urdf2vla convert_dataset --project "$project" --dataset "$dataset"
+urdf2vla evaluate_vla --project "$project" --replay --dataset "$dataset" --episodes 3 --video
 ```
 
-- With a driver **older than 580**, `nvidia-ctk` crashes (`free(): invalid pointer` in `nvSandboxUtilsShutdown`). Add
-  `--feature-flag=disable-nvsandboxutils`.
-- **After a driver upgrade, generate it again.** The file names the driver's library versions, and it was not
-  refreshed by itself after our upgrade.
+Recording can take more than three attempts because it saves only successful demonstrations. Check
+`build/collect_report.yaml` for the saved count and `build/eval_report.yaml` for the replay results. Replay checks the
+recorded actions and the server connection. The `--video` option saves one MP4 per episode in `build/eval_videos/`.
 
-## 3. Docker's storage on the large disk {#disk}
+<figure>
+  <video controls muted playsinline preload="none" width="100%" poster="../../assets/brev_franka_replay.jpg" src="../../assets/brev_franka_replay.mp4" aria-label="Franka replay from three cameras"></video>
+  <figcaption>The Franka places a cube in the bin during replay. From left to right: wrist, left, and right camera.</figcaption>
+</figure>
 
-Brev instances have a small system disk (124 GB on ours) and a large one under `/data` (295 GB). Put Docker's images
-and the repository on `/data`:
+To train and evaluate a model, [set up Hugging Face access](#huggingface) next.
 
-```bash
-# Docker: add "data-root": "/data/docker" to /etc/docker/daemon.json (keep the nvidia runtime entries), then
-sudo systemctl restart docker && docker info | grep "Root Dir"
-# repository
-cd /data && git clone https://github.com/momoiorg-repository/urdf2vla.git
-```
-
-What takes the space (measured):
-
-| | |
-|---|---|
-| Images | Isaac Lab Arena 38 GB, GR00T 26 GB (plus a 26 GB base image that shares its layers). About 64 GB, plus up to 50 GB of build cache (`docker builder prune` frees it) |
-| Dataset | 50 FANUC demos: 2.6 GB (HDF5), 61 MB converted |
-| GR00T models | 6.5 GB (`nvidia/GR00T-N1.7-DROID`) + 4.6 GB (`nvidia/Cosmos-Reason2-2B`) in `~/.cache/huggingface` |
-| **Checkpoints** | **24 GB each** (11 GB weights + 13 GB optimizer state). `train_vla` keeps 2 by default (`--save-total-limit`) |
-
-Checkpoints are the part that runs out. With 5 kept per run, two runs filled the 295 GB disk and the second one
-died while saving. `train_vla` now refuses to start when there isn't room for its checkpoints. To free space after a
-run, delete `optimizer.pt` from finished checkpoints: it's only needed to resume training, and the weights stay
-usable for `evaluate_vla`.
-
-## 4. Build and start {#build}
-
-```bash
-uv venv .venv && uv pip install -e '.[view,dev,docs]' xacro && source .venv/bin/activate
-bash docker/build.sh            # Arena image 13 min, GR00T image 4 min on the L40S
-bash docker/run.sh && bash docker/run.sh gr00t
-urdf2vla doctor
-```
-
-Run `docker/build.sh` in a way that survives your SSH session ending (`tmux`, or `setsid nohup … &`): the build
-stops if the shell that started it exits.
-
-## 5. Hugging Face {#huggingface}
+## Train or evaluate a GR00T model {#huggingface}
 
 GR00T N1.7 uses the vision-language model `nvidia/Cosmos-Reason2-2B`, which is **gated**: training and evaluation
 stop with `401 Client Error … Cannot access gated repo` until you have access.
@@ -426,9 +329,11 @@ stop with `401 Client Error … Cannot access gated repo` until you have access.
 Keep a copy of the token on `/data` (for example `/data/secrets/hf_token`, mode 600) if your instance's home
 directory doesn't survive a stop, and copy it back to `~/.cache/huggingface/token` afterwards.
 
-## 6. Run the example
+Continue with [Train and evaluate](training.md).
 
-The steps are the same as in [Bring your own robot](your-robot.md). Measured on the L40S with the FANUC CRX-3iA:
+## FANUC CRX-3iA benchmark
+
+FANUC CRX-3iA measurements from one NVIDIA L40S (46 GB), 8 CPUs, 144 GB RAM, and Ubuntu 22.04.
 
 | Step | Result | Time | Peak GPU memory |
 |---|---|---|---|
@@ -453,7 +358,7 @@ Before a 30-minute evaluation, check that the model releases the gripper (about 
 urdf2vla train_vla --project projects/crx3ia --dataset demos_droid --check-only training/crx3ia_demos_droid/checkpoints/checkpoint-10000
 ```
 
-## Results {#results}
+### Trained-model results {#results}
 
 Both models were fine-tuned from `nvidia/GR00T-N1.7-DROID` (the default for single-arm robots) on the same 50 scripted
 demos, and evaluated on the same 20 episodes (same seed: random object and position each episode).
@@ -483,13 +388,92 @@ is learned, checks it (`gripper_timing`), and `train_vla` checks the trained mod
 
 Videos and images of the evaluation: [Trained models](../models.md#crx3ia).
 
-## The GR00T server port {#port}
+## Troubleshoot or set up manually
+
+Use these steps if the setup script stops or you need to configure the VM by hand.
+
+### Install NVIDIA driver 580 or newer {#driver}
+
+Isaac Sim 6.2 and the GR00T image need driver **580 or newer**. With an older driver, the first Isaac Sim step stops
+with `The NVIDIA driver on your system is too old (found version 12070)`: the image's PyTorch is built for CUDA 13.
+
+Check with `nvidia-smi`. If the driver is older, the fastest fix is to pick an instance image with a newer driver.
+To upgrade in place (our instance came with 565.57.01):
+
+```bash
+# Brev holds the installed driver; release the holds (also on nvidia-modprobe, nvidia-settings, nvidia-prime)
+sudo apt-mark unhold $(apt-mark showhold | grep -E 'nvidia|cuda-drivers')
+# keep every driver package on the 580 branch (otherwise the CUDA repository mixes in a newer branch)
+apt-get download nvidia-driver-pinning-580 && sudo dpkg -i nvidia-driver-pinning-580_*.deb
+# remove the old driver, install 580 (the kernel module is built with DKMS)
+sudo apt-get purge -y $(dpkg -l | awk '$1 ~ /^[ih]i$/ && $2 ~ /565/ {print $2}')
+sudo apt-get install -y nvidia-driver-580-open nvidia-utils-580 nvidia-compute-utils-580
+sudo reboot
+```
+
+After reboot, confirm the driver version with `nvidia-smi`, then regenerate the [CDI specification](#cdi).
+
+### Move Docker storage to a larger disk {#disk}
+
+Brev instances have a small system disk (124 GB on ours) and a large one under `/data` (295 GB). Put Docker's images
+and the repository on `/data`:
+
+```bash
+# Docker: add "data-root": "/data/docker" to /etc/docker/daemon.json (keep the nvidia runtime entries), then
+sudo systemctl restart docker && docker info | grep "Root Dir"
+# repository
+cd /data && git clone https://github.com/momoiorg-repository/urdf2vla.git
+```
+
+What takes the space (measured):
+
+| | |
+|---|---|
+| Images | Isaac Lab Arena 38 GB, GR00T 26 GB (plus a 26 GB base image that shares its layers). About 64 GB, plus up to 50 GB of build cache (`docker builder prune` frees it) |
+| Dataset | 50 FANUC demos: 2.6 GB (HDF5), 61 MB converted |
+| GR00T models | 6.5 GB (`nvidia/GR00T-N1.7-DROID`) + 4.6 GB (`nvidia/Cosmos-Reason2-2B`) in `~/.cache/huggingface` |
+| **Checkpoints** | **24 GB each** (11 GB weights + 13 GB optimizer state). `train_vla` keeps 2 by default (`--save-total-limit`) |
+
+Checkpoints are the part that runs out. With 5 kept per run, two runs filled the 295 GB disk and the second one
+died while saving. `train_vla` now refuses to start when there isn't room for its checkpoints. To free space after a
+run, delete `optimizer.pt` from finished checkpoints: it's only needed to resume training, and the weights stay
+usable for `evaluate_vla`.
+
+### Enable Docker GPU access with CDI {#cdi}
+
+The NVIDIA Container Toolkit on Brev runs in **CDI mode**: `docker run --gpus all` uses a description of the GPU in
+`/etc/cdi/nvidia.yaml`. On our instance that file was missing, and `docker run --gpus all` failed with:
+
+```text
+could not apply required modification to OCI specification: error modifying OCI spec:
+failed to inject CDI devices: unresolvable CDI devices nvidia.com/gpu=all
+```
+
+Generate it:
+
+```bash
+sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
+docker run --rm --gpus all ubuntu nvidia-smi        # should print the GPU
+```
+
+- With a driver **older than 580**, `nvidia-ctk` crashes (`free(): invalid pointer` in `nvSandboxUtilsShutdown`). Add
+  `--feature-flag=disable-nvsandboxutils`.
+- **After a driver upgrade, generate it again.** The file names the driver's library versions, and it was not
+  refreshed by itself after our upgrade.
+
+### Build and start the containers {#build}
+
+```bash
+uv venv .venv && uv pip install -e '.[view,dev,docs]' xacro && source .venv/bin/activate
+bash docker/build.sh            # Arena image 13 min, GR00T image 4 min on the L40S
+bash docker/run.sh && bash docker/run.sh gr00t
+urdf2vla doctor
+```
+
+Run `docker/build.sh` in a way that survives your SSH session ending (`tmux`, or `setsid nohup … &`): the build
+stops if the shell that started it exits.
+
+### The GR00T server port {#port}
 
 Brev runs NVIDIA DCGM, whose `nv-hostengine` listens on `127.0.0.1:5555`, the GR00T inference server's default
 port. `evaluate_vla` moves to the next free port by itself and says so in its warnings; `doctor` reports it as info.
-
-## Viewer and teleoperation over SSH
-
-- `urdf2vla view` serves on port 8080: `ssh -L 8080:localhost:8080 <instance>` and open `http://localhost:8080`.
-- Record with the terminal keyboard: `collect_dataset --device socket` in one SSH session and `urdf2vla teleop-keys`
-  in a second one.
