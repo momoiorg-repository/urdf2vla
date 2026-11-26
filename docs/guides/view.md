@@ -1,9 +1,10 @@
-# Check your robot in the browser
+# Inspect robot and camera setup in the browser
 
 `urdf2vla view` opens a 3D page in your web browser showing your robot, its grasp point, the table and the cameras, so you
 can check the setup — and answer urdf2vla's questions — without opening Isaac Sim or Omniverse.
 
 It reads only the URDF and urdf2vla's settings, so it works right after `inspect_robot` and doesn't need the containers.
+To watch a running simulation on Brev, open the [Isaac Sim Kit livestream](brev.md#kit-livestream).
 
 ```bash
 uv pip install -e '.[view]'                 # once

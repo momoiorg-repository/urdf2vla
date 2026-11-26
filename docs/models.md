@@ -1,4 +1,4 @@
-# Trained models
+# Published models and datasets
 
 Models trained end to end with urdf2vla, from the robot's URDF to a GR00T N1.7 checkpoint, and evaluated in Isaac Sim.
 Each one is on Hugging Face with the files urdf2vla needs to run it.
@@ -8,7 +8,7 @@ Each one is on Hugging Face with the files urdf2vla needs to run it.
 | FANUC CRX-3iA + Robotiq 2F-85 | [`umegan/urdf2vla-crx3ia-gr00t-n1.7`](https://huggingface.co/umegan/urdf2vla-crx3ia-gr00t-n1.7) | [`umegan/urdf2vla-crx3ia-pickplace`](https://huggingface.co/datasets/umegan/urdf2vla-crx3ia-pickplace) | **20/20** | `nvidia/GR00T-N1.7-DROID`, 50 scripted demos |
 | Franka Panda (its own hand) | [`umegan/urdf2vla-franka-gr00t-n1.7`](https://huggingface.co/umegan/urdf2vla-franka-gr00t-n1.7) | [`umegan/urdf2vla-franka-pickplace`](https://huggingface.co/datasets/umegan/urdf2vla-franka-pickplace) | **19/20** | `nvidia/GR00T-N1.7-DROID`, 50 scripted demos |
 
-All were trained and evaluated on one NVIDIA L40S; see [Run on NVIDIA Brev](guides/brev.md) for every measured step.
+All were trained and evaluated on one NVIDIA L40S; see [NVIDIA Brev setup](guides/brev.md) for every measured step.
 They are simulation results only: one scene, one object at a time, fixed lighting.
 
 ## FANUC CRX-3iA {#crx3ia}
@@ -43,7 +43,7 @@ one per object): wrist camera, left camera, right camera.</em></p>
 | | |
 |---|---|
 | Hugging Face | [`umegan/urdf2vla-franka-gr00t-n1.7`](https://huggingface.co/umegan/urdf2vla-franka-gr00t-n1.7) (NVIDIA Open Model License) |
-| Robot | Franka Emika Panda (7 joints) with the Franka Hand from its URDF ([tutorial](tutorial.md)) |
+| Robot | Franka Emika Panda (7 joints) with the Franka Hand from its URDF ([Franka CLI tutorial](tutorial.md)) |
 | Cameras | wrist + left + right, 256×256 each |
 | State / action | 7 joint positions + gripper; 16 actions per call at 20 Hz |
 | Training data | 50 scripted demos (50 of 63 attempts succeeded, 30 min): [`umegan/urdf2vla-franka-pickplace`](https://huggingface.co/datasets/umegan/urdf2vla-franka-pickplace) |

@@ -1,9 +1,10 @@
-# ブラウザでロボットを確かめる
+# ブラウザでロボットとカメラを確認する
 
 `urdf2vla view` は、ロボット・把持点・台・カメラを Web ブラウザの 3D 画面に表示します。Isaac Sim や Omniverse を
 開かずに設定を確かめ、urdf2vla の質問に答えられます。
 
 URDF と urdf2vla の設定だけを読むので、`inspect_robot` の直後から使え、コンテナも要りません。
+Brev で動作中のシミュレーションを見るには [Isaac Sim Kit のライブ配信](brev.md#kit-livestream)を開きます。
 
 ```bash
 uv pip install -e '.[view]'                 # 初回だけ

@@ -29,8 +29,11 @@ bash docker/run.sh && bash docker/run.sh gr00t
 urdf2vla doctor                     # マシンを検査し、問題ごとに直し方を示す
 ```
 
-その後は[チュートリアル](https://momoiorg-repository.github.io/urdf2vla/ja/tutorial/)に進むか、リポジトリを
-Claude Code か Codex で開いて「自分のロボットで VLA 開発を始めたい」と頼んでください。
+セットアップ後は、ワークフローの進め方を選びます。
+
+- **コマンドを自分で実行する。** 同梱のロボットで全工程を試します。[Franka の CLI チュートリアル](https://momoiorg-repository.github.io/urdf2vla/ja/tutorial/)
+- **エージェントに工程を任せる。** Codex または Claude Code でリポジトリを開き、やりたいことを伝えます。[AI エージェントのガイド](https://momoiorg-repository.github.io/urdf2vla/ja/guides/claude-code/)
+- **自分のスクリプトで自動化する。** CLI を呼び出し、終了コードと JSON の結果を確認します。[シェルスクリプトでの自動化](https://momoiorg-repository.github.io/urdf2vla/ja/reference/#automation)
 
 ## いまの状態
 

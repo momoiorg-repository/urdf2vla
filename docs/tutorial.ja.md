@@ -1,13 +1,16 @@
-# チュートリアル: Franka で一通り
+# Franka のチュートリアルを CLI で進める
 
-urdf2vla に同梱の Franka Panda で、URDF から、デモ 50 個の記録、GR00T N1.7 の fine-tune、シミュレーションでの評価まで
-全工程を通します。途中で質問されることはないので、インストールの確認にもなります。
+同梱の Franka Panda を使って、コマンドを 1 つずつ自分で実行します。URDF を取り込み、デモを 50 件記録し、GR00T N1.7 を
+ファインチューニングしてシミュレーションで評価します。ロボットの設定はサンプルに含まれているため、手順 3 までで
+シミュレーションが起動することを確認できます。コマンドの実行を任せたい場合は
+[Codex または Claude Code で進める](guides/claude-code.md)を参照してください。
 
-[インストール](install.md) を済ませ、2 つのコンテナを起動し、Hugging Face の準備（[手順 5](install.md#huggingface)）を
-しておきます。下の時間は NVIDIA L40S で測ったものです。1〜5 と 7 は 16 GB の RTX GPU でも動きます。
+[NVIDIA Brev](guides/brev.md) または [手元の Linux](install.md) でセットアップを済ませ、2 つのコンテナを起動します。
+学習やモデルの評価に進む前に [Hugging Face へのアクセス](install.md#huggingface)を設定します。所要時間は NVIDIA L40S での
+実測値です。手順 1〜5 と 7 は 16 GB の RTX GPU でも実行できます。
 
-コマンドはすべて手元のマシンの端末で、`urdf2vla` のフォルダで `source .venv/bin/activate` の後に実行します
-（コンテナの中ではありません）。
+コマンドはホスト側の端末（Brev なら SSH 接続先）で実行します。`urdf2vla` ディレクトリで、まず
+`source .venv/bin/activate` を実行してください。
 
 | 工程 | コマンド | 時間 |
 |---|---|---|
@@ -89,7 +92,7 @@ urdf2vla train_vla --project projects/tutorial_franka --dataset demos
 
 44 GB 以上の GPU なら、`nvidia/GR00T-N1.7-DROID` から GR00T N1.7 を 10,000 step fine-tune し（L40S で 2 時間 42 分、41.6 GB）、
 学習したモデルがデモと同じところでグリッパを開くかを検査します（`release_check`: 10/10）。それより小さい GPU では、
-他のマシンで学習するための一式を作ります（[学習と評価](guides/training.md#another-machine)）。
+他のマシンで学習するための一式を作ります（[GR00T のファインチューニングと評価](guides/training.md#another-machine)）。
 
 ## 7. 評価する {#evaluate}
 
@@ -113,4 +116,4 @@ GR00T のコンテナでモデルを起動し、Isaac Sim でロボットを動�
     シミュレータで再生します。物体が箱に入れば、データの形式・行動・接続はすべて動いています。何時間も学習する前の
     簡単な確認です。
 
-次へ: [自分のロボットで](guides/your-robot.md)。
+自分の URDF を使うときは [自分のロボットをシミュレーションする](guides/your-robot.md)へ進んでください。

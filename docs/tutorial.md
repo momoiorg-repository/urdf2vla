@@ -1,15 +1,16 @@
-# Tutorial: Franka end to end
+# Run the Franka tutorial with CLI commands
 
-This tutorial runs the whole pipeline with the Franka Panda that ships with urdf2vla: from its URDF to 50 recorded
-demonstrations, a fine-tuned GR00T N1.7 model and its evaluation in simulation. Nothing asks you questions, so it is
-also the way to check your installation.
+Run each command yourself with the bundled Franka Panda. You'll import its URDF, record 50 demonstrations, fine-tune
+GR00T N1.7 and evaluate the model in simulation. The example supplies the robot settings, so you can use the first
+three steps to check that your installation can launch the simulation. To delegate the commands, see
+[Run with Codex or Claude Code](guides/claude-code.md).
 
-You need the [installation](install.md) finished, both containers running, and Hugging Face set up
-([step 5](install.md#huggingface)). The times below were measured on an NVIDIA L40S; steps 1–5 and 7 also run on a
-16 GB RTX GPU.
+Complete setup on [NVIDIA Brev](guides/brev.md) or [local Linux](install.md) and start both containers. Configure
+[Hugging Face access](install.md#huggingface) before training or evaluating a model. Times below were measured on an
+NVIDIA L40S. Steps 1–5 and 7 also run on a 16 GB RTX GPU.
 
-Run every command in a terminal on your machine, in the `urdf2vla` folder with `source .venv/bin/activate` — not
-inside a container.
+Run the commands from the host terminal, such as your SSH session on Brev. In the `urdf2vla` directory, run
+`source .venv/bin/activate` first.
 
 | Step | Commands | Time |
 |---|---|---|
@@ -94,7 +95,7 @@ urdf2vla train_vla --project projects/tutorial_franka --dataset demos
 On a GPU with 44 GB or more, this fine-tunes GR00T N1.7 from `nvidia/GR00T-N1.7-DROID` for 10,000 steps (2 h 42 min,
 41.6 GB on the L40S) and then checks that the trained model opens the gripper where the demonstrations do
 (`release_check`: 10/10). On a smaller GPU it packages the job for another machine instead — see
-[Train and evaluate](guides/training.md#another-machine).
+[Fine-tune and evaluate GR00T](guides/training.md#another-machine).
 
 ## 7. Evaluate {#evaluate}
 
@@ -118,4 +119,4 @@ With `--video`, every episode is saved in `build/eval_videos/` as the model sees
     simulator instead of a model. If the object lands in the bin, the data format, the actions and the connection all
     work — a quick check before you spend hours on training.
 
-Next: [bring your own robot](guides/your-robot.md).
+To use the same workflow with your own URDF, start with [Simulate your own robot](guides/your-robot.md).

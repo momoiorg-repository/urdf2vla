@@ -1,4 +1,4 @@
-# Train and evaluate
+# Fine-tune and evaluate GR00T
 
 urdf2vla fine-tunes **NVIDIA Isaac GR00T N1.7** on your demonstrations: from `nvidia/GR00T-N1.7-DROID` (GR00T
 fine-tuned on the single-arm DROID dataset) for a robot with one arm, and from `nvidia/GR00T-N1.7-3B` for two arms. Converting, training
@@ -58,7 +58,7 @@ looks at your GPU:
 | Base model | `nvidia/GR00T-N1.7-DROID` for one arm, `nvidia/GR00T-N1.7-3B` for two | `--base-model` |
 
 Both base models use the gated `nvidia/Cosmos-Reason2-2B`: accept its license on Hugging Face and log in first
-(`urdf2vla doctor` checks it; see [Run on NVIDIA Brev](brev.md#huggingface)).
+(`urdf2vla doctor` checks it; see [NVIDIA Brev setup](brev.md#huggingface)).
 
 When training on the machine ends, `train_vla` runs a **release check** on the last checkpoint, without simulation
 (about a minute): just before each demo opens the gripper, does the model open it too? A low rate is reported in
@@ -120,7 +120,7 @@ state and the task text; the model answers with the next actions. The result is 
 | `--model` | checkpoint folder; relative paths are relative to the project. Keep it inside the repository so the containers can read it. |
 | `--episodes` | number of episodes (default 10) |
 | `--execution-horizon` | how many of the predicted actions to execute before asking the model again (default 16) |
-| `--replay` | instead of a model, replay the converted dataset — tests everything except the model (see the [tutorial](../tutorial.md#evaluate)) |
+| `--replay` | instead of a model, replay the converted dataset — tests everything except the model (see the [Franka CLI tutorial](../tutorial.md#evaluate)) |
 
 Each failed episode gets a name in the report: `never_closed`, `missed_grasp`, `never_released` or
 `released_off_target`. The most common one comes back in `warnings` with what to look at.
@@ -128,5 +128,5 @@ Each failed episode gets a name in the report: `never_closed`, `missed_grasp`, `
 !!! success "Measured on an NVIDIA L40S"
     FANUC CRX-3iA, 50 scripted demos, fine-tuned from `nvidia/GR00T-N1.7-DROID` for 10,000 steps (about 2 h 40 min,
     41.9 GB): **20/20** in evaluation, in about 10 minutes for 20 episodes. Details in
-    [Run on NVIDIA Brev](brev.md#results); the model is
+    [NVIDIA Brev setup](brev.md#results); the model is
     [`umegan/urdf2vla-crx3ia-gr00t-n1.7`](https://huggingface.co/umegan/urdf2vla-crx3ia-gr00t-n1.7).

@@ -29,8 +29,11 @@ bash docker/run.sh && bash docker/run.sh gr00t
 urdf2vla doctor                     # checks the machine and prints the fix for each problem
 ```
 
-Then follow the [tutorial](https://momoiorg-repository.github.io/urdf2vla/tutorial/), or open the repository in
-Claude Code or Codex and say "I want to start VLA development with my robot".
+After setup, choose how to run the workflow.
+
+- **Run each command yourself.** Try the full pipeline with the bundled robot in the [Franka CLI tutorial](https://momoiorg-repository.github.io/urdf2vla/tutorial/).
+- **Delegate the steps.** Open the repo in Codex or Claude Code and describe your goal. [AI agent guide](https://momoiorg-repository.github.io/urdf2vla/guides/claude-code/)
+- **Automate with your own scripts.** Call the CLI and check its exit codes and JSON results. [Shell script automation](https://momoiorg-repository.github.io/urdf2vla/reference/#automation)
 
 ## Status
 

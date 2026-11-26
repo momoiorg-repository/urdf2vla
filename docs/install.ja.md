@@ -1,4 +1,4 @@
-# インストール
+# 手元の Linux でセットアップする
 
 クラウド GPU を使う場合は [NVIDIA Brev のセットアップ](guides/brev.md#launchable)から始めます。
 
@@ -20,7 +20,7 @@ Isaac Lab Arena のコンテナで動きます。データ変換、学習、推�
 | ディスク | 空き **150 GB**。このマシンで学習するなら **300 GB**（checkpoint が 1 つ 24 GB） |
 | Python | Python 3.10 以降と [uv](https://docs.astral.sh/uv/) |
 | Hugging Face | `nvidia/Cosmos-Reason2-2B` のライセンスに同意したアカウント。学習と評価で使います（[手順 5](#huggingface)） |
-| 学習 | **44 GB 以上**の GPU（L40S, A100, H100, RTX 6000 Ada）。別のマシン（[学習と評価](guides/training.md#another-machine)）や[クラウドの GPU](guides/brev.md) でもかまいません |
+| 学習 | **44 GB 以上**の GPU（L40S, A100, H100, RTX 6000 Ada）。別のマシン（[GR00T のファインチューニングと評価](guides/training.md#another-machine)）や[クラウドの GPU](guides/brev.md) でもかまいません |
 
 ## 1. `urdf2vla` コマンドを入れる
 
@@ -76,7 +76,8 @@ GR00T N1.7 は vision-language モデル `nvidia/Cosmos-Reason2-2B` を使い、
 
 <div class="grid cards" markdown>
 
-- **AI エージェントに工程を任せる** → [AI エージェントから使う](guides/claude-code.md)
-- **各工程を自分で実行する**（同梱の Franka で） → [チュートリアル](tutorial.md)
+- 同梱のロボットを使ってコマンドを自分で実行する。[Franka の CLI チュートリアル](tutorial.md)
+- やりたいことを伝え、コマンドの実行をエージェントに任せる。[Codex または Claude Code で進める](guides/claude-code.md)
+- 自分のスクリプトから CLI を呼び出す。[シェルスクリプトでの自動化](reference.md#automation)
 
 </div>

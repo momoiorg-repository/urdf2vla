@@ -1,11 +1,17 @@
-# urdf2vla
+# What urdf2vla does
 
-**From your robot's URDF to a trained and evaluated Vision-Language-Action (VLA) model in NVIDIA Isaac Sim.**
+urdf2vla turns a robot URDF into a pick-and-place environment in NVIDIA Isaac Sim. Record demonstrations,
+fine-tune a Vision-Language-Action (VLA) model with GR00T, and measure how often it completes the task in simulation.
 
-<video autoplay loop muted playsinline width="100%" src="assets/crx3ia_model.mp4"></video>
-<p class="caption"><em>A GR00T N1.7 model trained with urdf2vla, running a FANUC CRX-3iA in Isaac Sim (20/20 in evaluation).
-Each frame is what the model sees: the wrist camera and the left and right cameras.
-<a href="models/">Trained models</a> · <a href="https://huggingface.co/umegan/urdf2vla-crx3ia-gr00t-n1.7">Hugging Face</a></em></p>
+## Where to start
+
+Choose where to run urdf2vla. Use [NVIDIA Brev](guides/brev.md) for a cloud GPU or [local Linux](install.md) for a machine you manage.
+
+| How you want to work | Start here |
+|---|---|
+| **Run commands yourself** | Follow the [Franka CLI tutorial](tutorial.md) with the bundled robot. Run each step in your terminal, from importing the URDF to evaluating the trained model. |
+| **Ask an AI agent to run the steps** | Open the repo in [Codex or Claude Code](guides/claude-code.md) and describe your goal. The agent uses the repo's skill to run the CLI and asks you for robot-specific decisions as needed. |
+| **Automate with shell scripts** | Call the same CLI from a script and use exit codes and JSON results to decide when to continue, pause for input, or stop. See [shell script automation](reference.md#automation). |
 
 ## Who it's for
 
@@ -15,17 +21,14 @@ Isaac Sim, Omniverse or VLA training.
 
 ## What you can do with it
 
-- **Turn a URDF into a checked pick-and-place environment in Isaac Sim.** The table, objects, bin and cameras are placed
-  from your arm's reach. urdf2vla asks only what the URDF can't tell it (which link is the hand, a good starting pose),
-  and you can answer by looking at the robot in your browser.
-- **Attach or swap the gripper** with one line, using the grippers in NVIDIA's asset library.
-- **Record demonstrations** with a scripted controller, the keyboard, or Isaac Lab Mimic to multiply a few into many.
-- **Fine-tune NVIDIA Isaac GR00T N1.7** on them and **evaluate the model in simulation** with a success rate, a reason
-  for every failure and videos.
-- **Run it all on a cloud GPU** (NVIDIA Brev), or let an AI agent (Claude Code, Codex) run the steps and ask you only
-  about your robot.
-
-Every step is one command that checks its own result: it moves on, asks a question, or tells you what to change.
+- **Build a pick-and-place environment in Isaac Sim from a URDF.** urdf2vla uses the arm's reach to place the table,
+  objects, bin and cameras. You can attach or swap a gripper from NVIDIA's asset library. [Simulate your own robot](guides/your-robot.md).
+- **Check the robot and cameras.** Inspect the gripper, initial pose and camera placement, and answer configuration
+  questions. [Inspect the setup in the browser](guides/view.md).
+- **Record demonstrations.** Use a scripted robot controller or keyboard teleoperation, and optionally expand the
+  dataset with Isaac Lab Mimic. [Record training demonstrations](guides/recording.md).
+- **Fine-tune NVIDIA Isaac GR00T N1.7 and evaluate it in simulation.** See the success rate, failure reasons and
+  episode videos. [Fine-tune and evaluate GR00T](guides/training.md).
 
 ```mermaid
 flowchart LR
@@ -40,7 +43,12 @@ flowchart LR
 | Franka Panda | [`umegan/urdf2vla-franka-gr00t-n1.7`](https://huggingface.co/umegan/urdf2vla-franka-gr00t-n1.7) | [dataset](https://huggingface.co/datasets/umegan/urdf2vla-franka-pickplace) | **19/20** |
 
 Each was trained from 50 scripted demonstrations in about 2 h 40 min on one NVIDIA L40S. Videos and details:
-[Trained models](models.md).
+[Published models and datasets](models.md).
+
+<video autoplay loop muted playsinline width="100%" src="assets/crx3ia_model.mp4"></video>
+<p class="caption"><em>A GR00T N1.7 model trained with urdf2vla, running a FANUC CRX-3iA in Isaac Sim (20/20 in evaluation).
+Each frame is what the model sees: the wrist camera and the left and right cameras.
+<a href="models/">Published models and datasets</a> · <a href="https://huggingface.co/umegan/urdf2vla-crx3ia-gr00t-n1.7">Hugging Face</a></em></p>
 
 ## Where it's going
 
@@ -55,16 +63,3 @@ Each was trained from 50 scripted demonstrations in about 2 h 40 min on one NVID
 
 One or two arms with a two-finger gripper, one task (an object into a container), simulation only. Training needs a
 GPU with **44 GB or more**; everything else runs on a 16 GB RTX GPU.
-
-## Where to start
-
-For a cloud GPU, start with [NVIDIA Brev setup](guides/brev.md#launchable).
-
-<div class="grid cards" markdown>
-
-- **[Install](install.md)** — what you need and how to build the containers.
-- **[Use it with an AI agent](guides/claude-code.md)** — let Claude Code or Codex run the steps.
-- **[Tutorial](tutorial.md)** — the whole pipeline once with the bundled Franka Panda.
-- **[Bring your own robot](guides/your-robot.md)** — from a URDF, with the FANUC CRX-3iA as the example.
-
-</div>

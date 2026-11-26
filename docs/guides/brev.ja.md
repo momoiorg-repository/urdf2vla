@@ -1,4 +1,4 @@
-# NVIDIA Brev で動かす
+# NVIDIA Brev でセットアップする
 
 [Brev コンソール](https://brev.nvidia.com/)を開き、[Launchable の設定](#launchable)から始めます。VM の準備ができたら、
 Franka のシミュレーションを確認し、手元で Kit の画面を表示して、デモを記録できます。
@@ -326,7 +326,7 @@ GR00T N1.7 は画像と言語のモデル `nvidia/Cosmos-Reason2-2B` を使い�
 インスタンスを止めるとホームディレクトリが消える場合は、トークンを `/data` にも置き（例: `/data/secrets/hf_token`、
 権限 600）、再開のあと `~/.cache/huggingface/token` にコピーし直します。
 
-続きは[学習と評価](training.md)を参照してください。
+続きは[GR00T のファインチューニングと評価](training.md)を参照してください。
 
 ## FANUC CRX-3iA の実測値
 
@@ -381,7 +381,7 @@ License。urdf2vla での評価の手順はモデルカードにあります）�
 
 ![Four moments of one evaluation episode](../assets/crx3ia_model_steps.png)
 
-評価の動画と画像: [学習済みモデル](../models.md#crx3ia)。
+評価の動画と画像: [公開モデルとデータセット](../models.md#crx3ia)。
 
 ## セットアップのトラブルシューティング
 

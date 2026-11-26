@@ -1,4 +1,4 @@
-# リファレンス
+# CLI と設定のリファレンス
 
 ## コマンド
 
@@ -53,6 +53,15 @@
 | `outputs` | 書いたファイル（プロジェクトからの相対パス） |
 | `data` | 工程の主な結果（`checks` を含む） |
 | `log` | ログのファイル |
+
+## シェルスクリプトで自動化する {#automation}
+
+シェルスクリプトからも同じ CLI を呼び出せます。`urdf2vla skills --json` で工程の一覧と前提条件を確認できます。
+[Franka の CLI チュートリアル](tutorial.md)のコマンド順を参考に、必要な工程とオプションを選びます。
+
+- 終了コードが `0` のときは、結果の `next` で推奨される次の工程を確認します。
+- `2` のときは、`questions` を読んで入力を待ちます。`urdf2vla answer --project DIR key=value` で回答を保存し、その工程を再実行します。
+- `1` のときは、処理を止めて `errors` と `log` を確認します。`urdf2vla diagnose --project DIR` で直近の失敗を診断できます。
 
 ## `project.yaml`
 

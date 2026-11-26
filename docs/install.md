@@ -1,4 +1,4 @@
-# Install
+# Set up on local Linux
 
 For a cloud GPU, start with [NVIDIA Brev setup](guides/brev.md#launchable).
 
@@ -20,7 +20,7 @@ Isaac Sim, Isaac Lab, and Isaac Lab Arena. A second container runs GR00T N1.7 fo
 | Disk | **150 GB** free; **300 GB** if you train on this machine (each checkpoint is 24 GB) |
 | Python | Python 3.10 or newer and [uv](https://docs.astral.sh/uv/) |
 | Hugging Face | An account with the license of `nvidia/Cosmos-Reason2-2B` accepted, for training and evaluation ([step 5](#huggingface)) |
-| Training | A GPU with **44 GB or more** (L40S, A100, H100, RTX 6000 Ada). It can be another machine ([Train and evaluate](guides/training.md#another-machine)) or a [cloud GPU](guides/brev.md) |
+| Training | A GPU with **44 GB or more** (L40S, A100, H100, RTX 6000 Ada). It can be another machine ([Fine-tune and evaluate GR00T](guides/training.md#another-machine)) or a [cloud GPU](guides/brev.md) |
 
 ## 1. Install the `urdf2vla` command
 
@@ -76,7 +76,8 @@ GR00T N1.7 uses the vision-language model `nvidia/Cosmos-Reason2-2B`, which need
 
 <div class="grid cards" markdown>
 
-- **Let an AI agent run the steps** → [Use it with an AI agent](guides/claude-code.md)
-- **Run each step yourself** with the bundled Franka → [Tutorial](tutorial.md)
+- Run each command yourself with the bundled robot. [Franka CLI tutorial](tutorial.md)
+- Describe your goal and let an agent run the commands. [Run with Codex or Claude Code](guides/claude-code.md)
+- Call the CLI from your own script. [Shell script automation](reference.md#automation)
 
 </div>

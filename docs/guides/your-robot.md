@@ -1,9 +1,10 @@
-# Bring your own robot
+# Simulate your own robot from a URDF
 
 This guide takes a robot from its URDF to a running simulation, using a **FANUC CRX-3iA** as the example. FANUC
 publishes the URDF, and like most industrial arms the CRX comes **without a gripper** — so you'll also see how to
-attach one, and how to swap it for another. The steps are the same for any URDF. If you haven't yet, do the
-[tutorial](../tutorial.md) with the Franka first: you'll know what success looks like.
+attach one and how to swap it for another. To try the full workflow with a bundled URDF first, follow the
+[Franka CLI tutorial](../tutorial.md). To have an agent run these setup commands, see
+[Run with Codex or Claude Code](claude-code.md).
 
 <figure markdown="span">
   ![The CRX-3iA's wrist, left and right cameras at the start of an episode](../assets/crx3ia_cameras.png){ width="900" }

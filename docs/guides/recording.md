@@ -1,4 +1,4 @@
-# Record demonstrations
+# Record training demonstrations
 
 A VLA learns from demonstrations: camera images, the robot's state and the action taken at every step. urdf2vla records
 them in Isaac Sim with `collect_dataset` and keeps only the **successful** episodes.
@@ -26,11 +26,14 @@ to `datasets/<name>.hdf5` (`demos` by default; choose another with `--dataset`).
 
 ## Three ways to record
 
-=== "Scripted (no human)"
+=== "Scripted robot controller"
 
     A scripted controller picks up the object and puts it in the bin, with a new random object and position each episode.
     On a dual-arm robot it uses the nearer arm and keeps the other arm open at its initial pose. This is the quickest
     way to get a dataset and to check the whole pipeline.
+
+    The `--device scripted` option controls how the robot moves. You can launch the recording from your terminal,
+    a shell script, or a coding agent.
 
     ```bash
     urdf2vla collect_dataset --project projects/myrobot --device scripted --num-demos 50

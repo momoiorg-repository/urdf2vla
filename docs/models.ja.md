@@ -1,4 +1,4 @@
-# 学習済みモデル
+# 公開モデルとデータセット
 
 urdf2vla で、ロボットの URDF から GR00T N1.7 の checkpoint まで通して学習し、Isaac Sim で評価したモデルです。
 どれも、urdf2vla で動かすのに要るファイルと一緒に Hugging Face にあります。
@@ -43,7 +43,7 @@ urdf2vla で、ロボットの URDF から GR00T N1.7 の checkpoint まで通�
 | | |
 |---|---|
 | Hugging Face | [`umegan/urdf2vla-franka-gr00t-n1.7`](https://huggingface.co/umegan/urdf2vla-franka-gr00t-n1.7)（NVIDIA Open Model License） |
-| ロボット | Franka Emika Panda（7 関節）と URDF の Franka Hand（[チュートリアル](tutorial.md)） |
+| ロボット | Franka Emika Panda（7 関節）と URDF の Franka Hand（[Franka の CLI チュートリアル](tutorial.md)） |
 | カメラ | 手先 + 左 + 右、各 256×256 |
 | 状態 / 行動 | 関節 7 + グリッパ。1 回の推論で 16 step、20 Hz |
 | 学習データ | スクリプトのデモ 50 個（63 回中 50 回成功、30 分）: [`umegan/urdf2vla-franka-pickplace`](https://huggingface.co/datasets/umegan/urdf2vla-franka-pickplace) |

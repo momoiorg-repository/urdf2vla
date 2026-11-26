@@ -1,4 +1,4 @@
-# Running on NVIDIA Brev
+# Set up on NVIDIA Brev
 
 Start in the [Brev Console](https://brev.nvidia.com/) and follow the [Launchable setup](#launchable). Once the VM is ready,
 you can verify the Franka simulation, open the Kit viewport, and record demonstrations.
@@ -330,7 +330,7 @@ stop with `401 Client Error … Cannot access gated repo` until you have access.
 Keep a copy of the token on `/data` (for example `/data/secrets/hf_token`, mode 600) if your instance's home
 directory doesn't survive a stop, and copy it back to `~/.cache/huggingface/token` afterwards.
 
-Continue with [Train and evaluate](training.md).
+Continue with [Fine-tune and evaluate GR00T](training.md).
 
 ## FANUC CRX-3iA benchmark
 
@@ -387,7 +387,7 @@ is learned, checks it (`gripper_timing`), and `train_vla` checks the trained mod
 
 ![Four moments of one evaluation episode](../assets/crx3ia_model_steps.png)
 
-Videos and images of the evaluation: [Trained models](../models.md#crx3ia).
+Videos and images of the evaluation: [Published models and datasets](../models.md#crx3ia).
 
 ## Troubleshoot or set up manually
 

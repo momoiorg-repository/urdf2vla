@@ -1,10 +1,9 @@
-# Use it with an AI agent
+# Run with Codex or Claude Code
 
-**New to robot simulation? Let an agent drive.** urdf2vla ships with an agent skill, so a coding agent can run the
-steps for you, read each result, fix what it is allowed to fix, and come back only when it needs a fact about your
-robot. It works with [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) and with OpenAI's
-[Codex](https://developers.openai.com/codex) — both read the same skill file
-(`.agents/skills/urdf2vla/SKILL.md`, in the [Agent Skills](https://agentskills.io) format).
+Tell a coding agent what you want to do in plain language. It uses urdf2vla's Agent Skill to run the CLI commands,
+read the results, and ask you for decisions about your robot as needed. Both agents can read the same file at
+`.agents/skills/urdf2vla/SKILL.md`. [Codex](https://developers.openai.com/codex) ·
+[Claude Code](https://docs.claude.com/en/docs/claude-code/overview) · [Agent Skills format](https://agentskills.io)
 
 === "Claude Code"
 
@@ -56,11 +55,8 @@ For questions you answer by looking — which link is the hand, which way the fi
 the agent to open [`urdf2vla view`](view.md). Save your answers in the browser and tell the agent "saved"; it continues
 from there.
 
-## Without an agent
+## Run the same commands yourself {#without-an-agent}
 
-Nothing in urdf2vla depends on the agent. Every step is a plain `urdf2vla` command with a JSON result, so you can run it
-by hand, script it or call it from another agent: `urdf2vla skills --json` lists the steps with their inputs, outputs
-and prerequisites, `urdf2vla status --project ...` tells you what to run next, and `urdf2vla doctor` checks your machine.
-
-Next: to see what each step does, go through the [tutorial](../tutorial.md) — you can ask the agent to run it with you
-("run the Franka tutorial"). Then [bring your own robot](your-robot.md).
+Follow the [Franka CLI tutorial](../tutorial.md) to run each command yourself, or ask the agent to “run the Franka
+tutorial” to follow along. For repeatable runs, see [shell script automation](../reference.md#automation).
+When you're ready to use your own URDF, see [Simulate your own robot](your-robot.md).

@@ -64,20 +64,21 @@ plugins:
           build: true
           site_description: ロボットの URDF から、Omniverse を覚えなくても NVIDIA Isaac Sim で VLA モデルを学習するまで。
           nav_translations:
-            Home: ホーム
-            Get started: はじめる
-            Install: インストール
-            "Tutorial: Franka end to end": "チュートリアル: Franka で一通り"
-            Guides: ガイド
-            Bring your own robot: 自分のロボットを使う
-            Check your robot in the browser: ブラウザでロボットを確かめる
-            Record demonstrations: デモを記録する
-            Train and evaluate: 学習と評価
-            Run on NVIDIA Brev: NVIDIA Brev で動かす
-            Use it with an AI agent: AI エージェントから使う
-            Trained models: 学習済みモデル
-            Troubleshooting: トラブルシューティング
-            Reference: リファレンス
+            What urdf2vla does: urdf2vla でできること
+            Setup: セットアップ
+            Set up on NVIDIA Brev: NVIDIA Brev でセットアップする
+            Set up on local Linux: 手元の Linux でセットアップする
+            Run the workflow: ワークフローの実行
+            Run the Franka tutorial with CLI commands: Franka のチュートリアルを CLI で進める
+            Run with Codex or Claude Code: Codex または Claude Code で進める
+            Task guides: 作業別ガイド
+            Simulate your own robot from a URDF: 自分のロボットを URDF からシミュレーションする
+            Inspect robot and camera setup in the browser: ブラウザでロボットとカメラを確認する
+            Record training demonstrations: 学習用のデモを記録する
+            Fine-tune and evaluate GR00T: GR00T をファインチューニングして評価する
+            Published models and datasets: 公開モデルとデータセット
+            Troubleshoot setup and pipeline errors: セットアップと各工程のエラーを解決する
+            CLI and configuration reference: CLI と設定のリファレンス
 
 markdown_extensions:
   - admonition
@@ -104,17 +105,18 @@ markdown_extensions:
       alternate_style: true
 
 nav:
-  - Home: index.md
-  - Get started:
-      - Run on NVIDIA Brev: guides/brev.md
-      - Install: install.md
-      - Use it with an AI agent: guides/claude-code.md
-      - "Tutorial: Franka end to end": tutorial.md
-  - Guides:
-      - Bring your own robot: guides/your-robot.md
-      - Check your robot in the browser: guides/view.md
-      - Record demonstrations: guides/recording.md
-      - Train and evaluate: guides/training.md
-  - Trained models: models.md
-  - Troubleshooting: troubleshooting.md
-  - Reference: reference.md
+  - What urdf2vla does: index.md
+  - Setup:
+      - Set up on NVIDIA Brev: guides/brev.md
+      - Set up on local Linux: install.md
+  - Run the workflow:
+      - Run the Franka tutorial with CLI commands: tutorial.md
+      - Run with Codex or Claude Code: guides/claude-code.md
+  - Task guides:
+      - Simulate your own robot from a URDF: guides/your-robot.md
+      - Inspect robot and camera setup in the browser: guides/view.md
+      - Record training demonstrations: guides/recording.md
+      - Fine-tune and evaluate GR00T: guides/training.md
+  - Published models and datasets: models.md
+  - Troubleshoot setup and pipeline errors: troubleshooting.md
+  - CLI and configuration reference: reference.md

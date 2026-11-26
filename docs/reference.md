@@ -1,4 +1,4 @@
-# Reference
+# CLI and configuration reference
 
 ## Commands
 
@@ -53,6 +53,16 @@ Every step prints one JSON object and saves it in `logs/latest_<step>.json`:
 | `outputs` | Files written (relative to the project) |
 | `data` | The step's main results, including `checks` |
 | `log` | The full log file |
+
+## Automate with shell scripts {#automation}
+
+Run the same CLI steps from a shell script. Use `urdf2vla skills --json` to list the steps and their prerequisites.
+Start with the command sequence in the [Franka CLI tutorial](tutorial.md), then choose the steps and options you need.
+
+- On exit code `0`, read `next` from the result to find the suggested next steps.
+- On exit code `2`, read `questions` and pause for input. Save the answers with `urdf2vla answer --project DIR key=value`
+  and rerun the step.
+- On exit code `1`, stop and inspect `errors` and `log`. Use `urdf2vla diagnose --project DIR` to check the last failure.
 
 ## `project.yaml`
 

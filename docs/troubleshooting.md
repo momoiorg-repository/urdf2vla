@@ -1,4 +1,4 @@
-# Troubleshooting
+# Troubleshoot setup and pipeline errors
 
 When a step fails, its JSON result has `"status": "error"` and `errors` names the failed check. Three commands help:
 
@@ -88,8 +88,8 @@ from the target did it end?) and `snapshots/collect_fail_*.png` shows the last f
 | `finetune_args_valid` | GR00T rejected the training arguments. Check the values you passed to `train_vla`. |
 | `gripper_timing` | A gripper change falls where no training sample can execute it, so the model won't learn it. Re-run `convert_dataset --force` (it adds the frames that fix this). |
 | `release_check` | The trained model doesn't open the gripper where the demonstrations do; in evaluation it will carry the object and never let go. Convert again with `--force`, check `gripper_timing`, and train again. |
-| `401 … Cannot access gated repo` | Training and evaluation need `nvidia/Cosmos-Reason2-2B`: accept its license and log in ([Install](install.md#huggingface)). |
-| "This GPU can't train GR00T N1.7" warning | Not an error: train on a machine with 44 GB or more — see [Train and evaluate](guides/training.md#another-machine). |
+| `401 … Cannot access gated repo` | Training and evaluation need `nvidia/Cosmos-Reason2-2B`: accept its license and log in ([Hugging Face setup](install.md#huggingface)). |
+| "This GPU can't train GR00T N1.7" warning | Not an error: train on a machine with 44 GB or more — see [Fine-tune and evaluate GR00T](guides/training.md#another-machine). |
 
 ### The trained model fails in evaluation
 

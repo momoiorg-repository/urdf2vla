@@ -1,10 +1,9 @@
-# AI エージェントから使う
+# Codex または Claude Code で進める
 
-**ロボットのシミュレーションが初めてなら、エージェントに任せてください。** urdf2vla には Agent Skill が付いていて、
-コーディングエージェントが工程を実行し、結果を読み、直してよいものは直し、ロボットについての事実が必要なときだけ
-あなたに戻ってきます。[Claude Code](https://docs.claude.com/en/docs/claude-code/overview) と OpenAI の
-[Codex](https://developers.openai.com/codex) のどちらでも使え、どちらも同じ Skill のファイル
-（`.agents/skills/urdf2vla/SKILL.md`。[Agent Skills](https://agentskills.io) の形式）を読みます。
+やりたいことを普段の言葉でコーディングエージェントに伝えます。エージェントは urdf2vla の Agent Skill に従って CLI を実行し、
+結果を読み、ロボットについて判断が必要なときに質問します。どちらのエージェントも
+`.agents/skills/urdf2vla/SKILL.md` を読み込めます。[Codex](https://developers.openai.com/codex) ·
+[Claude Code](https://docs.claude.com/en/docs/claude-code/overview) · [Agent Skills の形式](https://agentskills.io)
 
 === "Claude Code"
 
@@ -54,11 +53,8 @@ Skill はエージェントが urdf2vla のコマンドだけを使うように�
 見て答える質問（どの link が手先か、指はどちらに開くか、カメラがどこを向くか）では、エージェントに
 [`urdf2vla view`](view.md) を開くよう頼んでください。ブラウザで答えを保存し、エージェントに「保存した」と伝えれば続きを実行します。
 
-## エージェントを使わない場合
+## 同じコマンドを自分で実行する {#エージェントを使わない場合}
 
-urdf2vla はエージェントがなくても動きます。各工程は JSON の結果を返す普通の `urdf2vla` コマンドなので、手で実行しても、
-スクリプトからも、他のエージェントからも呼べます。`urdf2vla skills --json` は各工程の入出力と前提を、
-`urdf2vla status --project ...` は次に実行するものを、`urdf2vla doctor` はマシンの検査結果を返します。
-
-次へ: 各工程が何をするかは [チュートリアル](../tutorial.md) で確かめられます。エージェントに「Franka のチュートリアルを
-一緒に実行して」と頼むこともできます。その後は [自分のロボットを使う](your-robot.md) へ。
+[Franka の CLI チュートリアル](../tutorial.md)に沿って自分でコマンドを実行するか、エージェントに「Franka のチュートリアルを
+一緒に実行して」と頼んでください。繰り返し同じ手順を実行するなら [シェルスクリプトでの自動化](../reference.md#automation)、
+自分の URDF を使うなら [自分のロボットをシミュレーションする](your-robot.md)へ進んでください。

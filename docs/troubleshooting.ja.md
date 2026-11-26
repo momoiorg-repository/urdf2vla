@@ -1,4 +1,4 @@
-# トラブルシューティング
+# セットアップと各工程のエラーを解決する
 
 工程が失敗すると、JSON の結果は `"status": "error"` になり、`errors` に失敗した検査の名前が入ります。役に立つコマンドは 3 つです。
 
@@ -85,8 +85,8 @@ urdf2vla status   --project projects/myrobot     # どの工程が済んだか�
 | `finetune_args_valid` | GR00T が学習の引数を受け付けなかった。`train_vla` に渡した値を確かめる |
 | `gripper_timing` | グリッパの切り替えが、どの学習サンプルでも実行できない位置にあり、モデルがそれを学べない。`convert_dataset --force` をやり直す（これを直すフレームを足します） |
 | `release_check` | 学習したモデルが、デモでグリッパを開く場所で開かない。評価では物体を運んだまま放さない。`--force` で変換し直し、`gripper_timing` を確かめてから学習し直す |
-| `401 … Cannot access gated repo` | 学習と評価には `nvidia/Cosmos-Reason2-2B` が必要。ライセンスに同意してログインする（[インストール](install.md#huggingface)） |
-| 「この GPU では GR00T N1.7 を学習できません」の警告 | エラーではありません。44 GB 以上のマシンで学習します（[学習と評価](guides/training.md#another-machine)） |
+| `401 … Cannot access gated repo` | 学習と評価には `nvidia/Cosmos-Reason2-2B` が必要。ライセンスに同意してログインする（[Hugging Face の設定](install.md#huggingface)） |
+| 「この GPU では GR00T N1.7 を学習できません」の警告 | エラーではありません。44 GB 以上のマシンで学習します（[GR00T のファインチューニングと評価](guides/training.md#another-machine)） |
 
 ### 学習したモデルが評価で失敗する
 

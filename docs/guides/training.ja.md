@@ -1,4 +1,4 @@
-# 学習と評価
+# GR00T をファインチューニングして評価する
 
 urdf2vla はデモで **NVIDIA Isaac GR00T N1.7** を fine-tune します。腕 1 本のロボットは `nvidia/GR00T-N1.7-DROID`
 （単腕の DROID のデータで fine-tune した GR00T）から、腕 2 本は `nvidia/GR00T-N1.7-3B` から始めます。変換・学習・モデルの推論サーバは
@@ -118,7 +118,7 @@ urdf2vla evaluate_vla --project projects/myrobot \
 | `--model` | checkpoint のフォルダ。相対パスはプロジェクトからの相対。コンテナから読めるよう、リポジトリの中に置いてください |
 | `--episodes` | エピソード数（既定 10） |
 | `--execution-horizon` | 予測した行動のうち、次にモデルに聞くまでに実行する数（既定 16） |
-| `--replay` | モデルの代わりに変換済みのデータセットを再生します。モデル以外のすべてを試せます（[チュートリアル](../tutorial.md#evaluate)） |
+| `--replay` | モデルの代わりに変換済みのデータセットを再生します。モデル以外のすべてを試せます（[Franka の CLI チュートリアル](../tutorial.md#evaluate)） |
 
 失敗したエピソードには、報告書で名前が付きます: `never_closed`、`missed_grasp`、`never_released`、
 `released_off_target`。いちばん多いものは、見るところと一緒に `warnings` で伝えます。
