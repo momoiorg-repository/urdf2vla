@@ -1,7 +1,9 @@
 # インストール
 
-手元のマシンには小さな `urdf2vla` コマンドを入れます。重い処理は 2 つの Docker コンテナの中で動きます。1 つは
-Isaac Sim、Isaac Lab、Isaac Lab Arena（シミュレーション）、もう 1 つは GR00T N1.7（データ変換・学習・推論）です。
+クラウド GPU を使う場合は [NVIDIA Brev のセットアップ](guides/brev.md#launchable)から始めます。
+
+手元の Linux マシンを使う場合は、以下の手順で `urdf2vla` を入れます。シミュレーションは Isaac Sim、Isaac Lab、
+Isaac Lab Arena のコンテナで動きます。データ変換、学習、推論には GR00T N1.7 のコンテナを使います。
 
 !!! tip "コマンドを実行する場所"
     このドキュメントのコマンドはすべて、**手元のマシンの端末**で、`urdf2vla` のフォルダで `source .venv/bin/activate`
@@ -76,6 +78,5 @@ GR00T N1.7 は vision-language モデル `nvidia/Cosmos-Reason2-2B` を使い、
 
 - **AI エージェントに工程を任せる** → [AI エージェントから使う](guides/claude-code.md)
 - **各工程を自分で実行する**（同梱の Franka で） → [チュートリアル](tutorial.md)
-- **クラウドの GPU で**（ドライバ、Docker から GPU を使う設定、ディスクをスクリプト 1 つで準備） → [NVIDIA Brev で動かす](guides/brev.md)
 
 </div>

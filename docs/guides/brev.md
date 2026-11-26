@@ -1,6 +1,7 @@
 # Running on NVIDIA Brev
 
-Start a GPU VM on Brev, verify the Franka simulation, and connect to the Kit viewport. Once the scene works, you can record demonstrations, replay them, or train a model.
+Start in the [Brev Console](https://brev.nvidia.com/) and follow the [Launchable setup](#launchable). Once the VM is ready,
+you can verify the Franka simulation, open the Kit viewport, and record demonstrations.
 
 ## Before you start
 

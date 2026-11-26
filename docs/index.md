@@ -58,6 +58,8 @@ GPU with **44 GB or more**; everything else runs on a 16 GB RTX GPU.
 
 ## Where to start
 
+For a cloud GPU, start with [NVIDIA Brev setup](guides/brev.md#launchable).
+
 <div class="grid cards" markdown>
 
 - **[Install](install.md)** — what you need and how to build the containers.

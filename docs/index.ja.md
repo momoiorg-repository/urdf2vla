@@ -57,6 +57,8 @@ GPU が必要です。それ以外は 16 GB の RTX GPU で動きます。
 
 ## はじめに読むもの
 
+クラウド GPU を使う場合は [NVIDIA Brev のセットアップ](guides/brev.md#launchable)から始めます。
+
 <div class="grid cards" markdown>
 
 - **[インストール](install.md)** — 必要なものと、コンテナの作り方。

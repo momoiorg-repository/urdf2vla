@@ -106,6 +106,7 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Get started:
+      - Run on NVIDIA Brev: guides/brev.md
       - Install: install.md
       - Use it with an AI agent: guides/claude-code.md
       - "Tutorial: Franka end to end": tutorial.md
@@ -114,7 +115,6 @@ nav:
       - Check your robot in the browser: guides/view.md
       - Record demonstrations: guides/recording.md
       - Train and evaluate: guides/training.md
-      - Run on NVIDIA Brev: guides/brev.md
   - Trained models: models.md
   - Troubleshooting: troubleshooting.md
   - Reference: reference.md

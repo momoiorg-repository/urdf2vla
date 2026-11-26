@@ -1,6 +1,7 @@
 # NVIDIA Brev で動かす
 
-Brev で GPU VM を起動し、Franka のシミュレーションを確認して、手元で Kit の画面を表示する手順です。動作確認のあとに、デモの記録・再生やモデルの学習に進めます。
+[Brev コンソール](https://brev.nvidia.com/)を開き、[Launchable の設定](#launchable)から始めます。VM の準備ができたら、
+Franka のシミュレーションを確認し、手元で Kit の画面を表示して、デモを記録できます。
 
 ## 始める前に
 

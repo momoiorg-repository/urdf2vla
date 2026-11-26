@@ -1,7 +1,9 @@
 # Install
 
-You install the small `urdf2vla` command on your machine. It runs the heavy work in two Docker containers: one with
-Isaac Sim, Isaac Lab and Isaac Lab Arena (simulation), one with GR00T N1.7 (conversion, training, inference).
+For a cloud GPU, start with [NVIDIA Brev setup](guides/brev.md#launchable).
+
+For a local Linux machine, use the steps below. The `urdf2vla` command runs simulation in a container with
+Isaac Sim, Isaac Lab, and Isaac Lab Arena. A second container runs GR00T N1.7 for conversion, training, and inference.
 
 !!! tip "Where to run commands"
     Every command in these docs runs **in a terminal on your machine**, in the `urdf2vla` folder, after
@@ -76,6 +78,5 @@ GR00T N1.7 uses the vision-language model `nvidia/Cosmos-Reason2-2B`, which need
 
 - **Let an AI agent run the steps** → [Use it with an AI agent](guides/claude-code.md)
 - **Run each step yourself** with the bundled Franka → [Tutorial](tutorial.md)
-- **On a cloud GPU** (one script sets up the driver, Docker GPU access and disk) → [Run on NVIDIA Brev](guides/brev.md)
 
 </div>
