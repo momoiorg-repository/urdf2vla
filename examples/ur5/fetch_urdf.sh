@@ -47,4 +47,8 @@ def get_package_share_directory(name):
     raise LookupError(f"package not found: {name}")
 EOF
 (cd "$DIR" && PYTHONPATH="$SHIM${PYTHONPATH:+:$PYTHONPATH}" xacro urdf/ur.urdf.xacro "ur_type:=$TYPE" "name:=$TYPE" -o "$TYPE.urdf")
+# 機種によってはほかの機種のメッシュを使う（ur10g-1750 は ur17g-1300 のもの）: URDF が参照するメッシュのフォルダをすべて取得する
+for d in $(grep -oE 'package://ur_description/meshes/[^/]+' "$DIR/$TYPE.urdf" | sort -u | sed 's#package://ur_description/##'); do
+  git -C "$DIR" sparse-checkout add "$d"
+done
 echo "$DIR/$TYPE.urdf"
