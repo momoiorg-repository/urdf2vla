@@ -24,11 +24,13 @@ Each step also writes a report with the measured values behind every check: `bui
 
 ### The arm faces away from the table, or objects fall to the floor {#base}
 
-Signs, usually together:
+Signs:
 
-- `launch_sim` snapshots show the arm beside or behind the robot instead of over the table, or the arm only moves over
-  the table while the robot itself turns.
-- `grasp_hold` fails with `object_offset_from_tcp_m` near 1 m: the object fell past the table to the floor.
+- `launch_sim` snapshots show the arm beside or behind the robot instead of over the table, and the wrist camera sees
+  the floor. Every check can still pass: the grasp check holds the object in the air wherever the arm is, so look at
+  the snapshots.
+- If the base isn't fixed as well, the robot itself turns during `launch_sim`, and `grasp_hold` fails with the object
+  far from the TCP (about 1 m when it falls past the table to the floor).
 
 This happens when the URDF starts with more than one empty link — no mass, no shape — before the first real link, and
 the links between them are rotated. Universal Robots' official URDF is like this
@@ -54,7 +56,7 @@ that's the arm stretched out at the height of the table top. To choose the pose 
 | Failed check | Step | What it means | What to do |
 |---|---|---|---|
 | `joint_limits_hold` | `import_robot` | A finger joint was pushed past its limits — the simulator isn't enforcing them. Common with simplified URDF grippers. | Replace the gripper with a SimReady asset: `robot.gripper.simready` ([guide](guides/your-robot.md#simready)), then redo from `configure_robot`. |
-| `grasp_hold` | `launch_sim` | With the object between the fingers, it drifted away after being released. | Raise `overrides.robot.asset.solver_position_iterations` (default 32; SimReady grippers use 64) and redo from `import_robot`. If the gripper's force is unrealistic, check the effort limits. If the object ended up more than 0.3 m away, it was never between the fingers: see [The arm faces away from the table](#base), and check in the wrist camera's snapshots that the gripper points out of the arm. |
+| `grasp_hold` | `launch_sim` | With the object between the fingers, it drifted away after being released. | Raise `overrides.robot.asset.solver_position_iterations` (default 32; SimReady grippers use 64) and redo from `import_robot`. If the gripper's force is unrealistic, check the effort limits. If the object fell off the table (`object_offset_from_tcp_m` near 1 m), it was never between the fingers: see [The arm faces away from the table](#base), and check in the wrist camera's snapshots that the gripper points out of the arm. |
 | `grasp_opening` | `launch_sim` | Prismatic fingers closed further than the object is wide: they sank into it. | Raise `overrides.robot.asset.solver_position_iterations` and redo from `import_robot`. |
 | `object_on_table:<object>` | `launch_sim` | The object doesn't come to rest on the table at the height its size implies. | Usually an asset problem (its rigid body or collision shape doesn't match its look). Remove it from `task.objects` and report it with `build/launch_report.yaml` (`object_frames`). |
 | `asset_size:<object>` | `launch_sim` | The spawned object's size differs from the catalog by more than 15 % — a wrong scale or unit in the asset. | Remove it from `task.objects` and report it. |

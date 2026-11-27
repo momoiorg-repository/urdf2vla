@@ -18,8 +18,8 @@ LIMIT_TOL = {"prismatic": 0.003, "revolute": 0.05, "continuous": 0.05}  # 可動
 PUSH_STEPS = 300
 OPENING_TOL = 0.004  # 直動の指の開きが物体の幅より狭くてよい量 [m]（接触のめり込み）
 HELD_TOL = 0.02  # 離した後に物体が TCP から離れてよい距離 [m]
-# これより離れたら、指から滑ったのではなく、物体が台の下まで落ちた（最初から指の間になかった）: ロボットの置き方かグリッパの向きの問題
-FAR_TOL = 0.3  # m
+# 物体の中心が台の上面よりこれだけ下にあれば、台の外へ落ちた（指から滑っただけなら台の上に残る）: ロボットの置き方かグリッパの向きの問題
+BELOW_TABLE = 0.02  # m
 
 # 失敗したときに、直し方として示す文（project.yaml のキー）
 FIX = {
@@ -132,12 +132,13 @@ def grasp_hold(
     tcp_now, _ = view.tcp_pose(arm.name)
     drift = float(torch.linalg.norm(obj_p - tcp_now))
     report["object_offset_from_tcp_m"] = round(drift, 4)
+    report["object_height_above_table_m"] = round(float(obj_p[2]) - c.task.table.top_z, 4)  # 負なら台の外へ落ちた
     checks.append(
         {
             "name": f"grasp_hold:{g.name}{suffix}",
             "ok": drift < HELD_TOL,
             "detail": {"object_offset_from_tcp_m": round(drift, 4), "tolerance_m": HELD_TOL},
-            "fix": FIX["grasp_hold_far"] if drift > FAR_TOL else FIX["grasp_hold"],
+            "fix": FIX["grasp_hold_far"] if float(obj_p[2]) < c.task.table.top_z - BELOW_TABLE else FIX["grasp_hold"],
         }
     )
     # 直動の指: 指の開き（閉じた位置からの移動量の和）が物体の幅と合うか（めり込みの検出）

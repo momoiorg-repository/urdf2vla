@@ -159,7 +159,7 @@ urdf2vla answer --project P 'robot.gripper_joints=[joint7_R, joint7_L]' 'gripper
 - カメラ画像が step 間で更新されない（`camera_alive` 失敗）→ `overrides.task.render_fix: true`（制御周期が変わることを報告する）
 - `grasp_opening` / `grasp_hold` 失敗（指が物体にめり込む / 挟んだ物体が落ちる）→ `overrides.robot.asset.solver_position_iterations`
   を 2 倍（32 → 64、上限 128）にして import_robot からやり直す（物理の計算が少し遅くなることを報告する）
-  ただし `grasp_hold` で物体が TCP から 0.3 m 以上離れた（`object_offset_from_tcp_m` が 1 m 近い）ときは solver ではない。
+  ただし `grasp_hold` で物体が台の外へ落ちた（`object_offset_from_tcp_m` が 1 m 近い）ときは solver ではない。
   snapshots で腕が台の上にあるか・手首カメラに指が写るかを見て、ユーザにも見せる。腕が台と反対を向く・ロボットごと回るなら、
   `generated/robot_metadata.yaml` の `articulation_root` が質量のある最初の link か確かめる（docs/troubleshooting.md の
   「The arm faces away from the table」）。手首カメラがロボットの内側を写すなら、グリッパが内向きに付いている
