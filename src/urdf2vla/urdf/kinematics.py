@@ -24,6 +24,15 @@ def quat_from_rpy(r: float, p: float, y: float) -> Quat:
     )
 
 
+def rpy_from_quat(q: Quat) -> Vec:
+    """(x, y, z, w) → URDF の rpy（quat_from_rpy の逆）。"""
+    x, y, z, w = q
+    r = math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y))
+    p = math.asin(max(-1.0, min(1.0, 2 * (w * y - z * x))))
+    yaw = math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
+    return (r, p, yaw)
+
+
 def quat_mul(a: Quat, b: Quat) -> Quat:
     ax, ay, az, aw = a
     bx, by, bz, bw = b

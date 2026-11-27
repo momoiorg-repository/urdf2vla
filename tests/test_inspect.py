@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import textwrap
 from pathlib import Path
@@ -11,6 +12,7 @@ import pytest
 import yaml
 
 from urdf2vla.cli import main
+from urdf2vla.schema.robot import RobotMetadata
 from urdf2vla.urdf.kinematics import Transform, look_at_ros, quat_rotate
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -305,6 +307,74 @@ def test_arm_without_gripper_gets_the_simready_gripper_on_its_tool_frame(tmp_pat
     cfg = yaml.safe_load((proj / "generated/robot_config.yaml").read_text())
     assert cfg["grippers"][0]["mount_link"] == "tool0"
     assert cfg["arms"][0]["approach_axis"][2] > 0.99  # joint6 の軸（+z）の、tool0 がある側
+
+
+def _ur_like_urdf(path: Path) -> Path:
+    """UR の公式 ROS 2 の URDF（ur_description）と同じ作り: 空の world → 空の base_link（横に空の base）→ 180° 回った
+    base_link_inertia。最後の link（wrist_3_link）の座標はフランジ面にあり、形はその手前（内側）。ft_frame（+z が腕の内側）と
+    tool0（+z が外）は同じ位置。手首の関節は ±360°。"""
+    pi = math.pi
+
+    def fixed(name, parent, child, rpy="0 0 0"):
+        return f'<joint name="{name}" type="fixed"><parent link="{parent}"/><child link="{child}"/><origin xyz="0 0 0" rpy="{rpy}"/></joint>'
+
+    def rev(name, parent, child, xyz, axis, rpy="0 0 0"):
+        return (f'<joint name="{name}" type="revolute"><parent link="{parent}"/><child link="{child}"/><origin xyz="{xyz}" rpy="{rpy}"/>'
+                f'<axis xyz="{axis}"/><limit lower="-6.2832" upper="6.2832" effort="150" velocity="3.14"/></joint>')  # fmt: skip
+
+    wrist3 = _link("wrist_3_link").replace("</link>", '<collision><origin xyz="0 0 -0.04"/><geometry><box size="0.07 0.07 0.08"/></geometry></collision></link>')
+    parts = [
+        '<link name="world"/>', '<link name="base_link"/>', '<link name="base"/>', _link("base_link_inertia", 4.0),
+        fixed("base_joint", "world", "base_link"), fixed("base_link-base_fixed_joint", "base_link", "base", f"0 0 {pi}"),
+        fixed("base_link-base_link_inertia", "base_link", "base_link_inertia", f"0 0 {pi}"),
+        _link("shoulder_link"), rev("shoulder_pan_joint", "base_link_inertia", "shoulder_link", "0 0 0.089", "0 0 1"),
+        _link("upper_arm_link"), rev("shoulder_lift_joint", "shoulder_link", "upper_arm_link", "0 0 0", "0 1 0"),
+        _link("forearm_link"), rev("elbow_joint", "upper_arm_link", "forearm_link", "-0.425 0 0", "0 1 0"),
+        _link("wrist_1_link"), rev("wrist_1_joint", "forearm_link", "wrist_1_link", "-0.392 0 0", "0 1 0"),
+        _link("wrist_2_link"), rev("wrist_2_joint", "wrist_1_link", "wrist_2_link", "0 0 -0.09", "0 0 1"),
+        # フランジ面に置いた wrist_3_link: 手前の関節（wrist_2）は -z 側、形も -z 側。外向きは +z
+        wrist3, rev("wrist_3_joint", "wrist_2_link", "wrist_3_link", "0 0 -0.08", "0 0 1", f"{pi} 0 0"),
+        '<link name="ft_frame"/>', fixed("wrist_3_link-ft_frame", "wrist_3_link", "ft_frame", f"{pi} 0 0"),
+        '<link name="tool0"/>', fixed("wrist_3-tool0", "wrist_3_link", "tool0"),
+    ]  # fmt: skip
+    path.write_text(f'<robot name="ur_like">{"".join(parts)}</robot>')
+    return path
+
+
+def test_ur_like_urdf_gets_its_base_turned_and_the_gripper_on_tool0(tmp_path, capsys):
+    """UR の URDF: 空の link が 2 段続く根元を飛ばして base_link_inertia を root にし（間の 180° は base_pose へ。Isaac Sim は空の
+    link を剛体にしないので、飛ばさないと固定が効かず、向きも 180° ずれる）、グリッパは tool0 に外向きで付ける（ft_frame は内向き）。"""
+    from urdf2vla.urdf import analysis as A
+    from urdf2vla.urdf.parser import parse_urdf
+
+    proj = make_project(tmp_path, capsys, _ur_like_urdf(tmp_path / "ur.urdf"), {"gripper": {"simready": "robotiq_2f_85"}})
+    r = run(capsys, "inspect_robot", "--project", str(proj))
+    assert r["status"] == "ok", r  # 正面は URDF の座標で +x（質問なし）
+    inferred = {i["key"]: i["value"] for i in r["inferred"]}
+    assert inferred["articulation_root"] == "base_link_inertia" and inferred["robot.front_axis"] == "+x"
+    assert run(capsys, "configure_robot", "--project", str(proj))["status"] == "ok"
+    cfg = yaml.safe_load((proj / "generated/robot_config.yaml").read_text())
+    assert cfg["root_link"] == "base_link_inertia"
+    assert abs(abs(cfg["base_pose"]["rot_xyzw"][2]) - 1.0) < 1e-6  # world から見た base_link_inertia の 180°
+    arm, g = cfg["arms"][0], cfg["grippers"][0]
+    assert g["mount_link"] == "tool0" and arm["approach_axis"][2] > 0.99 and arm["tcp_offset"]["pos"][2] > 0.1  # 把持点はフランジの外
+    # 正規化した URDF: 空の world・base_link を外し、横の base は同じ位置・向きのまま base_link_inertia に付け替える
+    m = parse_urdf(proj / "build/robot.urdf")
+    assert "world" not in m.links and "base_link" not in m.links and A.root_link(m) == "base_link_inertia"
+    assert m.parent_joint("base").parent == "base_link_inertia"
+    t = A.relative_transform(m, "base_link_inertia", "base")
+    assert all(abs(v) < 1e-6 for v in t.pos) and abs(abs(t.rot[3]) - 1.0) < 1e-6  # 180° と 180° で向きは同じ
+
+    meta = RobotMetadata.model_validate(yaml.safe_load((proj / "generated/robot_metadata.yaml").read_text()))
+    assert set(meta.links_after("elbow_joint")) == {"forearm_link", "wrist_1_link", "wrist_2_link", "wrist_3_link", "ft_frame", "tool0"}
+
+
+def test_gripperless_arm_does_not_offer_its_wrist_as_the_gripper(tmp_path, capsys):
+    """グリッパのない UR: 最後の関節（±360° の手首）を指の関節として提案しない。SimReady のグリッパを付けるよう案内する。"""
+    proj = make_project(tmp_path, capsys, _ur_like_urdf(tmp_path / "ur.urdf"))
+    r = run(capsys, "inspect_robot", "--project", str(proj))
+    q = next(q for q in r["questions"] if q["key"] == "robot.gripper_joints")
+    assert q["suggestion"] is None and "手首の回転" in q["prompt"] and "simready" in q["prompt"]
 
 
 def test_no_gripper_question_mentions_attaching_one(tmp_path, capsys):
