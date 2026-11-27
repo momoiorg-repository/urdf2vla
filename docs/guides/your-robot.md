@@ -46,7 +46,13 @@ attach one and how to swap it for another. To try the full workflow with a bundl
 
     The example attaches a Robotiq 2F-85 to `tool0` and sets an elbow-up starting pose above the table. Other models
     expand the same way — `bash examples/ur5/fetch_urdf.sh ur5e` (also `ur3e`, `ur10e`, `ur16e` and the rest of
-    `config/`). urdf2vla is tested with the UR5: scripted demonstrations and their replay, no trained model yet.
+    `config/`); change `urdf` in the project and remove `default_pose` so `import_robot` proposes one for that model.
+
+    | Model | What was checked |
+    |---|---|
+    | UR5 | The example: scripted demonstrations and their replay. No trained model yet. |
+    | UR5e, UR10e | With the proposed starting pose, `launch_sim` passes and scripted demonstrations record. The UR10e's pose turns `wrist_1` to about 237°; fine in simulation, but set your own pose if you plan to run it on the real arm. |
+    | UR3e | The proposed pose folds the arm so the upper arm passes next to the fingers, and `grasp_hold` fails. Set the starting pose yourself ([in the viewer](view.md#default-pose)), with the elbow up. |
 
 === "Your own URDF"
 
