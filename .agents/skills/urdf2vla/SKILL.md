@@ -38,6 +38,11 @@ urdf2vla <skill> --project projects/<name> [オプション]   # Skill の実行
 urdf2vla skills --json              # Skill 一覧（phase・入出力・前提）
 ```
 
+`.xacro` は直接読めないので、先に URDF に展開する（`xacro my.urdf.xacro -o robot.urdf`）。ROS 2 がないために
+`$(find パッケージ)` で止まるときは、`examples/ur5/fetch_urdf.sh` の代わりのモジュール（ament_index_python）を流用できる。
+公開の URDF の例: FANUC CRX は `bash examples/crx3ia/fetch_urdf.sh`、Universal Robots は `bash examples/ur5/fetch_urdf.sh [ur5e など]`
+（どちらも ROS 2 不要）で取得し、`urdf2vla init projects/<name> --from examples/<例>/project.yaml` から始める。
+
 ## Phase 1 の流れ
 
 1. `inspect_robot` — URDF 解析。ここで **End Effector の候補が複数ある・回転関節の指の開く向きが分からない・arm/gripper 以外の可動関節がある**
@@ -154,6 +159,12 @@ urdf2vla answer --project P 'robot.gripper_joints=[joint7_R, joint7_L]' 'gripper
 - カメラ画像が step 間で更新されない（`camera_alive` 失敗）→ `overrides.task.render_fix: true`（制御周期が変わることを報告する）
 - `grasp_opening` / `grasp_hold` 失敗（指が物体にめり込む / 挟んだ物体が落ちる）→ `overrides.robot.asset.solver_position_iterations`
   を 2 倍（32 → 64、上限 128）にして import_robot からやり直す（物理の計算が少し遅くなることを報告する）
+  ただし `grasp_hold` で物体が台の外へ落ちた（`object_offset_from_tcp_m` が 1 m 近い）ときは solver ではない。
+  snapshots で腕が台の上にあるか・手首カメラに指が写るかを見て、ユーザにも見せる。腕が台と反対を向く・ロボットごと回るなら、
+  `generated/robot_metadata.yaml` の `articulation_root` が質量のある最初の link か確かめる（docs/troubleshooting.md の
+  「The arm faces away from the table」）。手首カメラがロボットの内側を写すなら、グリッパが内向きに付いている
+  （`generated/robot_config.yaml` の `arms` の `approach_axis`）。`mount_link` を変えても向きは変わらないので、自分で直さず、
+  URDF を添えて報告するようユーザに伝える
 - `first_frame_fresh` 失敗（エピソードの最初の画像が reset 前の場面）→ そのデータセットは使わず、collect_dataset を別の `--dataset` 名で記録し直し、
   それでも続くならユーザに報告する（環境を作った直後の描画の立ち上がりの問題）
 

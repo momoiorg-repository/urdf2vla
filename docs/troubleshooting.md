@@ -22,12 +22,41 @@ Each step also writes a report with the measured values behind every check: `bui
 
 ## By symptom
 
+### The arm faces away from the table, or objects fall to the floor {#base}
+
+Signs:
+
+- `launch_sim` snapshots show the arm beside or behind the robot instead of over the table, and the wrist camera sees
+  the floor. Every check can still pass: the grasp check holds the object in the air wherever the arm is, so look at
+  the snapshots.
+- If the base isn't fixed as well, the robot itself turns during `launch_sim`, and `grasp_hold` fails with the object
+  far from the TCP (about 1 m when it falls past the table to the floor).
+
+This happens when the URDF starts with more than one empty link — no mass, no shape — before the first real link, and
+the links between them are rotated. Universal Robots' official URDF is like this
+(`world` → `base_link` → `base_link_inertia`, turned 180°). Isaac Sim makes no rigid body from an empty link. If such a
+link stays the robot's base, the base isn't fixed and the turn is lost. urdf2vla now skips the whole empty chain and
+puts the turn into `base_pose`.
+
+1. Update urdf2vla (`git pull`). In `generated/robot_metadata.yaml`, `articulation_root` should be the first link with
+   mass (`base_link_inertia` for UR).
+2. In an existing project, remove any workarounds you added to `project.yaml` (`robot.base_pose`, `robot.front_axis`,
+   `robot.gripper.mount_link`) and `robot.default_pose` from `answers.yaml`.
+3. Redo from `inspect_robot`, with `import_robot --force`.
+
+### The starting pose hits the table {#start-pose}
+
+When `import_robot` proposes a starting pose, answer `suggested`: it keeps the arm from the elbow on at least 8 cm above
+the table. `keep` keeps the pose you have; if you never set one, that's the middle of each joint's range. For a UR,
+that's the arm stretched out at the height of the table top. To choose the pose yourself, set it with the sliders in
+`urdf2vla view` and save it ([Saving the starting pose](guides/view.md#default-pose)), then redo from `configure_robot`.
+
 ### The gripper closes but the object slips out or falls
 
 | Failed check | Step | What it means | What to do |
 |---|---|---|---|
 | `joint_limits_hold` | `import_robot` | A finger joint was pushed past its limits — the simulator isn't enforcing them. Common with simplified URDF grippers. | Replace the gripper with a SimReady asset: `robot.gripper.simready` ([guide](guides/your-robot.md#simready)), then redo from `configure_robot`. |
-| `grasp_hold` | `launch_sim` | With the object between the fingers, it drifted away after being released. | Raise `overrides.robot.asset.solver_position_iterations` (default 32; SimReady grippers use 64) and redo from `import_robot`. If the gripper's force is unrealistic, check the effort limits. |
+| `grasp_hold` | `launch_sim` | With the object between the fingers, it drifted away after being released. | Raise `overrides.robot.asset.solver_position_iterations` (default 32; SimReady grippers use 64) and redo from `import_robot`. If the gripper's force is unrealistic, check the effort limits. If the object fell off the table (`object_offset_from_tcp_m` near 1 m), it was never between the fingers: see [The arm faces away from the table](#base), and check in the wrist camera's snapshots that the gripper points out of the arm. |
 | `grasp_opening` | `launch_sim` | Prismatic fingers closed further than the object is wide: they sank into it. | Raise `overrides.robot.asset.solver_position_iterations` and redo from `import_robot`. |
 | `object_on_table:<object>` | `launch_sim` | The object doesn't come to rest on the table at the height its size implies. | Usually an asset problem (its rigid body or collision shape doesn't match its look). Remove it from `task.objects` and report it with `build/launch_report.yaml` (`object_frames`). |
 | `asset_size:<object>` | `launch_sim` | The spawned object's size differs from the catalog by more than 15 % — a wrong scale or unit in the asset. | Remove it from `task.objects` and report it. |
@@ -60,7 +89,7 @@ whole `actuators:` list from `generated/robot_config.yaml` to `overrides.robot.a
 
 | Failed check | What it means | What to do |
 |---|---|---|
-| `camera_not_black` | The image is (almost) black — usually a camera inside the robot's geometry. | Move it: `cameras:` in `project.yaml`, or for the wrist camera an `offset` (`- {preset: wrist, offset: 0.12}`). Redo from `configure_camera`. |
+| `camera_not_black` | The image is (almost) black — usually a camera inside the robot's geometry. | Move it: `cameras:` in `project.yaml`, or for the wrist camera an `offset` (`- {preset: wrist, offset: 0.12}`). Redo from `configure_camera`. If the wrist camera shows the inside of the robot, the gripper may point into the arm: urdf2vla misread which way the arm's flange faces (`approach_axis` under `arms` in `generated/robot_config.yaml`). Choosing another `mount_link` doesn't change the direction; report it with the URDF. |
 | `camera_alive`, `camera_frames_updated` | The image didn't change between two steps. A frozen camera ruins training data. | Set `overrides.task.render_fix: true` and redo from `configure_task` (each control step then renders once more). |
 | `camera_mount` | The wrist camera isn't where it was configured. | Report it as a bug, with `build/launch_report.yaml`. |
 | `first_frame_fresh` | An episode's first image still shows the previous episode. | Don't use that dataset; record again under a new `--dataset` name. |

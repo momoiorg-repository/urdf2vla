@@ -141,7 +141,9 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
         )
         checks.append({"name": f"camera_not_black:{cam.name}", "ok": mean > 5.0, "detail": {"mean_intensity": round(mean, 2)},
                        "fix": "カメラが手や筐体のメッシュの中にあると真っ黒になります。`urdf2vla view` でカメラを外に出すか、"
-                              "cameras の指定に clip_near（手前の描かない距離 [m]、preset: urdf の既定は 0.03）を書いてください。"})  # fmt: skip
+                              "cameras の指定に clip_near（手前の描かない距離 [m]、preset: urdf の既定は 0.03）を書いてください。"
+                              "手首のカメラがロボットの内側を写しているなら、グリッパが腕の内側を向いているかもしれません（generated/robot_config.yaml"
+                              " の arms の approach_axis。mount_link を変えても向きは変わりません）。そのときは URDF を添えて報告してください。"})  # fmt: skip
 
     from isaaclab.utils.math import quat_apply
 

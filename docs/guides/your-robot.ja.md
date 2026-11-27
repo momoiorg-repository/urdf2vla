@@ -27,6 +27,30 @@ URDF を公開していて、多くの産業用ロボットと同じく CRX に�
     ほかの CRX も同じように展開できます: `bash examples/crx3ia/fetch_urdf.sh crx10ia_l`（ほかに `crx5ia`、`crx10ia`、
     `crx10ia_lp`、`crx20ia_l`、`crx30ia`）。urdf2vla で確かめているのは CRX-3iA です。
 
+=== "Universal Robots UR5"
+
+    Universal Robots はロボットの記述を
+    [UniversalRobots/Universal_Robots_ROS2_Description](https://github.com/UniversalRobots/Universal_Robots_ROS2_Description)
+    で xacro 形式で公開しています（BSD-3-Clause。一部の新しい機種のメッシュは UR 独自の利用条件）。例のスクリプトが、版を
+    固定してダウンロードし、UR5 を URDF に展開します。`xacro` は必要ですが、ROS 2 は要りません。UR の xacro は
+    `$(find ur_description)` でファイルを探しますが、その問い合わせにはスクリプトが答えます。
+
+    ```bash
+    uv pip install xacro              # ROS 2 があれば: source /opt/ros/jazzy/setup.bash
+    bash examples/ur5/fetch_urdf.sh   # → examples/ur5/ur_description/ur5.urdf
+    urdf2vla init projects/ur5 --from examples/ur5/project.yaml
+    ```
+
+    例は Robotiq 2F-85 を `tool0` に取り付け、肘を上げて台の上に構える初期姿勢を指定しています。ほかの機種も同じように
+    展開できます: `bash examples/ur5/fetch_urdf.sh ur5e`（ほかに `ur3e`、`ur10e`、`ur16e` など `config/` にある名前）。
+    プロジェクトの `urdf` を変え、`default_pose` を消すと、`import_robot` がその機種の初期姿勢を提案します。
+
+    | 機種 | 確かめたこと |
+    |---|---|
+    | UR5 | この例: 自動操作のデモ記録とその再生。学習したモデルはまだありません |
+    | UR5e、UR10e | 提案の初期姿勢で `launch_sim` に合格し、自動操作のデモを記録できる。UR10e の提案は `wrist_1` を約 237° 回すので、シミュレーションでは問題ありませんが、実機で使うなら姿勢を自分で決めてください |
+    | UR3e | 提案の姿勢は腕を深く折りたたみ、上腕が指のすぐ横を通るので `grasp_hold` に失敗する。初期姿勢を自分で決めてください（[Viewer で](view.md#default-pose)、肘を上げた姿勢に） |
+
 === "自分の URDF"
 
     urdf2vla は URDF から読めることはすべて読みます。始める前に次を確かめてください。
@@ -43,8 +67,10 @@ URDF を公開していて、多くの産業用ロボットと同じく CRX に�
       いま対応しているのは、2 本指のグリッパの付いた単腕・双腕のロボットです（[双腕ロボット](#双腕ロボット)）。
 
     xacro は先に展開します: `xacro my_robot.urdf.xacro -o my_robot.urdf`
+    ROS 2 がないために `$(find my_description)` で止まるときは、ROS 2 を読み込むか、`examples/ur5/fetch_urdf.sh` の
+    小さな代わりを流用してください。
 
-    FANUC CRX-3iA と Franka のほかに、**KUKA LBR iiwa 14** と **Kinova Gen3** も、公開の URDF からこの手順でデモの記録まで
+    FANUC CRX-3iA、UR5、Franka のほかに、**KUKA LBR iiwa 14** と **Kinova Gen3** も、公開の URDF からこの手順でデモの記録まで
     進めることを確かめています。
 
 ## 2. プロジェクトを作る
@@ -169,7 +195,8 @@ task:
 グリッパのない腕では、`mount_link` は書かなくてかまいません。urdf2vla は腕の先のいちばん外側のフレーム（`tool0` や FANUC の
 `fanuc_flange` などのフランジ・ツールのフレーム）に、指がフランジ面から外へ伸びる向き（最後の関節の軸のフランジ側）で付けます。
 どのフレームに付けたかと、ほかの候補は `configure_robot` が表示します。別のフレームにするときは `mount_link` に書きます。
-どのフレームを選んでも指はフランジ面から外へ伸びます（+z ではなく +x が外向きのフレーム、たとえば FANUC の `flange` でも）。
+どのフレームを選んでも指はフランジ面から外へ伸びます（+z ではなく +x が外向きのフレーム、たとえば FANUC の `flange` でも）。フランジに複数のフレームがあるときは、+z が外を向くものを選びます
+（UR では、+z が手首の内側を向く `ft_frame` ではなく `tool0`）。
 
 取り付けた様子がおかしければ、`launch_sim` の snapshot ですぐ分かります。
 

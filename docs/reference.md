@@ -78,7 +78,7 @@ robot:
   gripper_open_position: upper         # fingers open at the lower or upper joint limit
   default_pose: {joint1: 0.0}          # starting pose [rad or m]
   effort_limits: {"joint[1-6]": 50.0}  # N·m; joint-name regex → value, overrides the URDF
-  base_pose: {pos: [0, 0, 0], rot_xyzw: [0, 0, 0, 1]}
+  base_pose: {pos: [0, 0, 0], rot_xyzw: [0, 0, 0, 1]}  # the base's pose: the URDF's root link, or the link under an empty `world` (UR: base_link)
   gripper: {simready: robotiq_2f_85}   # attach a gripper from the Isaac Sim asset library (robotiq_2f_85, ufactory_xarm); + mount_link to choose the frame on an arm without a gripper (optional)
 
 task:

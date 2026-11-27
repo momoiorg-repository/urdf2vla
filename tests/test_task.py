@@ -129,3 +129,27 @@ def test_crx3ia_gripper_points_out_of_the_flange_whichever_frame(tmp_path, capsy
     assert robot.grippers[0].mount_link == (mount or "fanuc_flange")  # 書かなければ +z が外向きのフレームを選ぶ
     assert robot.arms[0].approach_axis[0] > 0.99  # J6_link の +x = フランジ面から外
     assert abs(robot.arms[0].tcp_offset.pos[0] - (0.123 + 0.1484 - 0.012)) < 0.005
+
+
+UR5_EXAMPLE = Path(__file__).resolve().parent.parent / "examples/ur5/ur_description/ur5.urdf"
+
+
+@pytest.mark.skipif(not UR5_EXAMPLE.exists(), reason="run examples/ur5/fetch_urdf.sh to get the UR5 URDF")
+def test_ur5_example_needs_no_questions_and_faces_the_table(tmp_path, capsys):
+    """UR5 の例: 質問なしで設定が終わる。空の world・base_link を飛ばして base_link_inertia を root にし（180° は base_pose へ）、
+    Robotiq 2F-85 を tool0 に外向きで付ける。台はロボットの正面（+x）。"""
+    from urdf2vla.cli import main
+
+    proj = tmp_path / "ur5"
+    main(["init", str(proj), "--from", str(UR5_EXAMPLE.parent.parent / "project.yaml")])
+    capsys.readouterr()
+    for skill in ("inspect_robot", "configure_robot", "configure_task", "configure_camera"):
+        r = run(capsys, skill, "--project", str(proj))
+        assert r["status"] == "ok" and not r["questions"], (skill, r)
+    meta = yaml.safe_load((proj / "generated/robot_metadata.yaml").read_text())
+    assert meta["articulation_root"] == "base_link_inertia" and not meta["meshes"].get("unresolved")
+    cfg = yaml.safe_load((proj / "generated/robot_config.yaml").read_text())
+    assert abs(abs(cfg["base_pose"]["rot_xyzw"][2]) - 1.0) < 1e-6
+    assert cfg["grippers"][0]["mount_link"] == "tool0" and cfg["arms"][0]["approach_axis"][2] > 0.99
+    task = yaml.safe_load((proj / "generated/task.yaml").read_text())
+    assert task["table"]["center"][0] > 0.3  # 台はロボットの正面（+x）
