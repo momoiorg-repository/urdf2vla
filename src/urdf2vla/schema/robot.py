@@ -100,6 +100,18 @@ class RobotMetadata(BaseModel):
     meshes: MeshReport = Field(default_factory=MeshReport)
     cameras: list[CameraCandidate] = Field(default_factory=list)  # URDF のカメラの frame
 
+    def links_after(self, joint: str) -> list[str]:
+        """joint の子 link と、そこから先のすべての link（木の子孫）。"""
+        children: dict[str, list[str]] = {}
+        for j in self.joints:
+            children.setdefault(j.parent, []).append(j.child)
+        out, stack = [], [next(j.child for j in self.joints if j.name == joint)]
+        while stack:
+            link = stack.pop()
+            out.append(link)
+            stack += children.get(link, [])
+        return out
+
 
 # --------------------------------------------------------------------------- configuration
 

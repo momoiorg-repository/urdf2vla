@@ -192,8 +192,22 @@ def run(project: Project, args, result: SkillResult, app=None) -> None:
                 side = 0.0 if len(cfg.arms) == 1 else (0.15 if arm.name == "left" else -0.15 if arm.name == "right" else 0.15 * (1 - 2 * k))
                 targets[arm.name] = [cx, cy + side, task.table.top_z + 0.20]
         try:
-            suggestion = suggest_default_pose(sim, robot, cfg, targets)
+            from urdf2vla.sim.pose_suggest import CLEARANCE
+
+            # 肘（arm の 3 番目の関節）から先の剛体: 推奨姿勢では台から離す（肘を下げた解で腕が台にめり込まないように）
+            clear_bodies = {
+                arm.name: [robot.body_names.index(link) for link in meta.links_after(arm.joints[min(2, len(arm.joints) - 1)]) if link in robot.body_names]
+                for arm in cfg.arms if arm.joints
+            }  # fmt: skip
+            print(f"[urdf2vla] bodies kept above the table: { {n: [robot.body_names[i] for i in ids] for n, ids in clear_bodies.items()} }")
+            suggestion = suggest_default_pose(sim, robot, cfg, targets, table_top=top_z, clear_bodies=clear_bodies)
             print(f"[urdf2vla] suggested default pose: {suggestion}")
+            low = {n: a["table_clearance"] for n, a in suggestion["arms"].items() if a.get("table_clearance") is not None and a["table_clearance"] < CLEARANCE}
+            if low:
+                result.warnings.append(
+                    f"推奨姿勢でも、肘から先が台に近い arm があります（台の上面からの高さ [m]: {low}）。"
+                    "`urdf2vla view` で姿勢を確かめ、台に当たるなら robot.default_pose を指定してください。"
+                )
         except Exception as e:  # noqa: BLE001  提案は補助機能。失敗しても検査結果は返す
             import traceback
 
