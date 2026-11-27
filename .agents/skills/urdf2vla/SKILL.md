@@ -52,7 +52,11 @@ urdf2vla skills --json              # Skill 一覧（phase・入出力・前提�
    初期姿勢で手先が下を向いていなければ IK で推奨姿勢を求め、`robot.default_pose` を質問する
 6. `launch_sim` — 環境を起動し `snapshots/*.png` を保存。**`*_start.png` と `*_end.png` を開いて、ロボット・台・物体・置き場所が写っているか確認し、ユーザにも見せる**
    （画像を開けないときは、そのパスをユーザに伝えて見てもらう）。
-   GUI で見たいと言われたら `urdf2vla launch_sim --project P --livestream`（WebRTC。Ctrl-C で終了）
+   GUI で見たいと言われたら WebRTC で配信する（Ctrl-C で終了。ユーザは Isaac Sim WebRTC Streaming Client で接続する）。
+   同じマシンか同じ LAN・VPN から見るなら `urdf2vla launch_sim --project P --livestream`（モード 2）。
+   Brev などのクラウドの VM に公開の endpoint 越しに接続するなら `--livestream 1 --public-ip <IPv4>`
+   （クライアントが接続する VM の公開 IPv4。ホスト名しかなければ VM で `getent ahostsv4 <ホスト名>`）。
+   49100/TCP と 47998/UDP を接続元の IP に絞って開ける必要がある（手順は docs/guides/brev.ja.md の「Isaac Sim の Kit ビューポートを配信する」）
 
 ## Phase 2 の流れ（データ収集）
 
@@ -60,7 +64,8 @@ urdf2vla skills --json              # Skill 一覧（phase・入出力・前提�
 8. `setup_teleoperation` — teleop 設定（`generated/teleop.yaml`）と、手先が指令どおり動くかの検査
 9. `collect_dataset --device scripted --num-demos N` — 自動操作で収集（人の操作は不要）。
    人が操作したいと言われたら `--device socket`（ユーザに別の端末で `urdf2vla teleop-keys` を実行してもらう）か
-   `--device keyboard --livestream`（WebRTC の画面にフォーカスしてキー操作）。
+   `--device keyboard --livestream`（WebRTC の画面にフォーカスしてキー操作）。`collect_dataset` の `--livestream` はモード 2
+   だけなので、Brev などの公開の endpoint 越しでは `--device socket` を使う。
    失敗したときは `build/collect_report.yaml` の `episodes`（`object_lift_m` = 物体が持ち上がったか、`object_to_target_m` など）と
    `snapshots/collect_fail_*.png` を見て、把持の失敗か置き場所の失敗かをユーザに説明する。
    把持の高さなどの調整は `project.yaml` の `overrides.teleop`（例: `grasp_height_offset: -0.01`）で行い、何を変えたか報告する。

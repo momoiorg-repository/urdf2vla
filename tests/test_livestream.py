@@ -42,3 +42,11 @@ def test_public_mode_and_ipv4_are_required_together(capsys, options):
     result = json.loads(capsys.readouterr().out)
     assert result["status"] == "error"
     assert "--public-ip" in result["errors"][0]
+
+
+@pytest.mark.parametrize("address", ["brev-host.example", "203.0.113.256", "2001:db8::1"])
+def test_public_ip_must_be_ipv4_and_fails_as_json(capsys, address):
+    assert cli.main(["launch_sim", "--livestream", "1", "--public-ip", address]) == 1
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "error"
+    assert "IPv4" in result["errors"][0] and address in result["errors"][0]

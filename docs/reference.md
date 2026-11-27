@@ -24,7 +24,7 @@
 | `configure_task` | Chooses the objects and the container (`task.objects`, `task.container`) and places the table, the spawn area and the bin from the arm's reach and shoulder height. |
 | `configure_camera` | Places the cameras: DROID layout by default (`wrist`, `left`, `right`), or `front` / `side` presets, or explicit cameras. |
 | `import_robot` | Converts the URDF to USD (attaching a SimReady gripper if configured) and runs the robot checks. Proposes an IK starting pose if the hand doesn't point down. |
-| `launch_sim` | Builds the pick-and-place environment with Isaac Lab Arena, saves camera snapshots, checks cameras, scene and a test grasp. `--livestream` keeps it running for a WebRTC client. |
+| `launch_sim` | Builds the pick-and-place environment with Isaac Lab Arena, saves camera snapshots, checks cameras, scene and a test grasp. `--livestream` keeps it running for a WebRTC client: on its own (mode 2) for the same machine or a private network, or `--livestream 1 --public-ip <IPv4>` for a client connecting through a public endpoint such as NVIDIA Brev ([Stream the Isaac Sim Kit viewport](guides/brev.md#kit-livestream)). |
 | `configure_vla_interface` | Defines the VLA's inputs (camera images, arm joints + gripper value) and outputs (joint targets + gripper command). |
 | `setup_teleoperation` | Configures hand-space control through inverse kinematics and checks the hand moves as commanded. |
 | `collect_dataset` | Records successful demonstrations (`--device scripted`, `keyboard` or `socket`) to HDF5 and checks them. |
