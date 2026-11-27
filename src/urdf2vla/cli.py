@@ -44,7 +44,7 @@ robot:
   # front_axis: +x                      # 正面が +x でないロボット（+y / -x / -y）
   # default_pose: {{joint1: 0.0}}         # 初期姿勢 [rad or m]
   # effort_limits: {{"joint[0-6]_.*": 10.0}}  # トルク上限 [N·m]（関節名の正規表現。URDF の値が仮値のとき）
-  # base_pose: {{pos: [0, 0, 0], rot_xyzw: [0, 0, 0, 1]}}   # 四元数は [x, y, z, w]
+  # base_pose: {{pos: [0, 0, 0], rot_xyzw: [0, 0, 0, 1]}}   # 土台の位置・向き（URDF の root link。空の world があればその下の link）。四元数は [x, y, z, w]
   # package_paths: [../my_ws/src]       # package:// を探す追加ディレクトリ
   # gripper: {{simready: robotiq_2f_85}}  # NVIDIA のアセットのグリッパを付ける（腕だけの URDF）・付け替える
   #                                     # （robotiq_2f_85 / ufactory_xarm。取付先は自動、mount_link: tool0 などで変更）

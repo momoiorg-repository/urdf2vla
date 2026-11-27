@@ -18,6 +18,8 @@ LIMIT_TOL = {"prismatic": 0.003, "revolute": 0.05, "continuous": 0.05}  # 可動
 PUSH_STEPS = 300
 OPENING_TOL = 0.004  # 直動の指の開きが物体の幅より狭くてよい量 [m]（接触のめり込み）
 HELD_TOL = 0.02  # 離した後に物体が TCP から離れてよい距離 [m]
+# これより離れたら、指から滑ったのではなく、物体が台の下まで落ちた（最初から指の間になかった）: ロボットの置き方かグリッパの向きの問題
+FAR_TOL = 0.3  # m
 
 # 失敗したときに、直し方として示す文（project.yaml のキー）
 FIX = {
@@ -26,6 +28,11 @@ FIX = {
     "configure_robot からやり直す）。",
     "grasp_hold": "物体を挟んでも保持できません。project.yaml の overrides.robot.asset.solver_position_iterations を増やして"
     "（既定 32、SimReady は 64）import_robot からやり直してください。",
+    "grasp_hold_far": "物体が指の間から大きく離れました（台の下まで落ちた）。指から滑ったのではなく、物体を置いた把持点（TCP）に"
+    "指がないか、腕が台の上にありません。ソルバの設定では直りません。snapshots の *_start.png と *_end.png で、腕が台の上に"
+    "あるか・グリッパが外を向いているか（手首カメラに指が写るか）を確かめてください。グリッパの取付先は generated/robot_config.yaml"
+    " の grippers の mount_link（変えるなら project.yaml の robot.gripper.mount_link）。腕が台と反対を向くなら、"
+    "generated/robot_metadata.yaml の articulation_root と base_pose を確かめてください（トラブルシューティングの「物体が床まで落ちる」）。",
     "grasp_opening": "指が物体にめり込んでいます。project.yaml の overrides.robot.asset.solver_position_iterations を増やして"
     "（既定 32、SimReady は 64）import_robot からやり直してください。",
 }
@@ -129,7 +136,7 @@ def grasp_hold(
             "name": f"grasp_hold:{g.name}{suffix}",
             "ok": drift < HELD_TOL,
             "detail": {"object_offset_from_tcp_m": round(drift, 4), "tolerance_m": HELD_TOL},
-            "fix": FIX["grasp_hold"],
+            "fix": FIX["grasp_hold_far"] if drift > FAR_TOL else FIX["grasp_hold"],
         }
     )
     # 直動の指: 指の開き（閉じた位置からの移動量の和）が物体の幅と合うか（めり込みの検出）

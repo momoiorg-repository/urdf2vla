@@ -21,12 +21,37 @@ urdf2vla status   --project projects/myrobot     # どの工程が済んだか�
 
 ## 症状から探す
 
+### 腕が台と反対を向く・物体が床まで落ちる {#base}
+
+たいてい、次が一緒に起きます。
+
+- `launch_sim` の snapshot で、腕が台の上ではなくロボットの横や後ろにある。または、腕を動かすとロボットごと回る。
+- `grasp_hold` が失敗し、`object_offset_from_tcp_m` が 1 m 近い（物体が台を越えて床まで落ちた）。
+
+URDF の根元に、質量も形もない空の link が 2 つ以上続き、その間で向きが回っているときに起きます。
+Universal Robots の公式の URDF がこの作りです（`world` → `base_link` → 180° 回った `base_link_inertia`）。Isaac Sim は空の
+link を剛体にしません。そのような link がロボットの土台のままだと、土台が固定されず、間の回転も抜け落ちます。urdf2vla は
+いまは空の link の連なりをまとめて飛ばし、間の回転を `base_pose` に入れます。
+
+1. urdf2vla を更新します（`git pull`）。`generated/robot_metadata.yaml` の `articulation_root` が、質量のある最初の link
+   （UR なら `base_link_inertia`）になっていることを確かめます。
+2. 作成済みのプロジェクトでは、`project.yaml` に足した回避策（`robot.base_pose`・`robot.front_axis`・
+   `robot.gripper.mount_link`）と、`answers.yaml` の `robot.default_pose` を消します。
+3. `inspect_robot` からやり直します（`import_robot` は `--force` を付けて実行）。
+
+### 初期姿勢が台に当たる {#start-pose}
+
+`import_robot` が初期姿勢を提案したら、`suggested` と答えます。提案の姿勢は、肘から先を台の上面から 8 cm 以上離します。
+`keep` は今の姿勢のままにします。初期姿勢を一度も指定していなければ、各関節の可動範囲の中央です。UR では、腕が台の上面の
+高さで水平に伸びた姿勢になります。姿勢を自分で決めるときは、`urdf2vla view` のスライダで決めて保存し
+（[初期姿勢を保存する](guides/view.md#default-pose)）、`configure_robot` からやり直します。
+
 ### グリッパは閉じるが、物体が滑り落ちる・落ちる
 
 | 失敗した検査 | 工程 | 意味 | 対処 |
 |---|---|---|---|
 | `joint_limits_hold` | `import_robot` | 指の関節が押されて可動範囲を越えた。シミュレータで可動範囲が効いていない。簡略化された URDF のグリッパでよく起きる | グリッパを SimReady のアセットに付け替える: `robot.gripper.simready`（[ガイド](guides/your-robot.md#simready)）。`configure_robot` からやり直す |
-| `grasp_hold` | `launch_sim` | 指の間に置いた物体が、離した後に離れていった | `overrides.robot.asset.solver_position_iterations` を増やして（既定 32、SimReady のグリッパは 64）`import_robot` からやり直す。グリッパの力が不自然なら、トルク上限を確かめる |
+| `grasp_hold` | `launch_sim` | 指の間に置いた物体が、離した後に離れていった | `overrides.robot.asset.solver_position_iterations` を増やして（既定 32、SimReady のグリッパは 64）`import_robot` からやり直す。グリッパの力が不自然なら、トルク上限を確かめる。物体が 0.3 m 以上離れたなら、最初から指の間になかった: [腕が台と反対を向く](#base)を見て、グリッパが腕の外を向いているかも確かめる |
 | `grasp_opening` | `launch_sim` | 直動の指が物体の幅より狭く閉じた（めり込んだ） | `overrides.robot.asset.solver_position_iterations` を増やして `import_robot` からやり直す |
 | `object_on_table:<object>` | `launch_sim` | 物体が、大きさから決まる高さで台の上に落ち着かない | たいていはアセットの問題（剛体や衝突形状が見た目と合わない）。`task.objects` から外し、`build/launch_report.yaml`（`object_frames`）を付けて報告してください |
 | `asset_size:<object>` | `launch_sim` | 生成した物体の大きさがカタログと 15 % 以上違う（アセットの縮尺や単位の誤り） | `task.objects` から外して報告してください |
@@ -58,7 +83,7 @@ urdf2vla status   --project projects/myrobot     # どの工程が済んだか�
 
 | 失敗した検査 | 意味 | 対処 |
 |---|---|---|
-| `camera_not_black` | 画像が（ほぼ）真っ黒。たいていはカメラがロボットの形状の中にある | 動かす: `project.yaml` の `cameras:`。手先カメラなら `offset`（`- {preset: wrist, offset: 0.12}`）。`configure_camera` からやり直す |
+| `camera_not_black` | 画像が（ほぼ）真っ黒。たいていはカメラがロボットの形状の中にある | 動かす: `project.yaml` の `cameras:`。手先カメラなら `offset`（`- {preset: wrist, offset: 0.12}`）。`configure_camera` からやり直す。手先カメラがロボットの内側を写しているなら、グリッパが腕の内側を向いているかもしれない: `generated/robot_config.yaml` の `grippers` の `mount_link` を確かめ、`robot.gripper.mount_link` を工具フランジのフレーム（UR は `tool0`）にする |
 | `camera_alive`, `camera_frames_updated` | 2 つの step の間で画像が変わらなかった。止まったカメラは学習データを台無しにする | `overrides.task.render_fix: true` を書き、`configure_task` からやり直す（制御 step ごとに描画が 1 回増えます） |
 | `camera_mount` | 手先カメラが設定した位置にない | `build/launch_report.yaml` を付けて不具合として報告してください |
 | `first_frame_fresh` | エピソードの最初の画像に前のエピソードが写っている | そのデータセットは使わず、新しい `--dataset` の名前で記録し直す |

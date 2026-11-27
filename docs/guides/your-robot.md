@@ -30,6 +30,24 @@ attach one and how to swap it for another. To try the full workflow with a bundl
     Other CRX models expand the same way — `bash examples/crx3ia/fetch_urdf.sh crx10ia_l` (also `crx5ia`, `crx10ia`,
     `crx10ia_lp`, `crx20ia_l`, `crx30ia`). urdf2vla is tested with the CRX-3iA.
 
+=== "Universal Robots UR5"
+
+    Universal Robots publishes its descriptions in
+    [UniversalRobots/Universal_Robots_ROS2_Description](https://github.com/UniversalRobots/Universal_Robots_ROS2_Description)
+    as xacro files (BSD-3-Clause; the meshes of a few newer models follow UR's own terms). The example script downloads
+    a pinned version and expands the UR5 into a URDF. It needs `xacro`, but not ROS 2: UR's xacro looks files up with
+    `$(find ur_description)`, and the script answers that lookup itself.
+
+    ```bash
+    uv pip install xacro              # or, with ROS 2: source /opt/ros/jazzy/setup.bash
+    bash examples/ur5/fetch_urdf.sh   # → examples/ur5/ur_description/ur5.urdf
+    urdf2vla init projects/ur5 --from examples/ur5/project.yaml
+    ```
+
+    The example attaches a Robotiq 2F-85 to `tool0` and sets an elbow-up starting pose above the table. Other models
+    expand the same way — `bash examples/ur5/fetch_urdf.sh ur5e` (also `ur3e`, `ur10e`, `ur16e` and the rest of
+    `config/`). urdf2vla is tested with the UR5: scripted demonstrations and their replay, no trained model yet.
+
 === "Your own URDF"
 
     urdf2vla reads everything it can from the URDF. Before you start, make sure that:
@@ -45,8 +63,10 @@ attach one and how to swap it for another. To try the full workflow with a bundl
       Supported today: one- or two-arm robots with a two-finger gripper (see [Dual-arm robots](#dual-arm-robots)).
 
     A xacro file has to be expanded first: `xacro my_robot.urdf.xacro -o my_robot.urdf`.
+    If it stops at `$(find my_description)` because ROS 2 isn't installed, source ROS 2, or reuse the small stand-in
+    in `examples/ur5/fetch_urdf.sh`.
 
-    Besides the FANUC CRX-3iA and the Franka, the **KUKA LBR iiwa 14** and the **Kinova Gen3** went from their public
+    Besides the FANUC CRX-3iA, the UR5 and the Franka, the **KUKA LBR iiwa 14** and the **Kinova Gen3** went from their public
     URDFs to recorded demonstrations with these steps.
 
 ## 2. Create a project
@@ -179,7 +199,8 @@ On an arm without a gripper, `mount_link` is optional. urdf2vla mounts the gripp
 the arm — the flange or tool frame, such as `tool0` or FANUC's `fanuc_flange` — with the fingers pointing out of the
 flange face (along the last joint's axis, on the flange side). `configure_robot` says which frame it chose and lists
 the others; write `mount_link` to choose one of them. The fingers point out of the flange whichever frame you choose,
-even one whose +x, not +z, leaves the flange (FANUC's `flange`).
+even one whose +x, not +z, leaves the flange (FANUC's `flange`). When several frames sit on the flange, it prefers one whose +z points out: UR's
+`tool0` rather than `ft_frame`, whose +z points into the wrist.
 
 If the attached gripper looks wrong, the `launch_sim` snapshots show it at once.
 

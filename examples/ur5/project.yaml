@@ -1,0 +1,27 @@
+# urdf2vla の例: Universal Robots UR5 + Robotiq 2F-85（NVIDIA SimReady のグリッパ）
+# URDF は UR の公式（UniversalRobots/Universal_Robots_ROS2_Description, BSD-3-Clause）。同梱していないので、先に取得する:
+#   uv pip install xacro                      # xacro（ROS 2 があれば source /opt/ros/jazzy/setup.bash でもよい）
+#   bash examples/ur5/fetch_urdf.sh           # → examples/ur5/ur_description/ur5.urdf
+#   urdf2vla init projects/ur5 --from examples/ur5/project.yaml
+# UR の URDF にはグリッパがない。NVIDIA SimReady の Robotiq 2F-85 を、UR の工具フランジ tool0（+z がフランジ面から外向き）に
+# 取り付ける（ft_frame は +z が腕の内側を向くので使わない）。End Effector と指の開く向きの質問は出ない。
+# 初期姿勢は、import_robot が IK で提案した姿勢（肘を上げ、台の中央の上 21 cm で手先が真下を向く）。消すと import_robot が
+# 提案する（マシンによって少し違う姿勢になることがある）。`urdf2vla view` で姿勢を見ながら変えて保存することもできる。
+name: ur5
+
+robot:
+  urdf: ur_description/ur5.urdf
+  gripper: {simready: robotiq_2f_85, mount_link: tool0}
+  default_pose: {shoulder_pan_joint: -0.1923, shoulder_lift_joint: -0.9039, elbow_joint: 0.8999,
+                 wrist_1_joint: 1.5749, wrist_2_joint: 1.5708, wrist_3_joint: -0.1923}
+
+cameras:
+  - preset: wrist   # DROID と同じ配置: 手先 + 左右の外部カメラ
+  - preset: left
+  - preset: right
+
+overrides:
+  robot: {}
+  task: {}
+  cameras: {}
+  teleop: {}

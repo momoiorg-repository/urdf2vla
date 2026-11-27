@@ -77,7 +77,7 @@ robot:
   gripper_open_position: upper         # 指が開くのは関節の lower / upper どちらの限界か
   default_pose: {joint1: 0.0}          # 初期姿勢 [rad または m]
   effort_limits: {"joint[1-6]": 50.0}  # N·m。関節名の正規表現 → 値（URDF の値より優先）
-  base_pose: {pos: [0, 0, 0], rot_xyzw: [0, 0, 0, 1]}
+  base_pose: {pos: [0, 0, 0], rot_xyzw: [0, 0, 0, 1]}  # 土台の位置・向き: URDF の root link（空の world があればその下の link。UR は base_link）
   gripper: {simready: robotiq_2f_85}   # Isaac Sim のアセットライブラリのグリッパを付ける（robotiq_2f_85 / ufactory_xarm。グリッパのない腕では mount_link で取付先を選べる。省略可）
 
 task:
