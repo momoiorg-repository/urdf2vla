@@ -129,6 +129,24 @@ def check_summary(project: Project) -> str:
     return "\n".join(lines) or "まだ工程を実行していません。"
 
 
+def pose_joints(cfg: dict, names: list[str]) -> list[str]:
+    """初期姿勢として保存する関節: スライダのある関節のうち、グリッパ（開いた状態から始める）と受動の関節（車輪など）を除く全部。
+
+    configure_robot は回答の dict を project.yaml の default_pose と混ぜずに使う（書かない関節は可動範囲の中央や 0 に戻る）ので、
+    腕以外の関節（昇降・首など）も含める。"""
+    skip = {j for g in cfg.get("grippers") or [] for j in g.get("joints") or []}
+    skip |= set((cfg.get("joint_roles") or {}).get("passive") or [])
+    return [n for n in names if n not in skip]
+
+
+def save_default_pose(project: Project, cfg: dict, values: dict[str, float]) -> dict[str, float]:
+    """関節の値（スライダ）を answers.yaml の robot.default_pose に保存する。project.yaml の robot.default_pose より優先され、
+    configure_robot が robot_config.yaml の default_pose にする。"""
+    pose = {n: round(float(values[n]), 4) + 0.0 for n in pose_joints(cfg, list(values))}  # + 0.0: -0.0 を 0.0 にする
+    project.set_answers({"robot.default_pose": pose})
+    return pose
+
+
 def run_viewer(project: Project, host: str = "0.0.0.0", port: int = 8080, block: bool = True):
     import viser
     import yourdfpy
@@ -331,6 +349,9 @@ def run_viewer(project: Project, host: str = "0.0.0.0", port: int = 8080, block:
         b_close = server.gui.add_button("グリッパを閉じる")
         show_col = server.gui.add_checkbox("衝突形状を表示（オレンジ）", initial_value=False)
         show_ee = server.gui.add_checkbox("手先の候補を表示", initial_value=not bool(cfg))
+        # グリッパの関節と arm の接近方向は robot_config.yaml にしかないので、configure_robot の後から保存できる
+        b_save_pose = server.gui.add_button("この姿勢を初期姿勢として保存", disabled=not cfg)
+        pose_md = server.gui.add_markdown("" if cfg else "configure_robot まで進めると、この姿勢を初期姿勢として保存できます。")
 
     def current() -> np.ndarray:
         return np.array([s.value for s in sliders])
@@ -376,8 +397,9 @@ def run_viewer(project: Project, host: str = "0.0.0.0", port: int = 8080, block:
         if not questions:
             server.gui.add_markdown("答える質問はありません。")
         inputs = []
+        pose_question = []  # robot.default_pose の質問（スライダの姿勢を保存したら答え済みにして、回答の保存で上書きしない）
         for q in questions:
-            server.gui.add_markdown(f"**{q['key']}**（{q['skill']}）\n\n{q['prompt']}")
+            q_md = server.gui.add_markdown(f"**{q['key']}**（{q['skill']}）\n\n{q['prompt']}")
             by_label = {str(c): c for c in (q.get("candidates") or [])}  # 表示は文字列、保存は元の値（数値・リストのまま）
             cands = list(by_label)
             if cands:
@@ -394,14 +416,16 @@ def run_viewer(project: Project, host: str = "0.0.0.0", port: int = 8080, block:
             # 関節の値の提案（IK の初期姿勢など）は、答える前に 3D で見られるようにする（mimic の従動関節などスライダのない関節は無視）
             if isinstance(sug, dict) and any(k in names for k in sug):
                 server.gui.add_button("提案の姿勢を見る").on_click(lambda _, sug=sug: set_values(sug))
+            if q["key"] == "robot.default_pose":
+                pose_question.append((q_md, w))
             inputs.append((q, w, by_label))
         if questions:
             save = server.gui.add_button("回答を保存")
             saved_md = server.gui.add_markdown("")
 
             def on_save(_):
-                # 空欄は答えていないものとして保存しない
-                values = {q["key"]: (by[w.value] if by else yaml.safe_load(w.value)) for q, w, by in inputs if str(w.value).strip()}
+                # 空欄は答えていないものとして保存しない。無効にした欄（スライダの姿勢を保存した初期姿勢の質問）も保存しない
+                values = {q["key"]: (by[w.value] if by else yaml.safe_load(w.value)) for q, w, by in inputs if str(w.value).strip() and not w.disabled}
                 if not values:
                     saved_md.content = "回答が空です。"
                     return
@@ -411,6 +435,38 @@ def run_viewer(project: Project, host: str = "0.0.0.0", port: int = 8080, block:
                 status_md.content = check_summary(project)
 
             save.on_click(on_save)
+
+    # ---- スライダの姿勢を初期姿勢として保存（answers.yaml の robot.default_pose。configure_robot が使う）
+    def arms_not_down(q: np.ndarray) -> list[str]:
+        """手先の接近方向が真下を向いていない arm（import_robot と同じ基準: ワールドでの z 成分が -0.7 より大きい）。"""
+        out = []
+        for arm in (cfg or {}).get("arms") or []:
+            a = link_world(arm["ik_body"], q)[:3, :3] @ np.array(arm["approach_axis"])
+            if a[2] > -0.7:
+                out.append(arm["name"])
+        return out
+
+    @b_save_pose.on_click
+    def _(_):
+        if not cfg:
+            return
+        q = current()
+        pose = save_default_pose(project, cfg, dict(zip(names, q)))
+        default.update(pose)  # 「初期姿勢」ボタンも保存した姿勢に戻す（グリッパは開いたまま）
+        for q_md, w in pose_question:
+            w.disabled = True
+            q_md.content = "**robot.default_pose** — スライダの姿勢を初期姿勢として保存したので、この質問には答え済みです。"
+        bad = arms_not_down(q)
+        snippet = yaml.safe_dump({"robot": {"default_pose": pose}}, sort_keys=False, default_flow_style=None)
+        pose_md.content = (
+            (f"⚠️ 手先が真下を向いていない arm があります（{', '.join(bad)}）。上から掴む Pick & Place では、TCP の青い矢印が"
+             "台を向く姿勢にしてください（保存はしました）。\n\n" if bad else "")
+            + f"保存しました（answers.yaml の robot.default_pose。project.yaml の robot.default_pose より優先）。"
+            f"`urdf2vla configure_robot --project {project.root}` を実行し、configure_task・configure_camera・import_robot・"
+            "launch_sim をこの順にやり直してください。記録済みのデモと学習済みのモデルは前の初期姿勢のままです。"
+            f"project.yaml に移すなら:\n\n```yaml\n{snippet}```"
+        )  # fmt: skip
+        status_md.content = check_summary(project)
 
     # ---- GUI: カメラ（取り付け先・位置・向き・視野角を変えて answers.yaml に保存。configure_camera が使う）
     SOURCE = {"view": "`urdf2vla view` で保存したカメラ（answers.yaml）", "project": "project.yaml の cameras", "preset": "--preset",

@@ -266,6 +266,42 @@ def test_view_lists_pending_questions_and_drops_replaced_gripper(tmp_path, capsy
     assert "/tmpproj/" not in path2.read_text() and "meshes" in path2.read_text()  # メッシュはホストのパスのまま（コンテナのパスではない）
 
 
+def test_view_saves_slider_pose_as_default_pose(tmp_path, capsys):
+    """urdf2vla view の「この姿勢を初期姿勢として保存」: グリッパと受動の関節（車輪）を除く全関節を answers.yaml に書き、
+    configure_robot がそれを project.yaml の default_pose より優先して使う。腕以外の関節（昇降・首）も書く（書かないと 0 に戻る）。"""
+    import numpy as np
+
+    from urdf2vla.project import Project
+    from urdf2vla.view import save_default_pose
+
+    urdf = bimanual_urdf(tmp_path / "bimanual.urdf")
+    proj = make_project(tmp_path, capsys, urdf, {"default_pose": {"lift_joint": -0.1, "head_pan": 0.2}})
+    r = run(capsys, "inspect_robot", "--project", str(proj))
+    qs = {q["key"]: q for q in r["questions"]}
+    answers = [f"joints.{n}.role={qs[f'joints.{n}.role']['suggestion']}" for n in r["data"]["other_joints"]]
+    run(capsys, "answer", "--project", str(proj), *answers, "grippers.0.open_position=lower", "grippers.1.open_position=lower")
+    assert run(capsys, "configure_robot", "--project", str(proj))["status"] == "ok"
+    cfg = yaml.safe_load((proj / "generated/robot_config.yaml").read_text())
+    fingers = {j for g in cfg["grippers"] for j in g["joints"]}
+    wheels = set(cfg["joint_roles"]["passive"])
+    arm = [j for a in cfg["arms"] for j in a["joints"]]
+
+    # スライダの値（numpy の数値）: 腕・昇降・首を動かし、指を閉じ、車輪も回した
+    values = {**{j: np.float64(0.30004) for j in arm}, "lift_joint": np.float64(-0.2), "head_pan": np.float64(-0.00001),
+              **{j: np.float64(1.0) for j in fingers}, **{j: np.float64(0.7) for j in wheels}}  # fmt: skip
+    pose = save_default_pose(Project(proj), cfg, values)
+    assert set(pose) == {*arm, "lift_joint", "head_pan"}
+    assert all(type(v) is float for v in pose.values()) and pose["left_joint1"] == 0.3 and str(pose["head_pan"]) == "0.0"
+    assert yaml.safe_load((proj / "answers.yaml").read_text())["robot.default_pose"] == pose
+
+    assert run(capsys, "configure_robot", "--project", str(proj))["status"] == "ok"
+    cfg2 = yaml.safe_load((proj / "generated/robot_config.yaml").read_text())
+    assert all(cfg2["default_pose"][j] == 0.3 for j in arm)
+    assert cfg2["default_pose"]["lift_joint"] == -0.2 and cfg2["default_pose"]["head_pan"] == 0.0  # project.yaml の値より優先
+    assert all(cfg2["default_pose"][j] == g["open"][j] for g in cfg2["grippers"] for j in g["joints"])  # グリッパは開いたまま
+    assert not wheels & set(cfg2["default_pose"]) and cfg2["provenance"]["default_pose"] == "user"
+
+
 def _arm_only_urdf(path: Path, camera_mesh: str | None, arm_mesh: str | None = None) -> Path:
     """6 軸の腕だけ（グリッパなし）+ 手首のカメラ。メッシュは別のマシンの絶対パス（見つからない）にできる。"""
 
