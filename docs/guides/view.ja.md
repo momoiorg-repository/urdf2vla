@@ -41,6 +41,20 @@ urdf2vla view --project projects/myrobot
   ![urdf2vla view で関節を動かし、グリッパを開閉する様子](../assets/view_joints.gif){ width="900" }
 </figure>
 
+## 初期姿勢を保存する {#default-pose}
+
+`configure_robot` の後、スライダで関節を決めて **この姿勢を初期姿勢として保存** を押します。姿勢は `answers.yaml` の
+`robot.default_pose` に保存され、`project.yaml` の `robot.default_pose` より優先されます。
+
+- 保存するのは、スライダのある関節のうち、グリッパ（いつも開いた状態から始める）と車輪などの受動の関節を除いたものです。
+- 手先の接近方向（TCP の青い矢印）が下を向いていなければ警告が出ます。上から掴む Pick & Place では台の方へ向けてください。
+- 保存したら `configure_robot` を実行し、`configure_task`・`configure_camera`・`import_robot`・`launch_sim` をこの順に
+  やり直します。記録済みのデモと学習済みのモデルは前の初期姿勢のままです。
+- `project.yaml` に移すときは、欄に出る YAML を写します。`project.yaml` の姿勢に戻すには、`answers.yaml` から
+  `robot.default_pose` を消します。
+
+保存すると、`import_robot` は IK で初期姿勢を提案しなくなり、**質問** 欄の初期姿勢の質問は答え済みになります。
+
 ## 質問に答える
 
 工程が `needs_input` を返すと、**質問** の欄に、まだ答えていない質問と urdf2vla が見つけた候補が並びます。答えを選んで

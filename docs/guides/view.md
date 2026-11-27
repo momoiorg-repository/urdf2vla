@@ -42,6 +42,23 @@ configured initial pose and to open or close the gripper.
   ![Moving the joints and opening and closing the gripper in urdf2vla view](../assets/view_joints.gif){ width="900" }
 </figure>
 
+## Saving the starting pose {#default-pose}
+
+After `configure_robot`, set the joints with the sliders and press **この姿勢を初期姿勢として保存 (Save this pose as
+the initial pose)**. The pose is saved to `answers.yaml` as `robot.default_pose`, which takes precedence over
+`robot.default_pose` in `project.yaml`.
+
+- Every joint with a slider is saved except the gripper joints, which always start open, and passive joints such as wheels.
+- If a hand's approach direction (the blue TCP arrow) doesn't point down, the panel warns you. Top-down pick-and-place
+  needs it pointing at the table.
+- Then run `configure_robot` and redo `configure_task`, `configure_camera`, `import_robot` and `launch_sim`, in that
+  order. Demonstrations you already recorded and models you trained still use the old pose.
+- To keep the pose in `project.yaml`, copy the YAML the panel shows. To go back to the pose in `project.yaml`, delete
+  `robot.default_pose` from `answers.yaml`.
+
+Once you save a pose, `import_robot` no longer proposes one with inverse kinematics, and the starting-pose question in
+the **質問 (Questions)** panel is marked as answered.
+
 ## Answering questions
 
 When a step returns `needs_input`, the **質問 (Questions)** panel lists the open questions with the choices urdf2vla found.
@@ -98,6 +115,7 @@ The page is currently in Japanese. The controls are:
 | ロボット | Robot: joint sliders and buttons |
 | 初期姿勢 / ゼロ姿勢 | Go to the initial pose / all joints at zero |
 | グリッパを開く / グリッパを閉じる | Open / close the gripper |
+| この姿勢を初期姿勢として保存 | Save this pose as the initial pose (`answers.yaml`) |
 | 衝突形状を表示（オレンジ） | Show collision shapes (orange) |
 | 手先の候補を表示 | Show the hand-link candidates |
 | 確認 | Status: which steps have run and how many checks passed |
