@@ -852,6 +852,12 @@ def configure_robot(project: Project, opts: dict, result: SkillResult, log) -> N
     if robot_in.get("base_pose"):
         base_pose = Pose(**robot_in["base_pose"])
         prov["base_pose"] = "user"
+        chain = A.root_chain(model, meta.root_link, meta.articulation_root) if meta.dummy_root else []
+        if len(chain) > 1:
+            # 書いた base_pose は空の root（world）の子（UR の base_link: RViz で見る座標）の姿勢。その先で飛ばした空の link の
+            # 分（UR の base_link → base_link_inertia の 180°）を足して、articulation root の姿勢にする
+            user = Transform(tuple(base_pose.pos), tuple(base_pose.rot_xyzw))
+            base_pose = Pose(**(user @ A.relative_transform(model, chain[1], meta.articulation_root)).rounded())
     else:
         base = Transform()
         prov["base_pose"] = "default"

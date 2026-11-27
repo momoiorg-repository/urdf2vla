@@ -368,6 +368,14 @@ def test_ur_like_urdf_gets_its_base_turned_and_the_gripper_on_tool0(tmp_path, ca
     meta = RobotMetadata.model_validate(yaml.safe_load((proj / "generated/robot_metadata.yaml").read_text()))
     assert set(meta.links_after("elbow_joint")) == {"forearm_link", "wrist_1_link", "wrist_2_link", "wrist_3_link", "ft_frame", "tool0"}
 
+    # 書いた base_pose は base_link（RViz で見る座標）の姿勢: 回さずに 10 cm 上げても、腕は +x（台の側）を向いたまま
+    extra = {"gripper": {"simready": "robotiq_2f_85"}, "base_pose": {"pos": [0, 0, 0.1], "rot_xyzw": [0, 0, 0, 1]}}
+    proj2 = make_project(tmp_path / "raised", capsys, _ur_like_urdf(tmp_path / "ur2.urdf"), extra)
+    run(capsys, "inspect_robot", "--project", str(proj2))
+    assert run(capsys, "configure_robot", "--project", str(proj2))["status"] == "ok"
+    base = yaml.safe_load((proj2 / "generated/robot_config.yaml").read_text())["base_pose"]
+    assert base["pos"] == [0, 0, 0.1] and abs(abs(base["rot_xyzw"][2]) - 1.0) < 1e-6
+
 
 def test_gripperless_arm_does_not_offer_its_wrist_as_the_gripper(tmp_path, capsys):
     """グリッパのない UR: 最後の関節（±360° の手首）を指の関節として提案しない。SimReady のグリッパを付けるよう案内する。"""
