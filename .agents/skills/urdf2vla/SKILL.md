@@ -163,7 +163,8 @@ urdf2vla answer --project P 'robot.gripper_joints=[joint7_R, joint7_L]' 'gripper
   snapshots で腕が台の上にあるか・手首カメラに指が写るかを見て、ユーザにも見せる。腕が台と反対を向く・ロボットごと回るなら、
   `generated/robot_metadata.yaml` の `articulation_root` が質量のある最初の link か確かめる（docs/troubleshooting.md の
   「The arm faces away from the table」）。手首カメラがロボットの内側を写すなら、グリッパが内向きに付いている
-  （`robot.gripper.mount_link` を工具フランジのフレームに。UR は `tool0`）
+  （`generated/robot_config.yaml` の `arms` の `approach_axis`）。`mount_link` を変えても向きは変わらないので、自分で直さず、
+  URDF を添えて報告するようユーザに伝える
 - `first_frame_fresh` 失敗（エピソードの最初の画像が reset 前の場面）→ そのデータセットは使わず、collect_dataset を別の `--dataset` 名で記録し直し、
   それでも続くならユーザに報告する（環境を作った直後の描画の立ち上がりの問題）
 

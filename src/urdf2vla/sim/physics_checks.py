@@ -30,9 +30,10 @@ FIX = {
     "（既定 32、SimReady は 64）import_robot からやり直してください。",
     "grasp_hold_far": "物体が指の間から大きく離れました（台の下まで落ちた）。指から滑ったのではなく、物体を置いた把持点（TCP）に"
     "指がないか、腕が台の上にありません。ソルバの設定では直りません。snapshots の *_start.png と *_end.png で、腕が台の上に"
-    "あるか・グリッパが外を向いているか（手首カメラに指が写るか）を確かめてください。グリッパの取付先は generated/robot_config.yaml"
-    " の grippers の mount_link（変えるなら project.yaml の robot.gripper.mount_link）。腕が台と反対を向くなら、"
-    "generated/robot_metadata.yaml の articulation_root と base_pose を確かめてください（トラブルシューティングの「物体が床まで落ちる」）。",
+    "あるか・グリッパが外を向いているか（手首カメラに指が写るか）を確かめてください。腕が台と反対を向くなら、"
+    "generated/robot_metadata.yaml の articulation_root と base_pose を確かめてください（トラブルシューティングの「物体が床まで落ちる」）。"
+    "グリッパが腕の内側を向くなら、urdf2vla が URDF から腕の外向きを読み違えています（generated/robot_config.yaml の arms の "
+    "approach_axis。mount_link を変えても向きは変わりません）。URDF を添えて報告してください。",
     "grasp_opening": "指が物体にめり込んでいます。project.yaml の overrides.robot.asset.solver_position_iterations を増やして"
     "（既定 32、SimReady は 64）import_robot からやり直してください。",
 }

@@ -4,7 +4,8 @@
 #   bash examples/ur5/fetch_urdf.sh           # → examples/ur5/ur_description/ur5.urdf
 #   urdf2vla init projects/ur5 --from examples/ur5/project.yaml
 # UR の URDF にはグリッパがない。NVIDIA SimReady の Robotiq 2F-85 を、UR の工具フランジ tool0（+z がフランジ面から外向き）に
-# 取り付ける（ft_frame は +z が腕の内側を向くので使わない）。End Effector と指の開く向きの質問は出ない。
+# 取り付ける（書かなくても tool0 を選ぶ。どのフレームに付けても指はフランジ面から外へ伸びる）。End Effector と指の開く向きの
+# 質問は出ない。
 # 初期姿勢は、import_robot が IK で提案した姿勢（肘を上げ、台の中央の上 21 cm で手先が真下を向く）。消すと import_robot が
 # 提案する（マシンによって少し違う姿勢になることがある）。`urdf2vla view` で姿勢を見ながら変えて保存することもできる。
 name: ur5

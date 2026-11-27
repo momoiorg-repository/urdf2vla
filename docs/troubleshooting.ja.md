@@ -51,7 +51,7 @@ link を剛体にしません。そのような link がロボットの土台の
 | 失敗した検査 | 工程 | 意味 | 対処 |
 |---|---|---|---|
 | `joint_limits_hold` | `import_robot` | 指の関節が押されて可動範囲を越えた。シミュレータで可動範囲が効いていない。簡略化された URDF のグリッパでよく起きる | グリッパを SimReady のアセットに付け替える: `robot.gripper.simready`（[ガイド](guides/your-robot.md#simready)）。`configure_robot` からやり直す |
-| `grasp_hold` | `launch_sim` | 指の間に置いた物体が、離した後に離れていった | `overrides.robot.asset.solver_position_iterations` を増やして（既定 32、SimReady のグリッパは 64）`import_robot` からやり直す。グリッパの力が不自然なら、トルク上限を確かめる。物体が 0.3 m 以上離れたなら、最初から指の間になかった: [腕が台と反対を向く](#base)を見て、グリッパが腕の外を向いているかも確かめる |
+| `grasp_hold` | `launch_sim` | 指の間に置いた物体が、離した後に離れていった | `overrides.robot.asset.solver_position_iterations` を増やして（既定 32、SimReady のグリッパは 64）`import_robot` からやり直す。グリッパの力が不自然なら、トルク上限を確かめる。物体が 0.3 m 以上離れたなら、最初から指の間になかった: [腕が台と反対を向く](#base)を見て、手首カメラの snapshot でグリッパが腕の外を向いているかも確かめる |
 | `grasp_opening` | `launch_sim` | 直動の指が物体の幅より狭く閉じた（めり込んだ） | `overrides.robot.asset.solver_position_iterations` を増やして `import_robot` からやり直す |
 | `object_on_table:<object>` | `launch_sim` | 物体が、大きさから決まる高さで台の上に落ち着かない | たいていはアセットの問題（剛体や衝突形状が見た目と合わない）。`task.objects` から外し、`build/launch_report.yaml`（`object_frames`）を付けて報告してください |
 | `asset_size:<object>` | `launch_sim` | 生成した物体の大きさがカタログと 15 % 以上違う（アセットの縮尺や単位の誤り） | `task.objects` から外して報告してください |
@@ -83,7 +83,7 @@ link を剛体にしません。そのような link がロボットの土台の
 
 | 失敗した検査 | 意味 | 対処 |
 |---|---|---|
-| `camera_not_black` | 画像が（ほぼ）真っ黒。たいていはカメラがロボットの形状の中にある | 動かす: `project.yaml` の `cameras:`。手先カメラなら `offset`（`- {preset: wrist, offset: 0.12}`）。`configure_camera` からやり直す。手先カメラがロボットの内側を写しているなら、グリッパが腕の内側を向いているかもしれない: `generated/robot_config.yaml` の `grippers` の `mount_link` を確かめ、`robot.gripper.mount_link` を工具フランジのフレーム（UR は `tool0`）にする |
+| `camera_not_black` | 画像が（ほぼ）真っ黒。たいていはカメラがロボットの形状の中にある | 動かす: `project.yaml` の `cameras:`。手先カメラなら `offset`（`- {preset: wrist, offset: 0.12}`）。`configure_camera` からやり直す。手先カメラがロボットの内側を写しているなら、グリッパが腕の内側を向いているかもしれない: urdf2vla がフランジの向きを読み違えている（`generated/robot_config.yaml` の `arms` の `approach_axis`）。`mount_link` を変えても向きは変わらないので、URDF を添えて報告する |
 | `camera_alive`, `camera_frames_updated` | 2 つの step の間で画像が変わらなかった。止まったカメラは学習データを台無しにする | `overrides.task.render_fix: true` を書き、`configure_task` からやり直す（制御 step ごとに描画が 1 回増えます） |
 | `camera_mount` | 手先カメラが設定した位置にない | `build/launch_report.yaml` を付けて不具合として報告してください |
 | `first_frame_fresh` | エピソードの最初の画像に前のエピソードが写っている | そのデータセットは使わず、新しい `--dataset` の名前で記録し直す |
