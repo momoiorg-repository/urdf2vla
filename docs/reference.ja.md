@@ -24,7 +24,7 @@
 | `configure_task` | 物体と容器を選び（`task.objects`, `task.container`）、腕の届く範囲と肩の高さから台・物体を置く範囲・箱を配置する |
 | `configure_camera` | カメラを置く: 既定は DROID の配置（`wrist`, `left`, `right`）。ほかに `front` / `side` のプリセットか明示指定 |
 | `import_robot` | URDF を USD に変換し（設定があれば SimReady のグリッパを取り付け）、ロボットの検査をする。手先が下を向いていなければ IK で初期姿勢を提案する |
-| `launch_sim` | Isaac Lab Arena で Pick & Place の環境を組み立て、カメラの画像を保存し、カメラ・場面・試しの把持を検査する。`--livestream` で WebRTC のクライアント用に動かし続ける |
+| `launch_sim` | Isaac Lab Arena で Pick & Place の環境を組み立て、カメラの画像を保存し、カメラ・場面・試しの把持を検査する。`--livestream` で WebRTC のクライアント用に動かし続ける: 値なし（モード 2）は同じマシンかプライベートネットワークから、`--livestream 1 --public-ip <IPv4>` は NVIDIA Brev などの公開の endpoint 越しに接続するとき（[Isaac Sim の Kit ビューポートを配信する](guides/brev.md#kit-livestream)） |
 | `configure_vla_interface` | VLA の入力（カメラ画像、腕の関節 + グリッパの値）と出力（関節の目標 + グリッパの指令）を決める |
 | `setup_teleoperation` | 逆運動学による手先の操作を設定し、指令どおりに動くかを検査する |
 | `collect_dataset` | 成功したデモを記録し（`--device scripted` / `keyboard` / `socket`）、HDF5 に保存して検査する |

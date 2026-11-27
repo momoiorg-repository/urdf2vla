@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 import re
@@ -246,12 +247,28 @@ def cmd_teleop_keys(args) -> int:
     return 0
 
 
+def _livestream_problem(mode: int | None, public_ip: str | None) -> str | None:
+    """launch_sim の --livestream / --public-ip の組み合わせの誤り（なければ None）。"""
+    if (mode == 1) != (public_ip is not None):
+        return "--livestream 1 と --public-ip <IPv4> は一緒に指定してください。"
+    if public_ip is not None:
+        try:
+            ipaddress.IPv4Address(public_ip)
+        except ValueError:
+            return (
+                f"--public-ip は IPv4 アドレスで指定してください（{public_ip!r}）。"
+                "ホスト名なら VM で getent ahostsv4 <ホスト名> を実行して IPv4 を調べます。"
+            )
+    return None
+
+
 def run_skill(name: str, args) -> int:
     spec = SKILLS[name]
     if name == "launch_sim":
-        if (args.livestream == 1) != (args.public_ip is not None):
+        problem = _livestream_problem(args.livestream, args.public_ip)
+        if problem:
             result = SkillResult(skill=name)
-            result.fail("--livestream 1 と --public-ip <IPv4> は一緒に指定してください。")
+            result.fail(problem)
             return _emit(result)
     project = _project(args)
     log_path = project.new_log(name)

@@ -1,7 +1,5 @@
 """Isaac Sim 内で動く Skill の宣言（実装は urdf2vla.sim 側）。"""
 
-from ipaddress import IPv4Address
-
 from urdf2vla.registry import Arg, declare_sim_skill
 
 declare_sim_skill(
@@ -33,7 +31,8 @@ declare_sim_skill(
             "const": 2,
             "help": "Kit を WebRTC で配信する（1: リモート接続、2: ローカル・プライベート接続。値の省略時は 2）",
         }),
-        Arg(("--public-ip",), {"type": IPv4Address, "help": "--livestream 1 でクライアントが接続する VM の IPv4 アドレス"}),
+        # IPv4 かどうかはホスト CLI（run_skill）が検査し、誤りは JSON の結果で返す（argparse の型にすると JSON にならない）
+        Arg(("--public-ip",), {"help": "--livestream 1 でクライアントが接続する VM の IPv4 アドレス"}),
         Arg(("--timeout",), {"type": float, "default": 900.0, "help": "秒（--livestream では無制限）"}),
     ],
 )
