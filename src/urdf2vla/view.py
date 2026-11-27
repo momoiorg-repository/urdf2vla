@@ -92,7 +92,7 @@ def view_urdf(project: Project) -> tuple[Path, object, dict, set[str]]:
     if simready_key(robot_in) and meta.arms and meta.arms[0].gripper is not None:
         drop = set(A.subtree_links(model, meta.grippers[meta.arms[0].gripper].mount_link))
     out = project.build / "view" / "robot_view.urdf"
-    write_normalized_urdf(model, out, Runtime(mode="local"), meta.meshes, drop_root=meta.root_link if meta.dummy_root else None, drop_links=drop)
+    write_normalized_urdf(model, out, Runtime(mode="local"), meta.meshes, new_root=meta.articulation_root if meta.dummy_root else None, drop_links=drop)
     return out, meta, robot_in, drop
 
 

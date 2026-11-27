@@ -105,12 +105,13 @@ def mesh_report(model: UrdfModel, runtime: Runtime, package_paths: list[Path]) -
 
 
 def write_normalized_urdf(
-    model: UrdfModel, out_path: Path, runtime: Runtime, report: MeshReport, drop_root: str | None, drop_links: set[str] | None = None
+    model: UrdfModel, out_path: Path, runtime: Runtime, report: MeshReport, new_root: str | None, drop_links: set[str] | None = None
 ) -> None:
     """メッシュをシミュレータ側の絶対パスに書き換えた URDF を out_path に書く。
 
     シミュレータ（コンテナ）から見えない場所のメッシュは、そのディレクトリごと out_path の隣の meshes/ に
     コピーして参照する（URDF がどこにあっても runtime.yaml の mounts を編集せずに使えるように）。
+    new_root（articulation_root が空の root link を飛ばしたとき）を渡すと、飛ばした link を外して new_root を root にする。
     """
     tree = ET.parse(model.path)
     root = tree.getroot()
@@ -133,12 +134,28 @@ def write_normalized_urdf(
         for el in list(root.findall("joint")):
             if el.find("child").get("link") in drop_links:
                 root.remove(el)
-    if drop_root:
-        for el in list(root.findall("link")):
-            if el.get("name") == drop_root:
-                root.remove(el)
+    if new_root:  # 空の root の連なり（world → base_link など）を外す。間の変換は configure_robot が base_pose に入れる
+        from urdf2vla.urdf import analysis as A
+        from urdf2vla.urdf.kinematics import rpy_from_quat
+
+        chain = set(A.root_chain(model, A.root_link(model), new_root))
         for el in list(root.findall("joint")):
-            if el.find("parent").get("link") == drop_root:
+            parent, child = el.find("parent").get("link"), el.find("child").get("link")
+            if parent not in chain:
+                continue
+            if child in chain or child == new_root:
+                root.remove(el)
+                continue
+            # 外す link に付いていたほかのフレーム（UR の base）は、同じ位置・向きのまま new_root に付け替える
+            t = A.relative_transform(model, new_root, child)
+            el.find("parent").set("link", new_root)
+            origin = el.find("origin")
+            if origin is None:
+                origin = ET.SubElement(el, "origin")
+            origin.set("xyz", " ".join(f"{v:.9g}" for v in t.pos))
+            origin.set("rpy", " ".join(f"{v:.9g}" for v in rpy_from_quat(t.rot)))
+        for el in list(root.findall("link")):
+            if el.get("name") in chain:
                 root.remove(el)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     ET.indent(tree)

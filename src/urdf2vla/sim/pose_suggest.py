@@ -14,6 +14,9 @@ ITERS = 200
 POS_TOL = 0.01  # m
 SIGMA_MIN = 0.05  # ヤコビアンの最小特異値の下限（これより小さい姿勢は特異姿勢に近い）
 ROT_TOL = 0.05  # rad
+# 肘から先の剛体の原点を、台の上面からこれ以上離す（原点は関節の中心なので、筐体の半径の分）。
+# IK は台を知らないので、肘を下げた解（UR5 では肘が台の上 3.5 cm）を選ぶと、初期姿勢で腕が台にめり込む
+CLEARANCE = 0.08  # m
 
 
 def _target_rotation(arm: ArmConfig, yaw_90: bool, device) -> torch.Tensor:
@@ -32,8 +35,14 @@ def _target_rotation(arm: ArmConfig, yaw_90: bool, device) -> torch.Tensor:
     return world @ body.T
 
 
-def suggest_default_pose(sim, robot, cfg: RobotConfig, tcp_targets: dict[str, list[float]], seed_count: int = 6) -> dict:
-    """arm ごとに TCP を tcp_targets[arm]（ワールド座標）へ真下向きで置く関節角を探す。"""
+def suggest_default_pose(
+    sim, robot, cfg: RobotConfig, tcp_targets: dict[str, list[float]], seed_count: int = 6,
+    table_top: float | None = None, clear_bodies: dict[str, list[int]] | None = None,
+) -> dict:  # fmt: skip
+    """arm ごとに TCP を tcp_targets[arm]（ワールド座標）へ真下向きで置く関節角を探す。
+
+    table_top（ロボットの root からの台の上面の高さ）と clear_bodies（arm ごとの、台から離す剛体の番号: 肘から先）を渡すと、
+    それらが台の上面から CLEARANCE 以上離れた解を優先する（収束した解のうちで）。"""
     from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
     from isaaclab.utils.math import quat_error_magnitude, quat_from_matrix
 
@@ -106,10 +115,16 @@ def suggest_default_pose(sim, robot, cfg: RobotConfig, tcp_targets: dict[str, li
                 # 特異姿勢から遠いか（ヤコビアンの最小特異値）。近いと、そこから少し動かそうとしただけで IK が止まる
                 sigma = float(torch.linalg.svdvals(jac[0])[-1])
                 well = sigma >= SIGMA_MIN
-                score = (0 if ok else 1, 0 if well else 1, -(margin + 2.0 * min(sigma, 0.2)) if ok else pos_err + rot_err)
+                # 台からの高さ（肘から先の剛体のうち、いちばん低いもの）
+                clearance = None
+                if table_top is not None and (clear_bodies or {}).get(arm.name):
+                    z = T(robot.data.body_pos_w)[0, clear_bodies[arm.name], 2] - T(robot.data.root_pos_w)[0, 2]
+                    clearance = float(z.min()) - table_top
+                clear = clearance is None or clearance >= CLEARANCE
+                score = (0 if ok else 1, 0 if clear else 1, 0 if well else 1, -(margin + 2.0 * min(sigma, 0.2)) if ok else pos_err + rot_err)
                 if best is None or score < best[0]:
-                    best = (score, q[0, ids].clone(), pos_err, rot_err, ok, margin, sigma)
-        _, q_best, pos_err, rot_err, ok, margin, sigma = best
+                    best = (score, q[0, ids].clone(), pos_err, rot_err, ok, margin, sigma, clearance)
+        _, q_best, pos_err, rot_err, ok, margin, sigma, clearance = best
         q_full[0, ids] = q_best
         for j, i in zip(arm.joints, ids):
             result["joint_pos"][j] = round(float(q_best[ids.index(i)]), 4)
@@ -120,6 +135,7 @@ def suggest_default_pose(sim, robot, cfg: RobotConfig, tcp_targets: dict[str, li
             "orientation_error": round(rot_err, 4),
             "limit_margin": round(margin, 3),
             "manipulability_sigma_min": round(sigma, 4),
+            "table_clearance": None if clearance is None else round(clearance, 3),  # 肘から先の剛体の原点の、台の上面からの高さ [m]
         }
     # arm 以外の関節は現在の初期姿勢のまま
     for j, v in cfg.default_pose.items():

@@ -179,7 +179,12 @@ def _robot_questions(meta: RobotMetadata, model: UrdfModel, robot_in: dict, answ
             Inferred(
                 key="articulation_root",
                 value=meta.articulation_root,
-                evidence=f"root link '{meta.root_link}' は質量も形状もない空 link なので、その子を articulation root にします",
+                evidence=(
+                    f"root link '{meta.root_link}' は質量も形状もない空 link なので、その子を articulation root にします"
+                    if model.parent_joint(meta.articulation_root).parent == meta.root_link
+                    else f"root link '{meta.root_link}' から続く空 link（{', '.join(A.root_chain(model, meta.root_link, meta.articulation_root))}）を"
+                    f"飛ばし、実体のある最初の link を articulation root にします（間の位置・向きは base_pose に入れます）"
+                ),
             )
         )
 
@@ -195,7 +200,9 @@ def _robot_questions(meta: RobotMetadata, model: UrdfModel, robot_in: dict, answ
 
     # 正面方向（台をどちらに置くか）。+x 以外ならロボットを回して置くので確認する
     if not robot_in.get("base_pose") and _hint(robot_in, answers, "robot.front_axis") is None:
-        front, why = A.front_axis_guess(model, meta.articulation_root, meta.arms)
+        # 正面は URDF の root link の座標（= world。RViz などで見る座標）で決める。articulation root は空の link を飛ばした先で、
+        # 回っていることがある（UR の base_link_inertia は 180°）
+        front, why = A.front_axis_guess(model, meta.root_link, meta.arms)
         if front == "+x":
             inferred.append(Inferred(key="robot.front_axis", value=front, evidence=why))
         else:
@@ -213,6 +220,12 @@ def _robot_questions(meta: RobotMetadata, model: UrdfModel, robot_in: dict, answ
         # 片側の顎だけが動く直列グリッパは、arm の最後の関節として見えることが多い（SO-100 系など）。
         # どれがグリッパかで arm の関節と End Effector の候補が変わるので、先にこれだけ聞く
         last = [a.joints[-1] for a in meta.arms if a.joints]
+
+        def wide(name: str) -> bool:  # 半回転より広く回る関節は顎ではなく手首の回転（UR の wrist_3_joint は ±360°）
+            j = model.joints[name]
+            return j.type == "continuous" or (j.lower is not None and j.upper is not None and j.upper - j.lower > math.pi + 1e-6)
+
+        wrist = [n for n in last if wide(n)]
         attach = ""
         if len(meta.arms) == 1 and last:
             # 腕だけの URDF（産業用ロボットに多い）なら、NVIDIA のアセットのグリッパを付けられる。取付先の候補は腕の先の link
@@ -223,17 +236,25 @@ def _robot_questions(meta: RobotMetadata, model: UrdfModel, robot_in: dict, answ
                 "`gripper: {simready: robotiq_2f_85}` を書くと、NVIDIA のアセットのグリッパを腕の先に取り付けます"
                 f"（取付先は腕の先のフレーム {', '.join(mounts)} から自動で選び、mount_link で変えられます）。"
             )
+        if wrist:  # 最後の関節が手首の回転なら、この URDF にグリッパはない: 取り付けを先に勧め、その関節は提案しない
+            prompt = (
+                "グリッパ（指）の関節が見つかりませんでした。各 arm の最後の関節（" + ", ".join(wrist) + "）は半回転より広く回るので、"
+                "指ではなく手首の回転です。この URDF にはグリッパがないと考えられます。" + attach
+                + "グリッパのある URDF なら、指を動かす関節を答えてください。"
+            )
+        else:
+            prompt = (
+                "グリッパ（指）の関節が自動では見つかりませんでした。指を動かす関節はどれですか？"
+                "片側の顎だけが動くグリッパなら、各 arm の最後の関節（候補）であることが多いです。" + attach
+            )
         questions.append(
             Question(
                 key="robot.gripper_joints",
-                prompt=(
-                    "グリッパ（指）の関節が自動では見つかりませんでした。指を動かす関節はどれですか？"
-                    "片側の顎だけが動くグリッパなら、各 arm の最後の関節（候補）であることが多いです。" + attach
-                ),
+                prompt=prompt,
                 candidates=last,
                 reason="関節名・mimic・同じ親を持つ指の組のどれにも当てはまりませんでした。"
                 "回答はリスト（例: [joint7_R, joint7_L]）で、双腕なら両手分を答えてください。",
-                suggestion=last or None,
+                suggestion=None if wrist else (last or None),
             )
         )
         for i, arm in enumerate(meta.arms):
@@ -453,7 +474,8 @@ def _default_pose_hint(project: Project, robot_in: dict, answers: dict) -> dict:
 
 def _flange_outward(model: UrdfModel, last_joint: str, mesh_paths: dict[str, str]) -> tuple[tuple, str]:
     """腕の先の外向き（最後の関節の子 link の座標）と、そちらにいちばん遠いフレーム（フランジ・tool0 など）。
-    外向きは最後の関節の軸のうち、子孫のフレーム（なければ子 link の衝突形状）がある側。"""
+    外向きは最後の関節の軸のうち、子孫のフレームがある側。フレームが関節の位置にしかなければ、1 つ手前の関節（親 link の原点）
+    と反対の側。それも軸の上で同じ位置なら、子 link の衝突形状がある側。"""
     from urdf2vla.urdf.kinematics import normalize
 
     j = model.joints[last_joint]
@@ -461,9 +483,15 @@ def _flange_outward(model: UrdfModel, last_joint: str, mesh_paths: dict[str, str
     frames = A.fixed_descendants(model, j.child)
     proj = {f: sum(a * b for a, b in zip(A.relative_transform(model, j.child, f).pos, axis)) for f in frames}
     side = max(proj.values(), key=abs)
-    if abs(side) < 1e-3:  # フレームが関節の位置にしかない: 子 link の形がある側
-        pts = A.collision_points(model, j.child, [j.child], mesh_paths)
-        side = sum(sum(a * b for a, b in zip(p, axis)) for p in pts) / len(pts) if pts else 1.0
+    if abs(side) < 1e-3:
+        # 手前の関節がある側が腕の内側。UR（公式の ROS 2 の ur_description）は最後の link の座標をフランジ面に置き、形はその
+        # 手前（内側）にあるので、形のある側を外向きにすると逆向き（グリッパが手首にめり込む）になる
+        back = sum(a * b for a, b in zip(A.relative_transform(model, j.child, j.parent).pos, axis))
+        if abs(back) >= 1e-3:
+            side = -back
+        else:  # 手前の関節も軸の上で同じ位置（球面手首など）: 子 link の形がある側
+            pts = A.collision_points(model, j.child, [j.child], mesh_paths)
+            side = sum(sum(a * b for a, b in zip(p, axis)) for p in pts) / len(pts) if pts else 1.0
     outward = tuple(c if side >= 0 else -c for c in axis)
 
     def z_out(f: str) -> float:  # フレームの +z と外向きの一致（ツール座標の慣習: tool0、FANUC の fanuc_flange）
@@ -824,14 +852,19 @@ def configure_robot(project: Project, opts: dict, result: SkillResult, log) -> N
     if robot_in.get("base_pose"):
         base_pose = Pose(**robot_in["base_pose"])
         prov["base_pose"] = "user"
+        chain = A.root_chain(model, meta.root_link, meta.articulation_root) if meta.dummy_root else []
+        if len(chain) > 1:
+            # 書いた base_pose は空の root（world）の子（UR の base_link: RViz で見る座標）の姿勢。その先で飛ばした空の link の
+            # 分（UR の base_link → base_link_inertia の 180°）を足して、articulation root の姿勢にする
+            user = Transform(tuple(base_pose.pos), tuple(base_pose.rot_xyzw))
+            base_pose = Pose(**(user @ A.relative_transform(model, chain[1], meta.articulation_root)).rounded())
     else:
         base = Transform()
         prov["base_pose"] = "default"
-        if meta.dummy_root:
-            j = model.parent_joint(meta.articulation_root)
-            base = Transform.from_xyz_rpy(j.xyz, j.rpy)
+        if meta.dummy_root:  # 飛ばした空の root link（world など。UR は world → base_link）から実体のある最初の link までの変換
+            base = A.relative_transform(model, meta.root_link, meta.articulation_root)
             prov["base_pose"] = "urdf"
-        # 正面を world の +x に向ける（台・カメラ・teleop は +x が正面の前提）
+        # 正面を world の +x に向ける（台・カメラ・teleop は +x が正面の前提）。正面は URDF の root link の座標で答えたもの
         front = _hint(robot_in, answers, "robot.front_axis") or "+x"
         yaw = {"+x": 0.0, "+y": -math.pi / 2, "-x": math.pi, "-y": math.pi / 2}[front]
         if yaw:
@@ -841,7 +874,7 @@ def configure_robot(project: Project, opts: dict, result: SkillResult, log) -> N
 
     # ---- normalized URDF
     out_urdf = project.build / "robot.urdf"
-    write_normalized_urdf(model, out_urdf, runtime, meta.meshes, drop_root=meta.root_link if meta.dummy_root else None, drop_links=drop_links)
+    write_normalized_urdf(model, out_urdf, runtime, meta.meshes, new_root=meta.articulation_root if meta.dummy_root else None, drop_links=drop_links)
     asset = AssetConfig(
         source_path=str(model.path),
         path=runtime.to_runtime(out_urdf),

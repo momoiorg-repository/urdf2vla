@@ -35,13 +35,33 @@ def root_link(model: UrdfModel) -> str:
     return roots[0]
 
 
+def _subtree_empty(model: UrdfModel, link: str) -> bool:
+    """link から先がすべて空の link（質量も形状もないフレーム）か。"""
+    return model.links[link].is_empty and all(_subtree_empty(model, j.child) for j in model.child_joints(link))
+
+
 def articulation_root(model: UrdfModel, root: str) -> tuple[str, bool]:
-    """'world' のような空の root link は飛ばし、実体のある最初の link を返す。"""
-    link = model.links[root]
-    kids = model.child_joints(root)
-    if link.is_empty and len(kids) == 1 and kids[0].type == "fixed":
-        return kids[0].child, True
-    return root, False
+    """'world' のような空の root link は飛ばし、実体のある最初の link を返す。
+
+    空の link が続けばそれも飛ばす（UR の公式 URDF: world → base_link → base_link_inertia。Isaac Sim は空の link を剛体に
+    しないので、そこに付けた固定の関節は効かず、間の回転（UR では 180°）も落ちる）。飛ばす link の、実体へ続く子以外の子が
+    空のフレームだけ（UR の base）なら飛ばしてよい（normalize がそのフレームを新しい root に付け替える）。"""
+    link = root
+    while model.links[link].is_empty:
+        main = [j for j in model.child_joints(link) if not _subtree_empty(model, j.child)]
+        if len(main) != 1 or main[0].type != "fixed":
+            break
+        link = main[0].child
+    return link, link != root
+
+
+def root_chain(model: UrdfModel, root: str, art_root: str) -> list[str]:
+    """root から art_root の手前までの link（articulation_root が飛ばした空の link）。"""
+    chain, link = [], art_root
+    while link != root:
+        link = model.parent_joint(link).parent
+        chain.append(link)
+    return list(reversed(chain))
 
 
 def path_joints(model: UrdfModel, start: str, end: str) -> list[Joint]:
